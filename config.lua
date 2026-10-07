@@ -73,7 +73,7 @@ Config.Defaults = {
     ['pref.accent']    = 'magenta',   -- magenta | purple | blue | green | orange | red
     ['pref.dark']      = true,
     ['pref.portrait']  = false,
-    ['pref.mapReturn'] = true,        -- haritadan çıkınca menüye animasyonla dön
+    ['pref.mapReturn'] = false,       -- true: harita / yerleşik menü kapanınca LOE menüsüne animasyonla dön (false: doğrudan oyuna)
     ['menu.native']    = false,       -- true: ESC yerleşik GTA menüsünü açar
 }
 

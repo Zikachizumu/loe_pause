@@ -442,7 +442,7 @@ Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler',
           } },
     }),
     group('behavior', 'Menü Davranışı', 'Menu Behaviour', {
-        toggle('pref.mapReturn', 'Haritadan dönüş animasyonu', 'Map return animation', true, {
+        toggle('pref.mapReturn', 'Haritadan dönüş animasyonu', 'Map return animation', false, {
             desc = L('Açıkken harita ve yerleşik GTA menüleri ESC ile kapanınca bu menü animasyonla geri gelir; kapalıyken doğrudan oyuna dönersin.',
                      'When on, closing the map or a built-in GTA menu with ESC brings this menu back with an animation; when off you return straight to the game.'),
         }),
