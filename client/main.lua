@@ -159,6 +159,15 @@ local function activateNative(target)
     if not n then return false end
     native.untilT = GetGameTimer() + 3000
     ActivateFrontendMenu(GetHashKey(n.menu), n.pause == true, n.component or -1)
+    if n.deeper ~= nil then
+        -- ActivateFrontendMenu tek başına tüm duraklatma menüsünü açar; doğrudan sayfaya (ör. büyük harita)
+        -- girmek için menü açılana kadar bekleyip bir seviye derine iniyoruz. (Çağıran bir thread içinde olmalı.)
+        local deadline = GetGameTimer() + 1500
+        while not IsPauseMenuActive() and GetGameTimer() < deadline do Wait(0) end
+        Wait(n.deeperDelayMs or 100)
+        PauseMenuceptionGoDeeper(n.deeper)
+        native.untilT = GetGameTimer() + 3000
+    end
     return true
 end
 

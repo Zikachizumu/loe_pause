@@ -48,8 +48,9 @@ Config.MapResource = { resource = 'loe_3dmap', open = 'Open', isOpen = 'IsOpen' 
 
 -- Yerleşik GTA menüsüne geçişler. DOĞRULAMA GEREKİR: menü hash'leri sürümden sürüme farklı davranabilir;
 -- çalışmayan olursa buradan değiştir (kod değişikliği gerekmez). Hash listesi: ActivateFrontendMenu dokümanı.
+-- deeper: menü açıldıktan sonra PauseMenuceptionGoDeeper(deeper) ile o sayfaya girer (0 = büyük harita).
 Config.Native = {
-    map      = { menu = 'FE_MENU_VERSION_MP_PAUSE',               pause = false, component = -1 },
+    map      = { menu = 'FE_MENU_VERSION_MP_PAUSE',               pause = false, component = -1, deeper = 0, deeperDelayMs = 100 },
     game     = { menu = 'FE_MENU_VERSION_LANDING_MENU',           pause = true,  component = -1 },
     settings = { menu = 'FE_MENU_VERSION_LANDING_MENU',           pause = true,  component = -1 },
     keybinds = { menu = 'FE_MENU_VERSION_LANDING_KEYMAPPING_MENU', pause = true,  component = -1 },

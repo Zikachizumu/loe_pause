@@ -69,7 +69,7 @@ GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yaz�
 
 | Satır | Davranış |
 |---|---|
-| Harita | `loe_3dmap` çalışıyorsa onu açar; yoksa yerleşik GTA haritası. Tercih açıksa harita kapanınca menü animasyonla geri gelir |
+| Harita | `loe_3dmap` çalışıyorsa onu açar; yoksa **doğrudan yerleşik büyük harita** (`ActivateFrontendMenu` + `PauseMenuceptionGoDeeper(0)`, bkz. `Config.Native.map`). Tercih açıksa harita kapanınca menü animasyonla geri gelir |
 | Oyun | Yerleşik GTA menüsü (`Config.Native.game`) |
 | İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik karakter özeti (ad, citizenid, meslek, nakit/banka, ID, ping, oyuncu sayısı) |
 | Battlepass / Shop | Sunucuda bu sistemler **yok**. `Config.Menu`'de `resource`/`export` (varsayılan `loe_battlepass`/`loe_shop` → `Open`) başlamışsa onları açar; değilse "Yakında" sayfası gösterir. |
