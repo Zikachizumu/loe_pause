@@ -277,7 +277,22 @@ sim.pause = true; sim.frames(64)
 check(isOpen() == true, 'S1: ESC LOE menüsünü açmalı')
 check(sim.pause == false, 'S1: yerleşik pause menü kapatılmalı')
 
--- S2: Harita → büyük harita açılır ve açık KALIR; ESC ile kapanınca sızan yeniden açılış söndürülür, LOE menüsü döner
+-- S1b: varsayılan tercih (haritadan dönüş KAPALI): ESC haritayı kapatır, oyuna dönülür, LOE menüsü tekrar AÇILMAZ
+check(Prefs.get('pref.mapReturn') == false, 'S1b: haritadan dönüş varsayılanı kapalı olmalı')
+sim.nui('menu', { id = 'map' })
+sim.frames(1300)
+check(sim.pause == true, 'S1b: harita açılmalı')
+local before0 = sim.openCount()
+sim.escFrame = true; sim.step(16)
+sim.frames(2500)
+check(sim.pause == false, 'S1b: ESC haritayı kapatmalı')
+check(isOpen() == false and sim.openCount() == before0, 'S1b: menü tekrar açılmamalı')
+sim.frames(700)
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S1b: sonraki ESC LOE menüsünü açmalı')
+Prefs.set('pref.mapReturn', true)
+
+-- S2: Harita → büyük harita açılır ve açık KALIR; ESC ile kapanınca sızan yeniden açılış söndürülür, LOE menüsü döner (tercih açık)
 local r = sim.nui('menu', { id = 'map' })
 check(r and r.ok, 'S2: menu callback ok dönmeli')
 sim.frames(120)
