@@ -293,12 +293,13 @@ check(isOpen() == true, 'S1b: sonraki ESC LOE menüsünü açmalı')
 Prefs.set('pref.mapReturn', true)
 
 -- S2: Harita → büyük harita açılır ve açık KALIR; ESC ile kapanınca sızan yeniden açılış söndürülür, LOE menüsü döner (tercih açık)
+local act0 = sim.calls.Activate or 0
 local r = sim.nui('menu', { id = 'map' })
 check(r and r.ok, 'S2: menu callback ok dönmeli')
 sim.frames(120)
 check(isOpen() == false, 'S2: harita seçilince LOE menüsü kapanmalı')
 sim.frames(700)
-check(sim.calls.Activate == 1, 'S2: ActivateFrontendMenu bir kez çağrılmalı')
+check(sim.calls.Activate == act0 + 1, 'S2: ActivateFrontendMenu bir kez çağrılmalı')
 check(sim.calls.GoDeeper == 0, 'S2: büyük haritaya inmek için GoDeeper(0) çağrılmalı')
 check(sim.pause == true, 'S2: yerleşik harita açık kalmalı (söndürülmemeli)')
 sim.frames(600)                                              -- videodaki gibi: harita açıldıktan ~1 sn sonra ESC
