@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>loe_pause — mock</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #111; color: #ddd; font: 13px system-ui; }
+    #dev { position: fixed; right: 8px; top: 8px; z-index: 99999; display: flex; gap: 6px; flex-wrap: wrap; max-width: 60vw; justify-content: flex-end; }
+    #dev button { background: #222; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 5px 9px; cursor: pointer; font: inherit; }
+    #dev button:hover { border-color: #ff2e93; }
+</style>
+</head>
+<body>
+<!--
+  Yalnızca geliştirme: gerçek html/index.html'i FiveM olmadan tarayıcıda çalıştırır.
+  Lua tarafını taklit eder (fetch → https://loe_pause/*). Önce:  python _dev/check.py   (schema.json üretir)
+  Sonra:  python -m http.server 8123   →   http://localhost:8123/_dev/mock.html
+  Parametreler:  ?lang=en  ?dark=0  ?portrait=1  ?accent=blue
+-->
+<script>
+(async () => {
+    const params = new URLSearchParams(location.search);
+    const schema = await (await fetch('schema.json')).json();
+    let html = await (await fetch('../html/index.html')).text();
+
+    const values = {
+        'aim.mode': 'game', 'cam.foot': 'game', 'cam.vehicle': 'game', 'cam.cinematic': true,
+        'disp.radar': true, 'disp.reticle': true, 'disp.gps': true, 'audio.vehradio': true, 'gfx.lod': 1.0,
+        'voice.radio': 60, 'voice.call': 60, 'voice.clicks': true, 'voice.click_on': 10, 'voice.click_off': 3,
+        'pref.accent': params.get('accent') || 'magenta', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
+        'pref.lang': params.get('lang') || 'tr', 'pref.mapReturn': true, 'menu.native': false,
+    };
+    const defaults = { 'pref.accent': 'magenta', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'tr', 'pref.mapReturn': true };
+    const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
+                   'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
+    const menu = ['map', 'game', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: !['battlepass', 'shop'].includes(id), external: ['battlepass', 'shop'].includes(id) }));
+    const stats = { id: 12, ping: 34, name: 'Arda Kaya', cid: 'LOE48213', job: 'Polis', grade: 'Memur', cash: 12500, bank: 248900 };
+
+    const send = (d) => window.postMessage(d, '*');
+    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats });
+
+    const handlers = {
+        ready: () => { setTimeout(() => { send({ action: 'init', schema, brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' } }); open(); setTimeout(() => send({ action: 'info', players: 27, max: 48, ping: 34 }), 300); }, 50); return { ok: true }; },
+        close: () => { send({ action: 'close' }); console.log('[mock] close'); return { ok: true }; },
+        setting: (b) => {
+            const row = schema.flatMap(c => c.groups).flatMap(g => g.rows).find(r => r.id === b.id);
+            if (!row) return { ok: false };
+            let v = b.value;
+            if (row.type === 'slider') v = Math.min(row.max, Math.max(row.min, Math.round(v / row.step) * row.step));
+            values[b.id] = v; console.log('[mock] setting', b.id, v); return { ok: true, value: v };
+        },
+        action: (b) => {
+            console.log('[mock] action', b.id);
+            if (b.id === 'pref.reset') { Object.assign(values, defaults); return { ok: true, msg: 'reset_done', values: { ...values } }; }
+            const msg = { 'rec.start': 'rec_started', 'rec.save': 'rec_saved', 'rec.discard': 'rec_discarded' }[b.id];
+            return { ok: true, msg };
+        },
+        native: (b) => { console.log('[mock] native menu →', b.target); return { ok: true }; },
+        menu: (b) => ({ ok: true, page: b.id === 'stats' ? 'stats' : (b.id === 'settings' ? 'settings' : (['battlepass', 'shop'].includes(b.id) ? 'soon' : undefined)) }),
+        quit: (b) => { console.log('[mock] quit', b.mode); return { ok: true }; },
+    };
+
+    const realFetch = window.fetch.bind(window);
+    window.fetch = async (url, opts) => {
+        if (typeof url === 'string' && url.startsWith('https://loe_pause/')) {
+            const name = url.split('/').pop();
+            const body = JSON.parse((opts && opts.body) || '{}');
+            const res = handlers[name] ? handlers[name](body) : { ok: false };
+            return { json: async () => res };
+        }
+        return realFetch(url, opts);
+    };
+
+    html = html.replace('<head>', '<head><base href="../html/">');
+    document.open(); document.write(html); document.close();
+
+    window.addEventListener('load', () => {
+        const bar = document.createElement('div'); bar.id = 'dev';
+        const btn = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; bar.append(b); };
+        btn('open', () => open('open')); btn('open (return)', () => open('return'));
+        btn('light', () => { values['pref.dark'] = false; open(); }); btn('dark', () => { values['pref.dark'] = true; open(); });
+        btn('portrait', () => { values['pref.portrait'] = !values['pref.portrait']; open(); });
+        document.body.append(bar);
+    });
+})();
+</script>
+</body>
+</html>

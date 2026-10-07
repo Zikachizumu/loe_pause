@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>loe_pause</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app" class="hidden" data-theme="dark">
+    <div class="bg" id="bg"></div>
+    <div class="bg-shade"></div>
+
+    <!-- ANA MENÜ -->
+    <section class="screen" id="screenMain">
+        <div class="panel menu-panel">
+            <div class="brand">
+                <svg class="crown" viewBox="0 0 120 80" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="crownGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0" style="stop-color:var(--accent)"/>
+                            <stop offset="1" style="stop-color:var(--accent);stop-opacity:.45"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M12 64 L21 27 L43 46 L60 13 L77 46 L99 27 L108 64 Z" fill="url(#crownGrad)" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>
+                    <path d="M13 64h94v9a2 2 0 0 1-2 2H15a2 2 0 0 1-2-2z" fill="var(--accent)"/>
+                    <circle cx="21" cy="22" r="4.4" fill="var(--accent)"/>
+                    <circle cx="60" cy="8" r="4.4" fill="var(--accent)"/>
+                    <circle cx="99" cy="22" r="4.4" fill="var(--accent)"/>
+                </svg>
+                <h1><span id="brandName">LEGENDS OF</span> <em id="brandAccent">EMPIRE</em></h1>
+            </div>
+            <div class="divider"><i data-i="chevron"></i></div>
+            <nav id="menuList" class="menu-list" role="menu"></nav>
+            <div class="divider"><i data-i="chevron"></i></div>
+            <footer id="brandFooter" class="brand-foot"></footer>
+        </div>
+    </section>
+
+    <!-- AYARLAR -->
+    <section class="screen hidden" id="screenSettings">
+        <div class="panel settings">
+            <header class="s-head">
+                <button class="icon-btn" id="sBack" type="button"><i data-i="back"></i></button>
+                <h2 id="sTitle">AYARLAR</h2>
+                <span class="grow"></span>
+                <button class="icon-btn" id="sClose" type="button"><i data-i="close"></i></button>
+            </header>
+            <div class="s-body" id="sBody">
+                <div class="col cats" id="colCats"></div>
+                <div class="col grps" id="colGrps"></div>
+                <div class="col rows">
+                    <div class="rows-head">
+                        <div class="search">
+                            <i data-i="search"></i>
+                            <input id="q" type="text" autocomplete="off" spellcheck="false" maxlength="40">
+                            <kbd>/</kbd>
+                        </div>
+                        <div class="crumb" id="crumb"></div>
+                    </div>
+                    <div class="rows-list" id="rowsList"></div>
+                </div>
+            </div>
+            <footer class="hints" id="hintsSettings"></footer>
+        </div>
+    </section>
+
+    <!-- SAYFA (istatistik / yakında) -->
+    <section class="screen hidden" id="screenPage">
+        <div class="panel page-panel">
+            <header class="s-head">
+                <button class="icon-btn" id="pBack" type="button"><i data-i="back"></i></button>
+                <h2 id="pTitle"></h2>
+                <span class="grow"></span>
+                <button class="icon-btn" id="pClose" type="button"><i data-i="close"></i></button>
+            </header>
+            <div class="page-body" id="pageBody"></div>
+            <footer class="hints" id="hintsPage"></footer>
+        </div>
+    </section>
+
+    <div class="hints hints-main" id="hintsMain"></div>
+
+    <div class="modal hidden" id="modal">
+        <div class="modal-box" role="dialog" aria-modal="true">
+            <h3 id="modalTitle"></h3>
+            <p id="modalText"></p>
+            <div class="modal-btns" id="modalBtns"></div>
+        </div>
+    </div>
+    <div class="toast" id="toast"></div>
+</div>
+<script src="js/icons.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
