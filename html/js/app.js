@@ -432,6 +432,8 @@ const renderCats = () => {
         class: 'nav-item' + (i === S.cat ? ' cur' : ''), type: 'button',
         onclick: () => { S.cat = i; S.grp = 0; S.zone = 'cats'; S.query = ''; q.value = ''; refreshSettings(true); },
     }, ico(c.icon), h('span', {}, L(c.label)))));
+    const cur = col.querySelector('.cur');
+    if (cur) cur.scrollIntoView({ block: 'nearest' });
 };
 
 const renderGroups = () => {
@@ -443,6 +445,8 @@ const renderGroups = () => {
         class: 'nav-item' + (i === S.grp ? ' cur' : ''), type: 'button',
         onclick: () => { S.grp = i; S.zone = 'grps'; refreshSettings(true); },
     }, h('span', {}, L(g.label)))));
+    const cur = col.querySelector('.cur');
+    if (cur) cur.scrollIntoView({ block: 'nearest' });
 };
 
 const renderRows = (resetScroll) => {
@@ -599,7 +603,7 @@ const onKey = (ev) => {
 };
 window.addEventListener('keydown', onKey, true);
 
-q.addEventListener('focus', () => { S.zone = 'search'; paintZones(); });
+q.addEventListener('focus', () => { S.zone = 'search'; renderRows(); paintZones(); });
 q.addEventListener('input', () => {
     S.query = q.value.trim();
     S.zone = 'search';
