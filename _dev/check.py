@@ -219,6 +219,7 @@ function IsPauseMenuActive() return S.pause end
 function SetFrontendActive(v) if not v then S.pause = false end end
 function SetPauseMenuActive(v) if not v then S.pause = false end end
 function IsDisabledControlJustPressed(_, c) return S.escFrame and (c == 200) end
+function IsControlJustPressed(g, c) return S.escFrame and g == 0 and c == 200 end
 function ActivateFrontendMenu()
     S.calls.Activate = (S.calls.Activate or 0) + 1
     S.events[#S.events + 1] = { at = S.now + 120, fn = function() S.pause = true end }   -- oyun menüyü biraz sonra açar
@@ -307,6 +308,17 @@ sim.frames(1200)
 check(sim.pause == false, 'S2b: sızan yeniden açılış söndürülmeli')
 check(isOpen() == true and sim.openCount() == before + 1 and sim.lastOpen().anim == 'return', 'S2b: LOE menüsü geri dönmeli')
 
+-- S2c: script ile açılan harita ESC'de KAPANMAZ (yalnızca "sıçrama", açık kalır) → ESC'yi biz yakalayıp kapatmalıyız
+sim.nui('menu', { id = 'map' })
+sim.frames(900)
+check(sim.pause == true, 'S2c: harita açılmalı')
+sim.frames(800)
+before = sim.openCount()
+sim.escFrame = true; sim.step(16)                            -- ESC: oyun menüyü kapatmaz
+sim.frames(1500)
+check(sim.pause == false, 'S2c: ESC haritayı kapatmalı (açık kalmamalı)')
+check(isOpen() == true and sim.openCount() == before + 1 and sim.lastOpen().anim == 'return', 'S2c: LOE menüsü geri dönmeli')
+
 -- S3: dönüş tercihi kapalıyken oyuna dönülür
 Prefs.set('pref.mapReturn', false)
 sim.nui('menu', { id = 'map' })
@@ -318,6 +330,19 @@ sim.at(250, function() sim.pause = true end)
 sim.frames(1500)
 check(sim.pause == false, 'S3: sızan yeniden açılış söndürülmeli')
 check(isOpen() == false and sim.openCount() == before, 'S3: tercih kapalıyken menü geri gelmemeli')
+
+-- S3b: aynı tercih, ESC haritayı kapatmıyor
+sim.pause = false; sim.frames(700)
+sim.exported.Close()
+sim.pause = true; sim.frames(64)                             -- ESC → LOE menüsü
+sim.nui('menu', { id = 'map' })
+sim.frames(1300)
+check(sim.pause == true, 'S3b: harita açılmalı')
+before = sim.openCount()
+sim.escFrame = true; sim.step(16)
+sim.frames(1500)
+check(sim.pause == false, 'S3b: ESC haritayı kapatmalı')
+check(isOpen() == false and sim.openCount() == before, 'S3b: tercih kapalıyken menü geri gelmemeli')
 Prefs.set('pref.mapReturn', true)
 
 -- S4: başka bir NUI ESC ile kapanırken pause menü açılmamalı

@@ -2,7 +2,7 @@ local isOpen, uiReady, pendingOpen = false, false, nil
 local openedAt, closedAt, lastNuiFocusAt = 0, 0, 0
 local radarWasHidden, radarOffAtOpen, blurred = false, false, false
 -- Bizim başlattığımız yerleşik GTA menüsü akışı: target = hangi menü, seen = gerçekten açıldı mı, returnAt = LOE menüsüne dönüş zamanı
-local native = { target = nil, since = 0, seen = false, returnAt = nil }
+local native = { target = nil, since = 0, seen = false, closingAt = nil, returnAt = nil }
 
 -- ================================================================ YARDIMCILAR
 local function menuItem(id)
@@ -22,6 +22,10 @@ local function callExport(res, fnName, ...)
         return ex[fnName](ex, table.unpack(args))
     end)
     return ok, result
+end
+
+local function dbg(...)
+    if Config.Debug then print('[loe_pause]', ...) end
 end
 
 local function killPause()
@@ -159,7 +163,8 @@ local function activateNative(target)
     local n = Config.Native[target]
     if not n then return false end
     -- Akış başladı: ana döngü menü AÇILANA kadar (en çok 4 sn) ve açık kaldığı sürece ona dokunmaz.
-    native.target, native.since, native.seen, native.returnAt = target, GetGameTimer(), false, nil
+    native.target, native.since, native.seen, native.closingAt, native.returnAt = target, GetGameTimer(), false, nil, nil
+    dbg('native start', target)
     ActivateFrontendMenu(GetHashKey(n.menu), n.pause == true, n.component or -1)
     if n.deeper ~= nil then
         -- ActivateFrontendMenu tek başına tüm duraklatma menüsünü açar; doğrudan sayfaya (ör. büyük harita)
@@ -170,6 +175,16 @@ local function activateNative(target)
         PauseMenuceptionGoDeeper(n.deeper)
     end
     return true
+end
+
+--- Yerleşik menü akışı bitti. wasOpen = menü gerçekten açılmıştı → (tercih açıksa) LOE menüsüne dön.
+local function finishNative(wasOpen)
+    dbg('native finished, wasOpen =', wasOpen)
+    native.target, native.seen, native.closingAt = nil, false, nil
+    closedAt = GetGameTimer()
+    if wasOpen and Prefs.get('pref.mapReturn') then
+        native.returnAt = closedAt + Config.Hijack.reopenCooldownMs + 60
+    end
 end
 
 local function openNative(target)
@@ -243,18 +258,24 @@ CreateThread(function()
             if IsNuiFocused() then lastNuiFocusAt = now end
 
             if native.target then
-                -- Bizim başlattığımız yerleşik menü (harita / oyun / ayarlar): açıkken dokunma.
+                -- Bizim başlattığımız yerleşik menü (harita / oyun / ayarlar).
                 if paused then
+                    if not native.seen then dbg('native menu active') end
                     native.seen = true
-                elseif native.seen or now - native.since > 4000 then
-                    -- Menü kapandı (ya da hiç açılmadı). ESC yerleşik menüyü kapatırken aynı basış onu YENİDEN açar;
-                    -- akış bittiği için aşağıdaki dal onu söndürür, ardından (tercih açıksa) LOE menüsüne dönülür.
-                    local wasOpen = native.seen
-                    native.target, native.seen = nil, false
-                    closedAt = now
-                    if wasOpen and Prefs.get('pref.mapReturn') then
-                        native.returnAt = now + Config.Hijack.reopenCooldownMs + 60
+                    -- Script ile açılan (ActivateFrontendMenu) menü ESC'de kendiliğinden KAPANMAZ; yalnızca bir seviye geri gider
+                    -- ve harita açık kalır. Bu yüzden ESC / P / Geri'yi biz yakalayıp menüyü kapatırız.
+                    if not native.closingAt and now - native.since > 500
+                        and (IsControlJustPressed(0, 200) or IsControlJustPressed(0, 199) or IsControlJustPressed(2, 202)) then
+                        native.closingAt = now
+                        dbg('ESC in native menu -> closing')
                     end
+                    if native.closingAt then killPause() end
+                end
+                if native.closingAt then
+                    -- Kapanışta sızan ESC yerleşik menüyü yeniden açabilir: pencere boyunca her karede söndür.
+                    if now - native.closingAt > 600 and not paused then finishNative(true) end
+                elseif not paused and (native.seen or now - native.since > 4000) then
+                    finishNative(native.seen)         -- menü kendi kapandı (ya da hiç açılmadı)
                 end
             elseif paused then
                 if Prefs.get('menu.native') or not canHijack() then

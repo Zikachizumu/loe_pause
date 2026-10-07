@@ -41,7 +41,8 @@ runuser -u fivem -- git -C "/opt/fivem/txData/LegendsofEmpire_AC516C.base/resour
 2. Menü açıkken oyun kontrolleri kapatılır, radar gizlenir; kapanınca radar önceki durumuna döner, NUI odağı bırakılır.
 3. Başka bir NUI (envanter, `loe_apt`, `loe_dealership`, `loe_cursor`...) ESC ile **kapanırken** aynı basış bu menüyü **açmaz** (`Config.Hijack.nuiGraceMs`). Menü kapanırken sızan ESC de yutulur (`reopenCooldownMs`).
 4. Giriş yapılmamışken (`LocalPlayer.state.isLoggedIn ~= true`), ara sahnede ve ekran kararmışken yerleşik menüye dokunulmaz → karakter seçimi/yaratma bozulmaz.
-5. Güvenlik ağı: **Ayarlar → Normal Menü** ile oyuncu ESC'yi yerleşik menüye çevirebilir; `/loepause` her durumda bu menüyü açar. Sunucu tarafında `Config.Hijack.enabled = false` hepsini kapatır.
+5. Script ile açılan yerleşik menü/harita (`ActivateFrontendMenu`) ESC'de kendiliğinden kapanmaz — yalnızca bir seviye geri gider ve açık kalır. Bu yüzden akış sırasında ESC / P / Geri yakalanır, menü kapatılır, sızan yeniden açılış söndürülür ve (tercih açıksa) LOE menüsüne dönülür. Sorun giderme: `Config.Debug = true` yapınca F8 konsolunda `[loe_pause] native ...` satırları görünür.
+6. Güvenlik ağı: **Ayarlar → Normal Menü** ile oyuncu ESC'yi yerleşik menüye çevirebilir; `/loepause` her durumda bu menüyü açar. Sunucu tarafında `Config.Hijack.enabled = false` hepsini kapatır.
 
 ## Kapsam: ne GERÇEKTEN çalışır, ne yerleşik menüye yönlenir
 
