@@ -1,7 +1,8 @@
 local isOpen, uiReady, pendingOpen = false, false, nil
 local openedAt, closedAt, lastNuiFocusAt = 0, 0, 0
 local radarWasHidden, radarOffAtOpen, blurred = false, false, false
-local native = { untilT = 0, active = false }     -- yerleşik GTA menüsü akışı (bizim başlattığımız)
+-- Bizim başlattığımız yerleşik GTA menüsü akışı: target = hangi menü, seen = gerçekten açıldı mı, returnAt = LOE menüsüne dönüş zamanı
+local native = { target = nil, since = 0, seen = false, returnAt = nil }
 
 -- ================================================================ YARDIMCILAR
 local function menuItem(id)
@@ -149,7 +150,7 @@ end
 Apply.menuOpen = function() return isOpen end
 
 local function canOpenManually()
-    return not isOpen and not native.active and loggedIn() and not IsNuiFocused() and not IsPauseMenuActive()
+    return not isOpen and not native.target and loggedIn() and not IsNuiFocused() and not IsPauseMenuActive()
         and not IsPlayerSwitchInProgress() and not IsCutsceneActive()
 end
 
@@ -157,7 +158,8 @@ end
 local function activateNative(target)
     local n = Config.Native[target]
     if not n then return false end
-    native.untilT = GetGameTimer() + 3000
+    -- Akış başladı: ana döngü menü AÇILANA kadar (en çok 4 sn) ve açık kaldığı sürece ona dokunmaz.
+    native.target, native.since, native.seen, native.returnAt = target, GetGameTimer(), false, nil
     ActivateFrontendMenu(GetHashKey(n.menu), n.pause == true, n.component or -1)
     if n.deeper ~= nil then
         -- ActivateFrontendMenu tek başına tüm duraklatma menüsünü açar; doğrudan sayfaya (ör. büyük harita)
@@ -166,7 +168,6 @@ local function activateNative(target)
         while not IsPauseMenuActive() and GetGameTimer() < deadline do Wait(0) end
         Wait(n.deeperDelayMs or 100)
         PauseMenuceptionGoDeeper(n.deeper)
-        native.untilT = GetGameTimer() + 3000
     end
     return true
 end
@@ -174,7 +175,6 @@ end
 local function openNative(target)
     if not Config.Native[target] then return false end
     close()
-    native.untilT = GetGameTimer() + 3000       -- ana döngü menüyü hemen kapatmasın
     CreateThread(function()
         Wait(200)
         activateNative(target)
@@ -242,21 +242,39 @@ CreateThread(function()
         else
             if IsNuiFocused() then lastNuiFocusAt = now end
 
-            if paused then
-                if native.active or now < native.untilT then
-                    native.active = true                       -- bizim başlattığımız yerleşik menü: dokunma
-                elseif Prefs.get('menu.native') or not canHijack() then
+            if native.target then
+                -- Bizim başlattığımız yerleşik menü (harita / oyun / ayarlar): açıkken dokunma.
+                if paused then
+                    native.seen = true
+                elseif native.seen or now - native.since > 4000 then
+                    -- Menü kapandı (ya da hiç açılmadı). ESC yerleşik menüyü kapatırken aynı basış onu YENİDEN açar;
+                    -- akış bittiği için aşağıdaki dal onu söndürür, ardından (tercih açıksa) LOE menüsüne dönülür.
+                    local wasOpen = native.seen
+                    native.target, native.seen = nil, false
+                    closedAt = now
+                    if wasOpen and Prefs.get('pref.mapReturn') then
+                        native.returnAt = now + Config.Hijack.reopenCooldownMs + 60
+                    end
+                end
+            elseif paused then
+                if Prefs.get('menu.native') or not canHijack() then
                     -- yerleşik menü serbest (oyuncu tercihi / giriş yapılmamış / ara sahne)
                 else
                     killPause()
                     local h = Config.Hijack
-                    if now - closedAt >= h.reopenCooldownMs and now - lastNuiFocusAt >= h.nuiGraceMs then
+                    if not native.returnAt and now - closedAt >= h.reopenCooldownMs and now - lastNuiFocusAt >= h.nuiGraceMs then
                         open('open')
                     end
                 end
-            elseif native.active then
-                native.active = false
-                closedAt = now
+            end
+
+            if native.returnAt and now >= native.returnAt then
+                if canOpenManually() then
+                    native.returnAt = nil
+                    open('return')
+                elseif now - native.returnAt > 1500 then
+                    native.returnAt = nil               -- dönüş mümkün olmadı (başka bir arayüz açık): oyunda kal
+                end
             end
         end
     end

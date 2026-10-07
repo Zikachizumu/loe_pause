@@ -188,6 +188,177 @@ check(pl.eval("Prefs.default('pref.accent')") == 'blue', 'Config.Defaults uygula
 pl.execute("Config.Defaults['pref.accent'] = 'invalid'")
 check(pl.eval("Prefs.default('pref.accent')") == 'magenta', 'geçersiz Config.Defaults yok sayılmalı')
 
+# ------------------------------------------------------------------ 4) ana döngü simülasyonu
+print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
+
+SIM_PRELUDE = r'''
+sim = { now = 5000, pause = false, nuiFocus = false, msgs = {}, calls = {}, handlers = {}, exported = {}, threads = {}, events = {}, escFrame = false }
+local S = sim
+setmetatable(_G, { __index = function(_, k) return function() end end })   -- bilinmeyen native → no-op
+
+LocalPlayer = { state = { isLoggedIn = true } }
+json = { encode = function() return '{}' end, decode = function() return {} end }
+function GetResourceKvpString() return nil end
+function SetResourceKvp() end
+function GetCurrentResourceName() return 'loe_pause' end
+function GetResourceState(r) return 'missing' end
+function GetHashKey(s) return 1 end
+function GetControlInstructionalButton() return 't_E' end
+function GetVehiclePedIsIn() return 0 end
+function GetPlayerServerId() return 7 end
+function PlayerId() return 1 end
+function IsRadarHidden() return false end
+function GetGameTimer() return S.now end
+function CreateThread(fn) S.threads[#S.threads + 1] = { co = coroutine.create(fn), wake = 0 } end
+function Wait(ms) coroutine.yield(ms or 0) end
+function RegisterNUICallback(name, fn) S.handlers[name] = fn end
+function SendNUIMessage(m) S.msgs[#S.msgs + 1] = m end
+function SetNuiFocus(a) S.nuiFocus = a == true end
+function IsNuiFocused() return S.nuiFocus end
+function IsPauseMenuActive() return S.pause end
+function SetFrontendActive(v) if not v then S.pause = false end end
+function SetPauseMenuActive(v) if not v then S.pause = false end end
+function IsDisabledControlJustPressed(_, c) return S.escFrame and (c == 200) end
+function ActivateFrontendMenu()
+    S.calls.Activate = (S.calls.Activate or 0) + 1
+    S.events[#S.events + 1] = { at = S.now + 120, fn = function() S.pause = true end }   -- oyun menüyü biraz sonra açar
+end
+function PauseMenuceptionGoDeeper(p) S.calls.GoDeeper = p end
+function AddEventHandler() end
+function RegisterNetEvent() end
+function RegisterCommand() end
+function RegisterKeyMapping() end
+function TriggerServerEvent() end
+exports = setmetatable({}, {
+    __call = function(_, name, fn) S.exported[name] = fn end,
+    __index = function() return setmetatable({}, { __index = function() return function() return nil end end }) end,
+})
+
+function sim.at(ms, fn) S.events[#S.events + 1] = { at = S.now + ms, fn = fn } end
+function sim.nui(name, data)
+    local out
+    S.handlers[name](data or {}, function(r) out = r end)
+    return out
+end
+function sim.step(ms)
+    S.now = S.now + ms
+    for i = #S.events, 1, -1 do
+        local e = S.events[i]
+        if S.now >= e.at then table.remove(S.events, i); e.fn() end
+    end
+    local list = {}
+    for i, t in ipairs(S.threads) do list[i] = t end
+    for _, t in ipairs(list) do
+        if coroutine.status(t.co) ~= 'dead' and S.now >= t.wake then
+            local ok, w = coroutine.resume(t.co)
+            if not ok then error(w) end
+            t.wake = S.now + (w or 0)
+        end
+    end
+    S.escFrame = false
+end
+function sim.frames(ms) for _ = 1, math.ceil(ms / 16) do sim.step(16) end end
+function sim.lastOpen() local l; for _, m in ipairs(S.msgs) do if m.action == 'open' then l = m end end return l end
+function sim.openCount() local n = 0; for _, m in ipairs(S.msgs) do if m.action == 'open' then n = n + 1 end end return n end
+'''
+
+SIM_SCENARIO = r'''
+local R = {}
+local function check(c, msg) if not c then R[#R + 1] = msg end end
+local isOpen = function() return sim.exported.IsOpen() end
+
+sim.frames(100)
+sim.nui('ready')
+check(isOpen() == false, 'başlangıçta menü kapalı olmalı')
+
+-- S1: ESC → yerleşik menü söndürülür, LOE menüsü açılır
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S1: ESC LOE menüsünü açmalı')
+check(sim.pause == false, 'S1: yerleşik pause menü kapatılmalı')
+
+-- S2: Harita → büyük harita açılır ve açık KALIR; ESC ile kapanınca sızan yeniden açılış söndürülür, LOE menüsü döner
+local r = sim.nui('menu', { id = 'map' })
+check(r and r.ok, 'S2: menu callback ok dönmeli')
+sim.frames(120)
+check(isOpen() == false, 'S2: harita seçilince LOE menüsü kapanmalı')
+sim.frames(700)
+check(sim.calls.Activate == 1, 'S2: ActivateFrontendMenu bir kez çağrılmalı')
+check(sim.calls.GoDeeper == 0, 'S2: büyük haritaya inmek için GoDeeper(0) çağrılmalı')
+check(sim.pause == true, 'S2: yerleşik harita açık kalmalı (söndürülmemeli)')
+sim.frames(600)                                              -- videodaki gibi: harita açıldıktan ~1 sn sonra ESC
+check(sim.pause == true, 'S2: harita açık kalmalı')
+local before = sim.openCount()
+sim.pause = false                                            -- ESC: oyun haritayı kapatır
+sim.at(250, function() sim.pause = true end)                 -- ...aynı basış yerleşik menüyü YENİDEN açar (videodaki hata)
+sim.frames(1200)
+check(sim.pause == false, 'S2: sızan yeniden açılış söndürülmeli, harita açık kalmamalı')
+check(isOpen() == true and sim.openCount() == before + 1 and sim.lastOpen().anim == 'return', 'S2: LOE menüsü "return" animasyonuyla dönmeli')
+
+-- S2b: harita uzun süre açık kaldıktan sonra ESC
+sim.nui('menu', { id = 'map' })
+sim.frames(900)
+check(sim.pause == true, 'S2b: harita açılmalı')
+sim.frames(3500)
+check(sim.pause == true, 'S2b: harita uzun süre açık kalmalı')
+before = sim.openCount()
+sim.pause = false
+sim.at(250, function() sim.pause = true end)
+sim.frames(1200)
+check(sim.pause == false, 'S2b: sızan yeniden açılış söndürülmeli')
+check(isOpen() == true and sim.openCount() == before + 1 and sim.lastOpen().anim == 'return', 'S2b: LOE menüsü geri dönmeli')
+
+-- S3: dönüş tercihi kapalıyken oyuna dönülür
+Prefs.set('pref.mapReturn', false)
+sim.nui('menu', { id = 'map' })
+sim.frames(900)
+check(sim.pause == true, 'S3: harita açılmalı')
+before = sim.openCount()
+sim.pause = false
+sim.at(250, function() sim.pause = true end)
+sim.frames(1500)
+check(sim.pause == false, 'S3: sızan yeniden açılış söndürülmeli')
+check(isOpen() == false and sim.openCount() == before, 'S3: tercih kapalıyken menü geri gelmemeli')
+Prefs.set('pref.mapReturn', true)
+
+-- S4: başka bir NUI ESC ile kapanırken pause menü açılmamalı
+sim.nuiFocus = true; sim.frames(48)
+sim.nuiFocus = false; sim.pause = true; sim.frames(64)
+check(isOpen() == false, 'S4: NUI kapanışındaki ESC LOE menüsünü açmamalı')
+check(sim.pause == false, 'S4: o ESC yerleşik menüyü de açık bırakmamalı')
+
+-- S5: giriş yapılmamışken yerleşik menüye dokunulmaz
+sim.frames(700)
+LocalPlayer.state.isLoggedIn = false
+sim.pause = true; sim.frames(160)
+check(isOpen() == false and sim.pause == true, 'S5: giriş yapılmamışken yerleşik menü serbest kalmalı')
+sim.pause = false; LocalPlayer.state.isLoggedIn = true; sim.frames(700)
+
+-- S6: menü açıkken ESC ile kapanır
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S6: menü yeniden açılmalı')
+sim.frames(500)
+sim.escFrame = true; sim.step(16); sim.frames(64)
+check(isOpen() == false, 'S6: açıkken ESC menüyü kapatmalı')
+return R
+'''
+
+sim = LuaRuntime(unpack_returned_tuples=True)
+sim.execute(SIM_PRELUDE)
+import os  # noqa: E402
+
+for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua'):
+    path = ROOT / rel
+    if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
+        path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
+    sim.execute(path.read_text(encoding='utf-8'))
+try:
+    res = lua_to_py(sim.execute(SIM_SCENARIO))
+    for msg in (res or []):
+        check(False, msg)
+    print('  senaryolar tamam')
+except Exception as exc:  # noqa: BLE001
+    check(False, f'simülasyon hatası: {exc}')
+
 print()
 if failures:
     print(f'{len(failures)} HATA')
