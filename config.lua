@@ -30,13 +30,12 @@ Config.Hijack = {
 }
 
 -- ================================================================ ANA MENÜ
--- Sıra sabittir (Harita, Oyun, İstatistikler, Battlepass, Shop, Ayarlar, Oyundan Çık).
+-- Sıra sabittir (Harita, İstatistikler, Battlepass, Shop, Ayarlar, Oyundan Çık).
 -- enabled = false → satır gizlenir.
 -- resource/export: bu resource 'started' ise export çağrılır; değilse satır "Yakında" sayfası gösterir.
 Config.Menu = {
     { id = 'map',        enabled = true },
-    { id = 'game',       enabled = true },
-    { id = 'stats',      enabled = true },   -- resource verirsen harici istatistik sistemi açılır; yoksa yerleşik karakter özeti
+    { id = 'stats',      enabled = true },   -- resource verirsen harici istatistik sistemi açılır; yoksa yerleşik karakter özeti (+ hastalık durumu)
     { id = 'battlepass', enabled = true, resource = 'loe_battlepass', export = 'Open' },
     { id = 'shop',       enabled = true, resource = 'loe_shop',       export = 'Open' },
     { id = 'settings',   enabled = true },
@@ -45,6 +44,14 @@ Config.Menu = {
 
 -- Harita: loe_3dmap varsa onu açar, yoksa yerleşik GTA haritasına düşer.
 Config.MapResource = { resource = 'loe_3dmap', open = 'Open', isOpen = 'IsOpen' }
+
+-- İstatistik sayfasındaki "Sağlık" kartı: hastalık sistemi loe_jobcreator'dadır. Menü o resource'a dokunmaz; yalnızca sunucunun
+-- bu oyuncuya zaten gönderdiği durum olayını dinler (resource/olay adları değişirse buradan güncelle).
+Config.Health = {
+    resource   = 'loe_jobcreator',
+    event      = 'loe_jobcreator:client:healthState',   -- sunucu → istemci: { enabled, conditions = { { label, symptom, bandaged, suppressed } } }
+    helloEvent = 'loe_jobcreator:server:healthHello',   -- loe_pause sonradan başlarsa güncel durumu yeniden ister (tekrar çağrılabilir)
+}
 
 -- Yerleşik GTA menüsüne geçişler. DOĞRULAMA GEREKİR: menü hash'leri sürümden sürüme farklı davranabilir;
 -- çalışmayan olursa buradan değiştir (kod değişikliği gerekmez). Hash listesi: ActivateFrontendMenu dokümanı.

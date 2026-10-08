@@ -2,7 +2,7 @@
 
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
-- Ana menü: **Harita · Oyun · İstatistikler · Battlepass · Shop · Ayarlar · Oyundan Çık**
+- Ana menü: **Harita · İstatistikler · Battlepass · Shop · Ayarlar · Oyundan Çık**
 - Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, Türkçe/İngilizce
 - Bağımlılık yok: `qbx_core`, `pma-voice`, `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez.
 
@@ -31,7 +31,6 @@ runuser -u fivem -- git -C "/opt/fivem/txData/LegendsofEmpire_AC516C.base/resour
 | `client/prefs.lua` | Şemaya göre doğrulama + oyuncu bazında KVP kalıcılığı |
 | `client/apply.lua` | Ayarları oyuna uygulayan native çağrıları + eylemler (kayıt, sıfırlama) |
 | `client/main.lua` | ESC/P yakalama, aç/kapat, NUI odağı, NUI callback'leri, harita/yerleşik menü geçişleri |
-| `server/main.lua` | Menü açılırken oyuncu sayısı (rate-limit'li) |
 | `html/` | NUI (vanilla HTML/CSS/JS), `html/img/bg.jpg` arka plan |
 | `_dev/` | Yalnızca geliştirme: `check.py` (Lua/şema/doğrulama testleri), `mock.html` (tarayıcıda önizleme) |
 
@@ -71,8 +70,7 @@ GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yaz�
 | Satır | Davranış |
 |---|---|
 | Harita | `loe_3dmap` çalışıyorsa onu açar; yoksa **doğrudan yerleşik büyük harita** (`ActivateFrontendMenu` + `PauseMenuceptionGoDeeper(0)`, bkz. `Config.Native.map`). Varsayılan: ESC ile harita kapanınca doğrudan oyuna dönülür. Tercih (`pref.mapReturn`, varsayılan **kapalı**) açıksa harita / yerleşik menü ESC ile kapanınca LOE menüsü animasyonla geri gelir; ESC'nin yerleşik menüyü yeniden açan sızıntısı söndürülür |
-| Oyun | Yerleşik GTA menüsü (`Config.Native.game`) |
-| İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik karakter özeti (ad, citizenid, meslek, nakit/banka, ID, ping, oyuncu sayısı) |
+| İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik özet: karakter (ad, citizenid, meslek), finans (nakit/banka) ve **Sağlık** kartı. Sağlık kartı `loe_jobcreator` hastalık sisteminin istemciye gönderdiği `healthState` olayından beslenir (ad, belirti, "ilaç etkisinde" / "sargılı" durumu); hastalık yoksa "Hastalığın yok" yazar. Sistem `Config.Health` ile ayarlanır, `loe_jobcreator`'a dokunulmaz |
 | Battlepass / Shop | Sunucuda bu sistemler **yok**. `Config.Menu`'de `resource`/`export` (varsayılan `loe_battlepass`/`loe_shop` → `Open`) başlamışsa onları açar; değilse "Yakında" sayfası gösterir. |
 | Ayarlar | Ayarlar ekranı |
 | Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (`disconnect`) / "Oyunu kapat" (`quit`) |
@@ -81,7 +79,7 @@ GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yaz�
 
 - NUI'den gelen **her** değer Lua'da yeniden doğrulanır: id şemada olmalı; toggle yalnızca boolean, select yalnızca tanımlı seçenek, slider yalnızca sonlu sayı (aralığa kırpılır, adıma yuvarlanır). Bozuk/oynanmış KVP yüklenirken süzülür.
 - Eylem ve native hedefleri beyaz listededir (`Schema.actions`, `Config.Native`); `quit` yalnızca `disconnect`/`quit` kabul eder.
-- Menü kapalıyken gelen NUI callback'leri reddedilir. Sunucu olayı oyuncu başına 2 sn rate-limit'lidir.
+- Menü kapalıyken gelen NUI callback'leri reddedilir. Sağlık verisi yalnızca sunucudan gelen olaydan okunur ve uzunluk/tür süzgecinden geçer.
 
 ## Test (oyunda)
 
@@ -89,7 +87,7 @@ GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yaz�
 2. ESC tekrar: menü kapanmalı, oyun kontrolü ve minimap/HUD geri gelmeli, yerleşik menü açılmamalı.
 3. Envanteri aç, ESC ile kapat: pause menü **açılmamalı**.
 4. Harita: `loe_3dmap` açılmalı; kapanınca (tercih açıksa) menü geri gelmeli.
-5. Oyun / bir `GTA Ayarları` satırı: yerleşik GTA menüsü açılmalı, ESC ile çıkınca oyuna dönmeli. **Çalışmazsa** `config.lua > Config.Native` hash'lerini düzelt.
+5. Ayarlar'da bir `GTA Ayarları` satırı: yerleşik GTA menüsü açılmalı, ESC ile çıkınca oyuna dönmeli. **Çalışmazsa** `config.lua > Config.Native` hash'lerini düzelt.
 6. Ayarlar → Kamera/Görüntü/Ses vb.: değiştir, çık, tekrar gir: değerler korunmalı; yeniden bağlanınca da korunmalı (KVP).
 7. Tercihler → Görünümü Sıfırla: onay çıkmalı; sonra tema/renk/dil varsayılana dönmeli.
 8. Normal Menü → "ESC ile yerleşik menü": ESC yerleşik menüyü açmalı; `/loepause` bu menüyü açmalı.

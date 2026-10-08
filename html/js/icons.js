@@ -31,6 +31,7 @@ window.ICONS = {
     user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
     wallet: '<path d="M4 7.5h14a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5Z"/><path d="M4 7.5V6a2 2 0 0 1 2-2h10"/><circle cx="16" cy="13.8" r="1" fill="currentColor"/>',
     signal: '<path d="M5 19v-3M10 19v-6M15 19V9M20 19V5"/>',
+    heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/>',
 };
 
 window.icon = function (name) {

@@ -192,7 +192,8 @@ check(pl.eval("Prefs.default('pref.accent')") == 'magenta', 'geçersiz Config.De
 print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
 
 SIM_PRELUDE = r'''
-sim = { now = 5000, pause = false, nuiFocus = false, msgs = {}, calls = {}, handlers = {}, exported = {}, threads = {}, events = {}, escFrame = false }
+sim = { now = 5000, pause = false, nuiFocus = false, msgs = {}, calls = {}, handlers = {}, exported = {}, threads = {}, events = {}, escFrame = false,
+        netHandlers = {}, started = {}, serverEvents = {} }
 local S = sim
 setmetatable(_G, { __index = function(_, k) return function() end end })   -- bilinmeyen native → no-op
 
@@ -201,7 +202,7 @@ json = { encode = function() return '{}' end, decode = function() return {} end 
 function GetResourceKvpString() return nil end
 function SetResourceKvp() end
 function GetCurrentResourceName() return 'loe_pause' end
-function GetResourceState(r) return 'missing' end
+function GetResourceState(r) return S.started[r] and 'started' or 'missing' end
 function GetHashKey(s) return 1 end
 function GetControlInstructionalButton() return 't_E' end
 function GetVehiclePedIsIn() return 0 end
@@ -225,11 +226,11 @@ function ActivateFrontendMenu()
     S.events[#S.events + 1] = { at = S.now + 120, fn = function() S.pause = true end }   -- oyun menüyü biraz sonra açar
 end
 function PauseMenuceptionGoDeeper(p) S.calls.GoDeeper = p end
-function AddEventHandler() end
-function RegisterNetEvent() end
+function AddEventHandler(name, fn) S.netHandlers[name] = fn end
+function RegisterNetEvent(name, fn) if fn then S.netHandlers[name] = fn end end
 function RegisterCommand() end
 function RegisterKeyMapping() end
-function TriggerServerEvent() end
+function TriggerServerEvent(name) S.serverEvents[#S.serverEvents + 1] = name end
 exports = setmetatable({}, {
     __call = function(_, name, fn) S.exported[name] = fn end,
     __index = function() return setmetatable({}, { __index = function() return function() return nil end end }) end,
@@ -261,6 +262,9 @@ end
 function sim.frames(ms) for _ = 1, math.ceil(ms / 16) do sim.step(16) end end
 function sim.lastOpen() local l; for _, m in ipairs(S.msgs) do if m.action == 'open' then l = m end end return l end
 function sim.openCount() local n = 0; for _, m in ipairs(S.msgs) do if m.action == 'open' then n = n + 1 end end return n end
+function sim.last() return S.msgs[#S.msgs] end
+function sim.fire(name, ...) return S.netHandlers[name](...) end
+function sim.count(list, v) local n = 0; for _, x in ipairs(list) do if x == v then n = n + 1 end end return n end
 '''
 
 SIM_SCENARIO = r'''
@@ -380,6 +384,37 @@ check(isOpen() == true, 'S6: menü yeniden açılmalı')
 sim.frames(500)
 sim.escFrame = true; sim.step(16); sim.frames(64)
 check(isOpen() == false, 'S6: açıkken ESC menüyü kapatmalı')
+
+-- S7: sağlık kartı — sunucunun healthState olayı önbelleğe alınır, menü açılınca ve açıkken iletilir
+local EV = 'loe_jobcreator:client:healthState'
+sim.frames(700)
+sim.fire(EV, { enabled = true, conditions = { { id = 'flu', label = 'Flu', symptom = 'cough', bandaged = false, suppressed = true } } })
+sim.pause = true; sim.frames(64)
+local o = sim.lastOpen()
+check(isOpen() == true, 'S7: menü açılmalı')
+check(o.health and o.health.known == true and #o.health.conditions == 1 and o.health.conditions[1].label == 'Flu'
+    and o.health.conditions[1].suppressed == true and o.health.conditions[1].bandaged == false, 'S7: hastalık menü açılırken iletilmeli')
+sim.fire(EV, { enabled = true, conditions = {} })
+check(sim.last().action == 'health' and #sim.last().health.conditions == 0, 'S7: menü açıkken güncelleme "health" mesajı olarak gitmeli')
+sim.fire(EV, 'çöp')
+sim.fire(EV, { enabled = true, conditions = { 'x', { label = 5 }, { label = '' }, { label = 'Ok' } } })
+check(#sim.last().health.conditions == 1 and sim.last().health.conditions[1].label == 'Ok', 'S7: bozuk veri süzülmeli')
+sim.fire(EV, { enabled = false })
+check(#sim.last().health.conditions == 0, 'S7: sağlık sistemi kapalıyken liste boş olmalı')
+
+-- S7b: oyuncu çıkışı önbelleği siler; loe_jobcreator çalışıyorsa menü güncel durumu bir kez ister (10 sn sınırı)
+sim.exported.Close(); sim.frames(700)
+sim.fire('QBCore:Client:OnPlayerUnload')
+sim.started.loe_jobcreator = true
+local hello = 'loe_jobcreator:server:healthHello'
+local n0 = sim.count(sim.serverEvents, hello)
+sim.pause = true; sim.frames(64)
+check(sim.lastOpen().health.known == false, 'S7b: çıkıştan sonra önbellek temiz olmalı')
+check(sim.count(sim.serverEvents, hello) == n0 + 1, 'S7b: bilinmeyen durumda healthHello istenmeli')
+sim.exported.Close(); sim.frames(700)
+sim.pause = true; sim.frames(64)
+check(sim.count(sim.serverEvents, hello) == n0 + 1, 'S7b: 10 sn içinde tekrar istenmemeli')
+sim.exported.Close()
 return R
 '''
 

@@ -33,14 +33,20 @@
     const defaults = { 'pref.accent': 'magenta', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'tr', 'pref.mapReturn': true };
     const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
                    'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
-    const menu = ['map', 'game', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: !['battlepass', 'shop'].includes(id), external: ['battlepass', 'shop'].includes(id) }));
-    const stats = { id: 12, ping: 34, name: 'Arda Kaya', cid: 'LOE48213', job: 'Polis', grade: 'Memur', cash: 12500, bank: 248900 };
+    const menu = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: !['battlepass', 'shop'].includes(id), external: ['battlepass', 'shop'].includes(id) }));
+    const stats = { name: 'Arda Kaya', cid: 'LOE48213', job: 'Polis', grade: 'Memur', cash: 12500, bank: 248900 };
+    // ?health=none → hastalık yok, ?health=quiet → ilaç etkisinde, varsayılan: aktif grip + sargılı kurşun yarası
+    const healthMode = params.get('health') || 'sick';
+    const health = { known: true, conditions: healthMode === 'none' ? [] : (healthMode === 'quiet'
+        ? [{ id: 'flu', label: 'Flu', symptom: 'You are coughing and feel weak.', suppressed: true, bandaged: false }]
+        : [{ id: 'flu', label: 'Flu', symptom: 'You are coughing and feel weak.', suppressed: false, bandaged: false },
+           { id: 'gunshot', label: 'Gunshot wound', symptom: 'You are bleeding.', suppressed: false, bandaged: true }]) };
 
     const send = (d) => window.postMessage(d, '*');
-    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats });
+    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health });
 
     const handlers = {
-        ready: () => { setTimeout(() => { send({ action: 'init', schema, brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' } }); open(); setTimeout(() => send({ action: 'info', players: 27, max: 48, ping: 34 }), 300); }, 50); return { ok: true }; },
+        ready: () => { setTimeout(() => { send({ action: 'init', schema, brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' } }); open(); }, 50); return { ok: true }; },
         close: () => { send({ action: 'close' }); console.log('[mock] close'); return { ok: true }; },
         setting: (b) => {
             const row = schema.flatMap(c => c.groups).flatMap(g => g.rows).find(r => r.id === b.id);
