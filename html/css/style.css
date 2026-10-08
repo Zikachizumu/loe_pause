@@ -272,6 +272,15 @@ kbd {
 .kv:first-of-type { border-top: 0; }
 .kv span { color: var(--mut); font-weight: 500; }
 .kv b { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.health-note { font-size: .88rem; color: var(--mut); line-height: 1.5; font-weight: 500; }
+.health-note.ok { color: #34d399; font-weight: 700; }
+.cond { padding: .65rem 0; border-top: 1px solid var(--line); }
+.cond:first-of-type { border-top: 0; padding-top: 0; }
+.cond-head { display: flex; align-items: center; justify-content: space-between; gap: .8rem; }
+.cond-head b { font-size: .92rem; font-weight: 800; }
+.cond .chip { font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 800; padding: .26rem .65rem; border-radius: 99px; color: #fff; background: rgba(239, 68, 68, .85); border: 1px solid rgba(239, 68, 68, .9); text-shadow: none; }
+.cond.quiet .chip { background: rgba(251, 191, 36, .18); border-color: rgba(251, 191, 36, .7); color: #fbbf24; }
+.cond small { display: block; margin-top: .4rem; font-size: .76rem; color: var(--dim); line-height: 1.4; font-weight: 500; }
 .soon { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1rem; padding: 2rem; }
 .soon .big { font-size: 4.2rem; color: var(--accent); filter: drop-shadow(0 0 1rem rgba(var(--accent-rgb), .6)); }
 .soon h3 { font-size: 1.5rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }

@@ -32,7 +32,7 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 /* ============================================================ METİNLER */
 const STR = {
     tr: {
-        menu_map: 'Harita', menu_game: 'Oyun', menu_stats: 'İstatistikler', menu_battlepass: 'Battlepass',
+        menu_map: 'Harita', menu_stats: 'İstatistikler', menu_battlepass: 'Battlepass',
         menu_shop: 'Shop', menu_settings: 'Ayarlar', menu_quit: 'Oyundan Çık',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
         hint_move: 'Hareket', hint_change: 'Değiştir', hint_select: 'Seç', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
@@ -41,12 +41,14 @@ const STR = {
         quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılabilir ya da oyunu tamamen kapatabilirsin.',
         quit_disconnect: 'Sunucudan ayrıl', quit_game: 'Oyunu kapat', cancel: 'Vazgeç',
         stats_title: 'İstatistikler', st_character: 'Karakter', st_name: 'Ad Soyad', st_cid: 'Vatandaş No', st_job: 'Meslek',
-        st_finance: 'Finans', st_cash: 'Nakit', st_bank: 'Banka', st_connection: 'Bağlantı', st_id: 'Sunucu ID', st_ping: 'Ping', st_players: 'Oyuncu',
+        st_finance: 'Finans', st_cash: 'Nakit', st_bank: 'Banka',
+        st_health: 'Sağlık', health_none: 'Hastalığın yok. Sağlıklısın.', health_unknown: 'Sağlık bilgisi alınıyor…',
+        health_active: 'Aktif', health_quiet: 'İlaç etkisinde — belirtiler sessiz', health_bandaged: 'Sargılı',
         msg_rec_started: 'Kayıt başladı', msg_rec_saved: 'Klip kaydedildi', msg_rec_discarded: 'Kayıt iptal edildi', msg_reset_done: 'Görünüm varsayılana döndü',
         back: 'Geri', close: 'Kapat',
     },
     en: {
-        menu_map: 'Map', menu_game: 'Game', menu_stats: 'Statistics', menu_battlepass: 'Battlepass',
+        menu_map: 'Map', menu_stats: 'Statistics', menu_battlepass: 'Battlepass',
         menu_shop: 'Shop', menu_settings: 'Settings', menu_quit: 'Quit Game',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
         hint_move: 'Move', hint_change: 'Change', hint_select: 'Select', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
@@ -55,20 +57,22 @@ const STR = {
         quit_title: 'Quit the game?', quit_text: 'You can leave the server or close the game completely.',
         quit_disconnect: 'Leave server', quit_game: 'Close game', cancel: 'Cancel',
         stats_title: 'Statistics', st_character: 'Character', st_name: 'Name', st_cid: 'Citizen ID', st_job: 'Job',
-        st_finance: 'Finances', st_cash: 'Cash', st_bank: 'Bank', st_connection: 'Connection', st_id: 'Server ID', st_ping: 'Ping', st_players: 'Players',
+        st_finance: 'Finances', st_cash: 'Cash', st_bank: 'Bank',
+        st_health: 'Health', health_none: 'No illness. You are healthy.', health_unknown: 'Loading health info…',
+        health_active: 'Active', health_quiet: 'Medicated — symptoms quiet', health_bandaged: 'Bandaged',
         msg_rec_started: 'Recording started', msg_rec_saved: 'Clip saved', msg_rec_discarded: 'Recording discarded', msg_reset_done: 'Appearance reset to defaults',
         back: 'Back', close: 'Close',
     },
 };
 
-const MENU_ICONS = { map: 'map', game: 'gamepad', stats: 'bars', battlepass: 'pass', shop: 'shop', settings: 'gear', quit: 'exit' };
-const DEFAULT_MENU = ['map', 'game', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: true }));
+const MENU_ICONS = { map: 'map', stats: 'bars', battlepass: 'pass', shop: 'shop', settings: 'gear', quit: 'exit' };
+const DEFAULT_MENU = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: true }));
 
 /* ============================================================ DURUM */
 const S = {
     open: false, lang: 'tr',
     schema: [], brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' },
-    values: {}, keys: {}, menu: DEFAULT_MENU, stats: null, info: null,
+    values: {}, keys: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
     modal: null,
@@ -195,22 +199,32 @@ const showPage = (kind, id) => {
 
 const kv = (label, value) => h('div', { class: 'kv' }, h('span', {}, label), h('b', {}, value));
 
+// Sağlık kartı: hastalık yoksa tek satır; varsa her biri için ad + durum + belirti.
+const healthRows = () => {
+    const hl = S.health || {};
+    if (!hl.known) return [h('p', { class: 'health-note' }, t('health_unknown'))];
+    if (!hl.conditions || !hl.conditions.length) return [h('p', { class: 'health-note ok' }, t('health_none'))];
+    return hl.conditions.map(c => {
+        const status = c.suppressed ? t('health_quiet') : (c.bandaged ? t('health_bandaged') : t('health_active'));
+        return h('div', { class: 'cond' + (c.suppressed ? ' quiet' : '') },
+            h('div', { class: 'cond-head' }, h('b', {}, c.label), h('span', { class: 'chip' }, status)),
+            c.symptom && !c.suppressed ? h('small', {}, c.symptom) : null);
+    });
+};
+
 const renderPage = () => {
     if (!S.page) return;
     const body = $('#pageBody');
     if (S.page.kind === 'stats') {
         $('#pTitle').textContent = t('stats_title');
-        const st = S.stats || {}, inf = S.info || {};
+        const st = S.stats || {};
         const job = st.job ? (st.grade ? `${st.job} — ${st.grade}` : st.job) : null;
-        const players = inf.players != null ? `${inf.players}${inf.max ? ' / ' + inf.max : ''}` : null;
-        const ping = (inf.ping ?? st.ping);
         body.replaceChildren(h('div', { class: 'cards' },
             h('div', { class: 'cardx wide' }, h('h4', {}, ico('user'), t('st_character')),
                 kv(t('st_name'), dash(st.name)), kv(t('st_cid'), dash(st.cid)), kv(t('st_job'), dash(job))),
             h('div', { class: 'cardx' }, h('h4', {}, ico('wallet'), t('st_finance')),
                 kv(t('st_cash'), fmtMoney(st.cash)), kv(t('st_bank'), fmtMoney(st.bank))),
-            h('div', { class: 'cardx' }, h('h4', {}, ico('signal'), t('st_connection')),
-                kv(t('st_id'), dash(st.id)), kv(t('st_ping'), ping != null ? `${ping} ms` : '—'), kv(t('st_players'), dash(players)))));
+            h('div', { class: 'cardx' }, h('h4', {}, ico('heart'), t('st_health')), ...healthRows())));
     } else {
         $('#pTitle').textContent = t('menu_' + S.page.id);
         body.replaceChildren(h('div', { class: 'soon' }, h('span', { class: 'big' }, ico('clock')), h('h3', {}, t('soon_title')), h('p', {}, t('soon_text'))));
@@ -639,7 +653,7 @@ const onOpen = (d) => {
     S.keys = d.keys || {};
     S.menu = (Array.isArray(d.menu) && d.menu.length) ? d.menu : DEFAULT_MENU;
     S.stats = d.stats || null;
-    S.info = null;
+    S.health = d.health || { known: false, conditions: [] };
     S.mainIdx = 0; S.cat = 0; S.grp = 0; S.row = 0; S.zone = 'cats'; S.query = ''; q.value = '';
     closeModal();
     applyPrefs();
@@ -665,8 +679,8 @@ window.addEventListener('message', (ev) => {
     if (d.action === 'init') onInit(d);
     else if (d.action === 'open') onOpen(d);
     else if (d.action === 'close') onClose();
-    else if (d.action === 'info') {
-        S.info = { players: d.players, max: d.max, ping: d.ping };
+    else if (d.action === 'health') {
+        S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();
     }
 });

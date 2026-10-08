@@ -84,7 +84,7 @@ local function buildMenu()
 end
 
 local function buildStats()
-    local out = { id = GetPlayerServerId(PlayerId()) }       -- ping/oyuncu sayısı sunucudan gelir (loe_pause:client:info)
+    local out = {}
     local ok, pd = pcall(function() return exports.qbx_core:GetPlayerData() end)
     if ok and type(pd) == 'table' then
         local ci = pd.charinfo or {}
@@ -99,6 +99,58 @@ local function buildStats()
         end
     end
     return out
+end
+
+-- ================================================================ SAĞLIK (hastalıklar)
+-- Hastalık sistemi loe_jobcreator'dadır (Sağlık sekmesi). Ona DOKUNMADAN, sunucunun bu oyuncuya zaten gönderdiği
+-- 'healthState' olayını dinleyip son durumu saklarız; menü açılınca istatistik sayfasında gösteririz.
+local HEALTH = Config.Health or {}
+local health = { known = false, conditions = {} }
+local lastHealthHello = 0
+
+local function clip(v, n)
+    if type(v) ~= 'string' or v == '' then return nil end
+    return v:sub(1, n)
+end
+
+local function healthPayload()
+    return { known = health.known, conditions = health.conditions }
+end
+
+RegisterNetEvent(HEALTH.event or 'loe_jobcreator:client:healthState', function(state)
+    if type(state) ~= 'table' then return end
+    local list = {}
+    if state.enabled == true and type(state.conditions) == 'table' then
+        for _, c in ipairs(state.conditions) do
+            if type(c) == 'table' and clip(c.label, 60) then
+                list[#list + 1] = {
+                    id         = clip(c.id, 40),
+                    label      = clip(c.label, 60),
+                    symptom    = clip(c.symptom, 140),
+                    bandaged   = c.bandaged == true,
+                    suppressed = c.suppressed == true,
+                }
+                if #list >= 12 then break end
+            end
+        end
+    end
+    health.known, health.conditions = true, list
+    if isOpen then SendNUIMessage({ action = 'health', health = healthPayload() }) end
+end)
+
+AddEventHandler('QBCore:Client:OnPlayerUnload', function()
+    health.known, health.conditions = false, {}
+end)
+
+--- loe_pause sonradan başladıysa (restart) önbellek boştur: sistemin kendi "merhaba" olayıyla güncel durumu iste.
+--- Bu olay loe_jobcreator tarafında tekrar çağrılabilir (ilk karşılamadan sonra yalnızca durumu yeniden gönderir).
+local function refreshHealth()
+    local res = HEALTH.resource or 'loe_jobcreator'
+    if health.known or not resourceStarted(res) then return end
+    local now = GetGameTimer()
+    if now - lastHealthHello < 10000 then return end
+    lastHealthHello = now
+    TriggerServerEvent(HEALTH.helloEvent or 'loe_jobcreator:server:healthHello')
 end
 
 -- ================================================================ AÇ / KAPAT
@@ -147,8 +199,9 @@ local function open(anim)
         keys   = buildKeys(),
         menu   = buildMenu(),
         stats  = buildStats(),
+        health = healthPayload(),
     })
-    TriggerServerEvent('loe_pause:server:getInfo')
+    refreshHealth()
 end
 
 Apply.menuOpen = function() return isOpen end
@@ -356,9 +409,6 @@ RegisterNUICallback('menu', function(d, cb)
     if id == 'map' then
         cb({ ok = true })
         CreateThread(openMap)
-    elseif id == 'game' then
-        cb({ ok = true })
-        openNative('game')
     elseif id == 'settings' then
         cb({ ok = true, page = 'settings' })
     elseif id == 'stats' or id == 'battlepass' or id == 'shop' then
@@ -393,17 +443,6 @@ Apply.actions['menu.opennative'] = function()
     openNative('game')
     return { ok = true }
 end
-
--- ================================================================ SUNUCU BİLGİSİ
-RegisterNetEvent('loe_pause:client:info', function(data)
-    if type(data) ~= 'table' or not isOpen then return end
-    SendNUIMessage({
-        action  = 'info',
-        players = tonumber(data.players),
-        max     = tonumber(data.max),
-        ping    = tonumber(data.ping),
-    })
-end)
 
 -- ================================================================ KOMUT / EXPORT
 RegisterCommand(Config.Command, function()
