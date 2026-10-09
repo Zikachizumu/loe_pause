@@ -111,9 +111,23 @@ local NOTE_KEYS = info(
     'Aşağıdaki tuşlar GTA varsayılan kontrolleridir ve güncel atamayı gösterir. Sunucudaki özel sistemler (envanter, telefon...) kendi tuşlarını kullanabilir; onlar "FiveM" grubunda listelenir.',
     'The keys below are the GTA default controls and show the current binding. Server systems (inventory, phone...) may use their own keys; they are listed in the "FiveM" group.')
 
+-- Hızlı Eylemler: Config.Shortcuts'taki tek seferlik komutları menüden çalıştırır (id = 'cmd.<id>'; işleyici client/main.lua'da).
+-- cap: yalnızca yetkililere görünen satırların izin anahtarı (sunucu doğrular).
+local shortcutRows, shortcutCommands = {}, {}
+for _, s in ipairs(Config.Shortcuts or {}) do
+    shortcutCommands[s.command] = true
+    shortcutRows[#shortcutRows + 1] = {
+        id = 'cmd.' .. s.id, type = 'action', label = L(s.tr, s.en), command = s.command,
+        button = L('Çalıştır', 'Run'), cap = (s.aces and #s.aces > 0) and s.id or nil,
+        desc = s.desc and L(s.desc.tr, s.desc.en) or nil,
+    }
+end
+
 local fivemRows = {}
 for _, m in ipairs(Config.KeyMappings or {}) do
-    fivemRows[#fivemRows + 1] = { type = 'key', label = L(m.tr, m.en), command = m.command }
+    if not shortcutCommands[m.command] then          -- Hızlı Eylemler'de zaten var
+        fivemRows[#fivemRows + 1] = { type = 'key', label = L(m.tr, m.en), command = m.command }
+    end
 end
 
 Schema.categories[#Schema.categories + 1] = cat('keys', 'keyboard', 'Tuş Atamaları', 'Key Bindings', {
@@ -221,6 +235,15 @@ Schema.categories[#Schema.categories + 1] = cat('keys', 'keyboard', 'Tuş Atamal
         info('Sunucu scriptlerinin kayıtlı tuşları. Atanmamış olanlar listelenmez.',
              'Keys registered by server scripts. Unbound ones are not listed.')),
 })
+
+if #shortcutRows > 0 then
+    local scRows = {
+        info('Bu eylemler, atanmış kısayol tuşuna basmakla aynı işi yapar; menü kapanır ve eylem çalışır. Tuşu değiştirmek için "Tuşları değiştir" satırını kullan.',
+             'These actions do the same as pressing the bound shortcut key; the menu closes and the action runs. Use "Change keys" to rebind a key.'),
+    }
+    for _, r in ipairs(shortcutRows) do scRows[#scRows + 1] = r end
+    table.insert(Schema.categories[#Schema.categories].groups, 1, group('shortcuts', 'Hızlı Eylemler', 'Quick Actions', scRows))
+end
 
 -- ------------------------------------------------------------------ 4. Ses
 Schema.categories[#Schema.categories + 1] = cat('audio', 'speaker', 'Ses', 'Audio', {

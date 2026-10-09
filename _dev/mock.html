@@ -32,7 +32,7 @@
     };
     const defaults = { 'pref.accent': 'magenta', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'tr', 'pref.mapReturn': true };
     const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
-                   'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
+                   'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:loe_hud_photomode': 't_F11', 'm:aractuslari': 't_F7', 'm:loecik': 't_F6', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
     const menu = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: !['battlepass', 'shop'].includes(id), external: ['battlepass', 'shop'].includes(id) }));
     const stats = { name: 'Arda Kaya', cid: 'LOE48213', job: 'Polis', grade: 'Memur', cash: 12500, bank: 248900 };
     // ?health=none → hastalık yok, ?health=quiet → ilaç etkisinde, varsayılan: aktif grip + sargılı kurşun yarası
@@ -44,7 +44,8 @@
 
     const send = (d) => window.postMessage(d, '*');
     const native = { subtitles: true, metric: true, safezone: 95, resolution: '2560x1440', language: 0 };
-    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, native });
+    const caps = params.get('admin') === '1' ? { admin: true } : {};   // ?admin=1 → "Yönetici paneli" satırı görünür
+    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, native, caps });
 
     const handlers = {
         ready: () => { setTimeout(() => { send({ action: 'init', schema, brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' } }); open(); }, 50); return { ok: true }; },

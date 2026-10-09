@@ -57,7 +57,7 @@ local function buildKeys()
         if c.id == 'keys' then
             for _, g in ipairs(c.groups) do
                 for _, r in ipairs(g.rows) do
-                    if r.type == 'key' then
+                    if r.type == 'key' or (r.type == 'action' and r.command) then
                         local k = r.control and ('c:' .. r.control) or ('m:' .. tostring(r.command))
                         local token = keyToken(r)
                         if type(token) == 'string' and token ~= '' then out[k] = token end
@@ -131,6 +131,47 @@ end
 --- Yerleşik GTA menüsüne ESC ile geçiş yalnızca config izin veriyorsa VE oyuncu seçtiyse geçerlidir.
 local function nativeMenuWanted()
     return Config.Hijack.allowNativeMenu == true and Prefs.get('menu.native') == true
+end
+
+-- ================================================================ HIZLI EYLEMLER (kısayol komutları)
+-- Görünürlük izni (yalnızca aces tanımlı satırlar için) sunucudan gelir; oyuncu çıkınca silinir.
+local SHORTCUTS = {}                         -- 'cmd.<id>' -> Config.Shortcuts girdisi (beyaz liste)
+for _, s in ipairs(Config.Shortcuts or {}) do
+    if type(s.id) == 'string' and type(s.command) == 'string' and s.command:sub(1, 1) ~= '+' then
+        SHORTCUTS['cmd.' .. s.id] = s
+    end
+end
+local caps, lastCapsAsk = {}, 0
+
+local function capsPayload()
+    local out = {}
+    for id in pairs(caps) do out[id] = true end
+    return out
+end
+
+RegisterNetEvent('loe_pause:client:caps', function(list)
+    if type(list) ~= 'table' then return end
+    local fresh = {}
+    for _, id in ipairs(list) do
+        local s = type(id) == 'string' and SHORTCUTS['cmd.' .. id]
+        if s and s.aces then fresh[id] = true end        -- yalnızca yetki gerektiren tanımlı satırlar
+    end
+    caps = fresh
+    if isOpen then SendNUIMessage({ action = 'caps', caps = capsPayload() }) end
+end)
+
+AddEventHandler('QBCore:Client:OnPlayerUnload', function() caps = {} end)
+
+local function refreshCaps()
+    local now = GetGameTimer()
+    if now - lastCapsAsk < 5000 then return end
+    for _, s in pairs(SHORTCUTS) do
+        if s.aces then
+            lastCapsAsk = now
+            TriggerServerEvent('loe_pause:server:caps')
+            return
+        end
+    end
 end
 
 -- ================================================================ SAĞLIK (hastalıklar)
@@ -233,8 +274,10 @@ local function open(anim)
         stats  = buildStats(),
         health = healthPayload(),
         native = buildNativeValues(),
+        caps   = capsPayload(),
     })
     refreshHealth()
+    refreshCaps()
 end
 
 Apply.menuOpen = function() return isOpen end
@@ -481,6 +524,20 @@ RegisterNUICallback('quit', function(d, cb)
         RestartGame()
     end)
 end)
+
+-- Hızlı Eylemler: menüyü kapatır, kısa bir beklemeden sonra kısayolun komutunu çalıştırır. Yalnızca Config.Shortcuts'taki
+-- komutlar çalışır (NUI'den komut metni ALINMAZ; yalnızca şemadaki eylem kimliği gelir).
+for actionId, s in pairs(SHORTCUTS) do
+    Apply.actions[actionId] = function()
+        if s.aces and not caps[s.id] then return { ok = false } end
+        CreateThread(function()
+            Wait(300)      -- menü kapanışı + kısayolun kendi debounce süresi (örn. imlec 250 ms)
+            dbg('shortcut', s.command)
+            ExecuteCommand(s.command)
+        end)
+        return { ok = true, close = true }
+    end
+end
 
 Apply.actions['menu.opennative'] = function()
     if Config.Hijack.allowNativeMenu ~= true then return { ok = false } end

@@ -113,7 +113,18 @@ for c in cats:
     for g in c['groups']:
         for r in g['rows']:
             if r['type'] == 'action':
-                check(f"Apply.actions['{r['id']}']" in apply_src + main_src, f"{r['id']}: eylem işleyicisi yok")
+                dynamic = r['id'].startswith('cmd.') and 'Apply.actions[actionId]' in main_src       # Config.Shortcuts döngüsü
+                check(dynamic or f"Apply.actions['{r['id']}']" in apply_src + main_src, f"{r['id']}: eylem işleyicisi yok")
+
+# Hızlı Eylemler: yapılandırma tutarlılığı
+shortcuts = lua_to_py(lua.eval('(function() local t = {} for i, s in ipairs(Config.Shortcuts) do t[i] = s end return t end)()'))
+sc_ids = [s['id'] for s in shortcuts.values()] if isinstance(shortcuts, dict) else [s['id'] for s in shortcuts]
+check(len(sc_ids) == len(set(sc_ids)), 'Config.Shortcuts: yinelenen id')
+for s in (shortcuts.values() if isinstance(shortcuts, dict) else shortcuts):
+    check(not s['command'].startswith('+'), f"Config.Shortcuts: '+' ile başlayan (bas-bırak) komut eklenemez: {s['command']}")
+    check(f"cmd.{s['id']}" in {r['id'] for c in cats for g in c['groups'] for r in g['rows'] if r['type'] == 'action'}, f"Config.Shortcuts: {s['id']} şemada eylem satırı olmamış")
+    if s.get('aces'):
+        check(any(r.get('cap') == s['id'] for c in cats for g in c['groups'] for r in g['rows']), f"{s['id']}: aces var ama satırda cap yok (herkese görünür!)")
 
 (ROOT / '_dev' / 'schema.json').write_text(json.dumps(cats, ensure_ascii=False, indent=1), encoding='utf-8')
 rows = sum(len(g['rows']) for c in cats for g in c['groups'])
@@ -237,8 +248,9 @@ function ActivateFrontendMenu()
     S.events[#S.events + 1] = { at = S.now + 120, fn = function() S.pause = true end }   -- oyun menüyü biraz sonra açar
 end
 function PauseMenuceptionGoDeeper(p) S.calls.GoDeeper = p end
-function AddEventHandler(name, fn) S.netHandlers[name] = fn end
-function RegisterNetEvent(name, fn) if fn then S.netHandlers[name] = fn end end
+local function addHandler(name, fn) S.netHandlers[name] = S.netHandlers[name] or {}; table.insert(S.netHandlers[name], fn) end
+function AddEventHandler(name, fn) addHandler(name, fn) end
+function RegisterNetEvent(name, fn) if fn then addHandler(name, fn) end end
 function RegisterCommand() end
 function RegisterKeyMapping() end
 function TriggerServerEvent(name) S.serverEvents[#S.serverEvents + 1] = name end
@@ -274,7 +286,7 @@ function sim.frames(ms) for _ = 1, math.ceil(ms / 16) do sim.step(16) end end
 function sim.lastOpen() local l; for _, m in ipairs(S.msgs) do if m.action == 'open' then l = m end end return l end
 function sim.openCount() local n = 0; for _, m in ipairs(S.msgs) do if m.action == 'open' then n = n + 1 end end return n end
 function sim.last() return S.msgs[#S.msgs] end
-function sim.fire(name, ...) return S.netHandlers[name](...) end
+function sim.fire(name, ...) for _, fn in ipairs(S.netHandlers[name] or {}) do fn(...) end end
 function sim.count(list, v) local n = 0; for _, x in ipairs(list) do if x == v then n = n + 1 end end return n end
 '''
 
@@ -490,6 +502,46 @@ check(restarts == 0, 'S9: sunucuya süre tanınmalı (yedek hemen çalışmamal�
 sim.frames(3000)
 check(restarts == 1, 'S9: sunucu düşürmezse yedek olarak RestartGame çalışmalı')
 check(#cmds == 0, 'S9: script\'ten çalışmayan disconnect komutu kullanılmamalı')
+
+-- S10: Hızlı Eylemler — kısayol komutu menü kapandıktan sonra çalışır; yetki gerektirenler yalnızca sunucu onayıyla
+sim.frames(700)
+sim.fire('QBCore:Client:OnPlayerUnload')
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S10: menü açılmalı')
+check(type(sim.lastOpen().caps) == 'table' and next(sim.lastOpen().caps) == nil, 'S10: yetki gelmeden caps boş olmalı')
+check(sim.count(sim.serverEvents, 'loe_pause:server:caps') >= 1, 'S10: açılışta sunucudan yetki istenmeli')
+local r1 = sim.nui('action', { id = 'cmd.cursor' })
+check(r1 and r1.ok == true, 'S10: imlec eylemi ok dönmeli')
+check(isOpen() == false, 'S10: eylem menüyü kapatmalı')
+sim.frames(500)
+check(#cmds == 1 and cmds[1] == 'imlec', 'S10: kısayol komutu menü kapandıktan sonra çalışmalı')
+
+sim.frames(700)
+sim.pause = true; sim.frames(64)
+local r2 = sim.nui('action', { id = 'cmd.admin' })
+check(r2 and r2.ok == false and isOpen() == true, 'S10: yetkisizken admin eylemi reddedilmeli')
+sim.frames(500)
+check(#cmds == 1, 'S10: reddedilen admin komutu çalıştırılmamalı')
+local r3 = sim.nui('action', { id = 'cmd.hack' })
+check(r3 and r3.ok == false, 'S10: tanımsız kısayol reddedilmeli')
+local r3b = sim.nui('action', { id = 'cmd.cursor; quit' })
+check(r3b and r3b.ok == false, 'S10: kimliğe komut eklenemez')
+
+sim.fire('loe_pause:client:caps', { 'admin' })
+check(sim.last().action == 'caps' and sim.last().caps.admin == true, 'S10: yetki menü açıkken arayüze iletilmeli')
+sim.fire('loe_pause:client:caps', { 'cursor', 'hack', 5 })
+check(sim.last().caps.cursor == nil and sim.last().caps.hack == nil and sim.last().caps.admin == nil, 'S10: bozuk/yetkisiz caps listesi süzülmeli')
+sim.fire('loe_pause:client:caps', 'çöp')
+sim.fire('loe_pause:client:caps', { 'admin' })
+local r4 = sim.nui('action', { id = 'cmd.admin' })
+check(r4 and r4.ok == true, 'S10: yetkiliyken admin eylemi çalışmalı')
+sim.frames(500)
+check(#cmds == 2 and cmds[2] == 'admin', 'S10: admin komutu çalışmalı')
+sim.fire('QBCore:Client:OnPlayerUnload')
+sim.frames(700)
+sim.pause = true; sim.frames(64)
+check(next(sim.lastOpen().caps) == nil, 'S10: oyuncu çıkınca yetki silinmeli')
+sim.exported.Close(); sim.frames(700)
 return R
 '''
 
@@ -520,7 +572,19 @@ function AddEventHandler(n, fn) handlers[n] = fn end
 function GetGameTimer() return now end
 function DropPlayer(s, r) dropped[#dropped + 1] = { s = s, r = r } end
 ''')
+sv.execute(r'''
+aceTable, sent = {}, {}
+function IsPlayerAceAllowed(s, a) return aceTable[s .. ':' .. a] == true end
+function TriggerClientEvent(n, t, list) sent[#sent + 1] = { n = n, t = t, list = list } end
+''')
+sv.execute((ROOT / 'config.lua').read_text(encoding='utf-8'))
 sv.execute((ROOT / 'server/main.lua').read_text(encoding='utf-8'))
+CAPS = sv.eval('''function(src, adv, admin)
+    source = src; now = now + (adv or 0)
+    aceTable[tostring(src) .. ':admin'] = admin == true
+    handlers['loe_pause:server:caps']()
+    return #sent
+end''')
 SV = sv.eval('''function(src, adv)
     source = src; now = now + (adv or 0)
     handlers['loe_pause:server:leave']()
@@ -537,6 +601,18 @@ check(SV('7') == 2, 'sunucu: sayı olmayan source yok sayılmalı')
 check(SV(-3) == 2, 'sunucu: negatif source yok sayılmalı')
 sv_drop()
 check(SV(5, 10) == 3, 'sunucu: oyuncu çıkınca sınır kaydı temizlenmeli')
+
+# yetki görünürlüğü (Hızlı Eylemler)
+n0 = int(sv.eval('#sent'))
+check(CAPS(9, 5000, False) == n0 + 1, 'sunucu: caps isteği yanıtlanmalı')
+last = lua_to_py(sv.eval('sent[#sent]'))
+check(last['n'] == 'loe_pause:client:caps' and last['t'] == 9 and len(lua_to_py(sv.eval('sent[#sent].list')) or []) == 0, 'sunucu: yetkisiz oyuncuya boş liste gitmeli')
+check(CAPS(9, 100, True) == n0 + 1, 'sunucu: caps istekleri 2 sn sınırlanmalı')
+check(CAPS(9, 3000, True) == n0 + 2, 'sunucu: süre dolunca yeniden yanıtlanmalı')
+check(list(lua_to_py(sv.eval('sent[#sent].list'))) == ['admin'], 'sunucu: admin ACE sahibine "admin" gitmeli')
+check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
+sv.execute('source = 9 handlers["playerDropped"]()')
+check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
 
 print()
 if failures:
