@@ -479,8 +479,11 @@ sim.nui('quit', { mode = 'quit' }); sim.frames(400)
 check(#cmds == 0 and isOpen() == true, 'S9: mode=quit reddedilmeli (menü açık kalır, komut yok)')
 sim.nui('quit', {}); sim.nui('quit', 'x'); sim.frames(400)
 check(#cmds == 0 and isOpen() == true, 'S9: modsuz/bozuk istek reddedilmeli')
-sim.nui('quit', { mode = 'disconnect' }); sim.frames(400)
-check(#cmds == 1 and cmds[1] == 'disconnect', 'S9: sunucudan ayrıl yalnızca disconnect çalıştırmalı')
+local leave0 = sim.count(sim.serverEvents, 'loe_pause:server:leave')
+check(leave0 == 0, 'S9: reddedilen isteklerde sunucuya ayrılma olayı gitmemeli')
+sim.nui('quit', { mode = 'disconnect' }); sim.frames(800)
+check(sim.count(sim.serverEvents, 'loe_pause:server:leave') == 1, 'S9: sunucudan ayrıl, sunucuya ayrılma olayını (kesin yol) göndermeli')
+check(#cmds == 1 and cmds[1] == 'disconnect', 'S9: istemci yedeği yalnızca disconnect çalıştırmalı')
 check(isOpen() == false, 'S9: ayrılırken menü kapanmalı')
 return R
 '''
@@ -501,6 +504,34 @@ try:
     print('  senaryolar tamam')
 except Exception as exc:  # noqa: BLE001
     check(False, f'simülasyon hatası: {exc}')
+
+# ------------------------------------------------------------------ 5) sunucu: ayrılma olayı
+print('[5] Sunucu: sunucudan ayrıl')
+sv = LuaRuntime(unpack_returned_tuples=True)
+sv.execute(r'''
+handlers, dropped, now, source = {}, {}, 1000, 0
+function RegisterNetEvent(n, fn) handlers[n] = fn end
+function AddEventHandler(n, fn) handlers[n] = fn end
+function GetGameTimer() return now end
+function DropPlayer(s, r) dropped[#dropped + 1] = { s = s, r = r } end
+''')
+sv.execute((ROOT / 'server/main.lua').read_text(encoding='utf-8'))
+SV = sv.eval('''function(src, adv)
+    source = src; now = now + (adv or 0)
+    handlers['loe_pause:server:leave']()
+    return #dropped
+end''')
+sv_drop = sv.eval('function() source = 5 handlers["playerDropped"]() end')
+check(SV(5) == 1, 'sunucu: ayrılma isteği oyuncuyu düşürmeli')
+d0 = lua_to_py(sv.eval('dropped[1]'))
+check(d0['s'] == 5 and isinstance(d0['r'], str) and d0['r'], 'sunucu: yalnızca isteği gönderen düşürülmeli, neden metni dolu olmalı')
+check(SV(5, 500) == 1, 'sunucu: 3 sn içinde art arda istek yok sayılmalı')
+check(SV(5, 3000) == 2, 'sunucu: süre dolunca yeniden düşürülebilmeli')
+check(SV(0) == 2, 'sunucu: source=0 yok sayılmalı')
+check(SV('7') == 2, 'sunucu: sayı olmayan source yok sayılmalı')
+check(SV(-3) == 2, 'sunucu: negatif source yok sayılmalı')
+sv_drop()
+check(SV(5, 10) == 3, 'sunucu: oyuncu çıkınca sınır kaydı temizlenmeli')
 
 print()
 if failures:
