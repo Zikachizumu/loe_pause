@@ -84,12 +84,12 @@ Okuma başarısız olursa satırda değer görünmez (menü bozulmaz). Diğer `G
 | İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik özet: karakter (ad, citizenid, meslek), finans (nakit/banka) ve **Sağlık** kartı. Sağlık kartı `loe_jobcreator` hastalık sisteminin istemciye gönderdiği `healthState` olayından beslenir (ad, belirti, "ilaç etkisinde" / "sargılı" durumu); hastalık yoksa "Hastalığın yok" yazar. Sistem `Config.Health` ile ayarlanır, `loe_jobcreator`'a dokunulmaz |
 | Battlepass / Shop | Sunucuda bu sistemler **yok**. `Config.Menu`'de `resource`/`export` (varsayılan `loe_battlepass`/`loe_shop` → `Open`) başlamışsa onları açar; değilse "Yakında" sayfası gösterir. |
 | Ayarlar | Ayarlar ekranı |
-| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (`disconnect`) / "Oyunu kapat" (`quit`) |
+| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (`disconnect`: sunucudan çıkar, FiveM ana menüsüne döner) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
 
 ## Güvenlik
 
 - NUI'den gelen **her** değer Lua'da yeniden doğrulanır: id şemada olmalı; toggle yalnızca boolean, select yalnızca tanımlı seçenek, slider yalnızca sonlu sayı (aralığa kırpılır, adıma yuvarlanır). Bozuk/oynanmış KVP yüklenirken süzülür.
-- Eylem ve native hedefleri beyaz listededir (`Schema.actions`, `Config.Native`); `quit` yalnızca `disconnect`/`quit` kabul eder.
+- Eylem ve native hedefleri beyaz listededir (`Schema.actions`, `Config.Native`); `quit` callback'i yalnızca `disconnect` kabul eder.
 - Menü kapalıyken gelen NUI callback'leri reddedilir. Sağlık verisi yalnızca sunucudan gelen olaydan okunur ve uzunluk/tür süzgecinden geçer.
 
 ## Test (oyunda)

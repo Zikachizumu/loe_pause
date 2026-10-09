@@ -462,6 +462,19 @@ check(isOpen() == false and sim.pause == true, 'S8c: izin verilmişse tercih aç
 sim.pause = false; sim.frames(700)
 Config.Hijack.allowNativeMenu = false
 Prefs.set('menu.native', false)
+
+-- S9: Oyundan Çık → yalnızca "sunucudan ayrıl" (disconnect) çalışır; oyunu kapatan 'quit' hiçbir yoldan çalışmaz
+local cmds = {}
+ExecuteCommand = function(c) cmds[#cmds + 1] = c end
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S9: menü açılmalı')
+sim.nui('quit', { mode = 'quit' }); sim.frames(400)
+check(#cmds == 0 and isOpen() == true, 'S9: mode=quit reddedilmeli (menü açık kalır, komut yok)')
+sim.nui('quit', {}); sim.nui('quit', 'x'); sim.frames(400)
+check(#cmds == 0 and isOpen() == true, 'S9: modsuz/bozuk istek reddedilmeli')
+sim.nui('quit', { mode = 'disconnect' }); sim.frames(400)
+check(#cmds == 1 and cmds[1] == 'disconnect', 'S9: sunucudan ayrıl yalnızca disconnect çalıştırmalı')
+check(isOpen() == false, 'S9: ayrılırken menü kapanmalı')
 return R
 '''
 

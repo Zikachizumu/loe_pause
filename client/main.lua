@@ -465,11 +465,12 @@ end)
 RegisterNUICallback('quit', function(d, cb)
     cb({ ok = true })
     local mode = type(d) == 'table' and d.mode
-    if not isOpen or (mode ~= 'disconnect' and mode ~= 'quit') then return end
+    -- Yalnızca "sunucudan ayrıl": bağlantıyı keser ve FiveM ana menüsüne döner. Oyunu tamamen kapatan 'quit' bilerek yok.
+    if not isOpen or mode ~= 'disconnect' then return end
     close()
     CreateThread(function()
         Wait(150)
-        ExecuteCommand(mode)
+        ExecuteCommand('disconnect')
     end)
 end)
 

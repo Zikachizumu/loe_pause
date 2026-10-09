@@ -38,8 +38,8 @@ const STR = {
         hint_move: 'Hareket', hint_change: 'Değiştir', hint_select: 'Seç', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
         on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
         soon_pill: 'Yakında', soon_title: 'Yakında', soon_text: 'Bu özellik henüz sunucuda aktif değil. Çok yakında burada olacak.',
-        quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılabilir ya da oyunu tamamen kapatabilirsin.',
-        quit_disconnect: 'Sunucudan ayrıl', quit_game: 'Oyunu kapat', cancel: 'Vazgeç',
+        quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılıp FiveM ana menüsüne dönersin.',
+        quit_disconnect: 'Sunucudan ayrıl', cancel: 'Vazgeç',
         stats_title: 'İstatistikler', st_character: 'Karakter', st_name: 'Ad Soyad', st_cid: 'Vatandaş No', st_job: 'Meslek',
         st_finance: 'Finans', st_cash: 'Nakit', st_bank: 'Banka',
         st_health: 'Sağlık', health_none: 'Hastalığın yok. Sağlıklısın.', health_unknown: 'Sağlık bilgisi alınıyor…',
@@ -54,8 +54,8 @@ const STR = {
         hint_move: 'Move', hint_change: 'Change', hint_select: 'Select', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
         on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
         soon_pill: 'Soon', soon_title: 'Coming soon', soon_text: 'This feature is not active on the server yet. It will be here soon.',
-        quit_title: 'Quit the game?', quit_text: 'You can leave the server or close the game completely.',
-        quit_disconnect: 'Leave server', quit_game: 'Close game', cancel: 'Cancel',
+        quit_title: 'Quit the game?', quit_text: 'You will leave the server and return to the FiveM main menu.',
+        quit_disconnect: 'Leave server', cancel: 'Cancel',
         stats_title: 'Statistics', st_character: 'Character', st_name: 'Name', st_cid: 'Citizen ID', st_job: 'Job',
         st_finance: 'Finances', st_cash: 'Cash', st_bank: 'Bank',
         st_health: 'Health', health_none: 'No illness. You are healthy.', health_unknown: 'Loading health info…',
@@ -183,7 +183,6 @@ const confirmQuit = () => openModal({
     buttons: [
         { label: t('cancel'), kind: 'ghost', cancel: true },
         { label: t('quit_disconnect'), onClick: () => post('quit', { mode: 'disconnect' }) },
-        { label: t('quit_game'), onClick: () => post('quit', { mode: 'quit' }) },
     ],
 });
 
