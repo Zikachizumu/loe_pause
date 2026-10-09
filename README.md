@@ -33,7 +33,7 @@ FXServer manifesti yalnızca `refresh`/sunucu açılışında okur; tek başına
 | `shared/schema.lua` | **Ayarlar ekranının tek doğruluk kaynağı** (kategoriler, gruplar, satırlar, tr/en metinler) |
 | `client/prefs.lua` | Şemaya göre doğrulama + oyuncu bazında KVP kalıcılığı |
 | `client/apply.lua` | Ayarları oyuna uygulayan native çağrıları + eylemler (kayıt, sıfırlama) |
-| `server/main.lua` | Yalnızca "Sunucudan ayrıl": olayı gönderen oyuncuyu `DropPlayer` ile düşürür (3 sn sınırı) |
+| `server/main.lua` | "Sunucudan ayrıl": olayı gönderen oyuncuyu `DropPlayer` ile düşürür (3 sn sınırı); Hızlı Eylemler için yetki (ACE) görünürlüğü |
 | `client/main.lua` | ESC/P yakalama, aç/kapat, NUI odağı, NUI callback'leri, harita/yerleşik menü geçişleri |
 | `html/` | NUI (vanilla HTML/CSS/JS), `html/img/bg.jpg` arka plan |
 | `_dev/` | Yalnızca geliştirme: `check.py` (Lua/şema/doğrulama testleri), `mock.html` (tarayıcıda önizleme) |
@@ -77,6 +77,7 @@ Okuma başarısız olursa satırda değer görünmez (menü bozulmaz). Diğer `G
 | Normal Menü: ESC'de yerleşik menü | Yalnızca `allowNativeMenu = true` iken görünür; ana döngü bu tercihe bakar |
 
 - **`GTA Ayarları` etiketli satırlar** (çözünürlük, MSAA, VSync, doku/gölge kalitesi, ses seviyeleri, çıkış cihazı, fare/gamepad hassasiyeti, titreşim, altyazı, parlaklık, güvenli alan...): burada **değiştirilemez**. Satıra tıklamak yerleşik GTA/FiveM menüsünü açar (`Config.Native`).
+- **Hızlı Eylemler** (Tuş Atamaları'nın ilk grubu): sunucuya eklenen tek seferlik kısayollar (fare imleci, fotoğraf modu, minimap, araç tuş ayarları, acil çıkış, konuşma mesafesi, yönetici paneli / geliştirici modu) menüden **Çalıştır** ile çalışır; atanmış tuş yanında gösterilir. Menü kapanır, 300 ms sonra komut `ExecuteCommand` ile çalıştırılır. Liste `Config.Shortcuts`'tır; NUI'den komut metni alınmaz, yalnızca şemadaki `cmd.<id>` kimliği gelir ve yalnızca bu beyaz listedeki komutlar çalışır. `+` ile başlayan (bas-bırak) komutlar eklenemez. `aces` tanımlı satır (yönetici paneli) yalnızca o ACE'e sahip oyunculara görünür (`loe_pause:server:caps` ile sunucu doğrular); asıl yetki kontrolü komutun kendi resource'undadır (`/admin` → `loe_adminmenu`). Geliştirici modunun 1–0 tuşları panelden açılınca çalışır.
 - **Tuş Atamaları** salt okunurdur: güncel tuş `GetControlInstructionalButton` ile okunur. Değiştirmek için "Tuşları değiştir" satırı FiveM tuş atamaları menüsünü açar (`FE_MENU_VERSION_LANDING_KEYMAPPING_MENU`). "FiveM" grubu `Config.KeyMappings` listesinden beslenir; atanmamış olanlar gizlenir.
 - **Kayıt ve Başlangıç**: GTA'nın kayıt yükleme / başlangıç akışı FiveM'de uygulanmaz; bölüm bunu açıklar.
 

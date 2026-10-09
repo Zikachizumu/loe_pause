@@ -72,7 +72,7 @@ const DEFAULT_MENU = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].
 const S = {
     open: false, lang: 'tr',
     schema: [], brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' },
-    values: {}, keys: {}, native: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
+    values: {}, keys: {}, native: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
     modal: null,
@@ -257,7 +257,7 @@ const prettyKey = (token) => {
     return S.lang === 'tr' ? 'Fare / Düğme' : 'Mouse / Button';
 };
 
-const entryVisible = (r) => !(r.type === 'key' && r.command && !S.keys['m:' + r.command]);
+const entryVisible = (r) => !(r.type === 'key' && r.command && !S.keys['m:' + r.command]) && !(r.cap && !S.caps[r.cap]);
 
 const buildEntries = () => {
     const out = [];
@@ -407,8 +407,12 @@ const buildRow = (e, i) => {
     }
 
     if (r.type === 'action') {
+        // Kısayol eylemi (r.command): atanmış tuşu da göster
+        const pretty = r.command ? prettyKey(S.keys['m:' + r.command]) : null;
         return h('div', { class: base, onclick: () => { mark(); runAction(r); } }, label,
-            h('div', { class: 'r-ctl' }, h('button', { class: 'btn', type: 'button' }, L(r.button))));
+            h('div', { class: 'r-ctl' },
+                r.command ? (pretty ? h('span', { class: 'keycap' }, pretty) : h('span', { class: 'keycap none' }, t('unbound'))) : null,
+                h('button', { class: 'btn', type: 'button' }, L(r.button))));
     }
 
     if (r.type === 'native') {
@@ -676,6 +680,7 @@ const onOpen = (d) => {
     S.values = d.values || {};
     S.keys = d.keys || {};
     S.native = d.native || {};
+    S.caps = d.caps || {};
     S.menu = (Array.isArray(d.menu) && d.menu.length) ? d.menu : DEFAULT_MENU;
     S.stats = d.stats || null;
     S.health = d.health || { known: false, conditions: [] };
@@ -704,6 +709,10 @@ window.addEventListener('message', (ev) => {
     if (d.action === 'init') onInit(d);
     else if (d.action === 'open') onOpen(d);
     else if (d.action === 'close') onClose();
+    else if (d.action === 'caps') {
+        S.caps = d.caps || {};
+        if (S.screen === 'settings') refreshSettings(false);
+    }
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();

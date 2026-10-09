@@ -86,6 +86,24 @@ Config.Defaults = {
     ['menu.native']    = false,       -- true: ESC yerleşik GTA menüsünü açar
 }
 
+-- ================================================================ HIZLI EYLEMLER
+-- Sunucuya eklenen kısayolların (RegisterKeyMapping komutları) menüden çalıştırılması: Ayarlar → Tuş Atamaları → Hızlı Eylemler.
+-- Böylece oyuncunun FiveM'in "Key Bindings → FiveM" ekranına gitmesi gerekmez. Yalnızca '+' ile BAŞLAMAYAN (bas-bırak olmayan,
+-- tek seferlik) komutlar eklenebilir. Menü kapanır, kısa bir bekleme sonrası komut çalıştırılır.
+-- aces verilirse satır yalnızca o ACE'lerden birine sahip oyunculara görünür (sunucu doğrular). Asıl yetki kontrolü yine komutun
+-- kendi resource'unda yapılır; bu liste yalnızca görünürlüğü belirler.
+Config.Shortcuts = {
+    { id = 'cursor',    command = 'imlec',               tr = 'Fare imlecini aç/kapat',    en = 'Toggle mouse cursor' },
+    { id = 'photo',     command = 'loe_hud_photomode',   tr = 'Fotoğraf modu (HUD gizle)', en = 'Photo mode (hide HUD)' },
+    { id = 'minimap',   command = 'loe_hud_minimapzoom', tr = 'Minimap uzaklaştır (5 sn)', en = 'Minimap zoom out (5 s)' },
+    { id = 'vehkeys',   command = 'aractuslari',         tr = 'Araç tuş ayarları',         en = 'Vehicle key settings' },
+    { id = 'propexit',  command = 'loecik',              tr = 'Acil çıkış (mülk)',         en = 'Emergency exit (property)' },
+    { id = 'proximity', command = 'cycleproximity',      tr = 'Konuşma mesafesi',          en = 'Cycle voice proximity' },
+    { id = 'admin',     command = 'admin',               tr = 'Yönetici paneli / Geliştirici modu', en = 'Admin panel / Developer mode',
+      aces = { 'admin' },
+      desc = { tr = 'Yalnızca yetkililere görünür. Geliştirici modu panelin içinden açılır.', en = 'Visible to staff only. Developer mode is switched on inside the panel.' } },
+}
+
 -- ================================================================ TUŞ ATAMALARI → "FiveM" grubu
 -- RegisterKeyMapping ile kayıtlı komutların GÜNCEL tuşu okunur (salt okunur). Okunamayan/atanmamış olanlar listelenmez.
 -- command: RegisterKeyMapping'e verilen tam ad ('+inv' gibi ox_lib keybind'leri '+' ile başlar).
