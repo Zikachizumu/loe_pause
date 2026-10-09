@@ -244,6 +244,7 @@ kbd {
     font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: var(--dim);
     border: 1px solid var(--line-strong); border-radius: 99px; padding: .26rem .65rem;
 }
+.ro-val { font-size: .86rem; font-weight: 700; color: var(--txt); white-space: nowrap; }
 .row.t-native .ic { font-size: 1.1rem; color: var(--dim); }
 .row.t-native:hover .tag, .row.t-native.sel .tag { color: var(--accent); border-color: rgba(var(--accent-rgb), .6); }
 .btn {

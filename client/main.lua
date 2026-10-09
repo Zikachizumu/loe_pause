@@ -101,6 +101,38 @@ local function buildStats()
     return out
 end
 
+--- GTA'nın GÜNCEL ayar değerleri (yalnızca OKUNUR; GTA bu ayarların yazılmasına script'ten izin vermez).
+--- Anahtarlar schema.lua'daki native satırların `read` alanıyla eşleşir. Okunamayan anahtar hiç gönderilmez → satırda değer görünmez.
+local function buildNativeValues()
+    local out = {}
+    local function read(key, fn)
+        local ok, v = pcall(fn)
+        if ok and v ~= nil then out[key] = v end
+    end
+    read('subtitles', function() return IsSubtitlePreferenceSwitchedOn() == true end)
+    read('metric', function() return ShouldUseMetricMeasurements() == true end)
+    read('safezone', function()
+        local z = GetSafeZoneSize()
+        if type(z) == 'number' and z > 0 and z <= 1.001 then return math.floor(z * 100 + 0.5) end
+    end)
+    read('resolution', function()
+        local w, h = GetActualScreenResolution()
+        if type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then
+            return ('%dx%d'):format(math.floor(w), math.floor(h))
+        end
+    end)
+    read('language', function()
+        local l = GetCurrentLanguage()
+        if type(l) == 'number' and l >= 0 and l <= 12 then return math.floor(l) end
+    end)
+    return out
+end
+
+--- Yerleşik GTA menüsüne ESC ile geçiş yalnızca config izin veriyorsa VE oyuncu seçtiyse geçerlidir.
+local function nativeMenuWanted()
+    return Config.Hijack.allowNativeMenu == true and Prefs.get('menu.native') == true
+end
+
 -- ================================================================ SAĞLIK (hastalıklar)
 -- Hastalık sistemi loe_jobcreator'dadır (Sağlık sekmesi). Ona DOKUNMADAN, sunucunun bu oyuncuya zaten gönderdiği
 -- 'healthState' olayını dinleyip son durumu saklarız; menü açılınca istatistik sayfasında gösteririz.
@@ -200,6 +232,7 @@ local function open(anim)
         menu   = buildMenu(),
         stats  = buildStats(),
         health = healthPayload(),
+        native = buildNativeValues(),
     })
     refreshHealth()
 end
@@ -331,7 +364,7 @@ CreateThread(function()
                     finishNative(native.seen)         -- menü kendi kapandı (ya da hiç açılmadı)
                 end
             elseif paused then
-                if Prefs.get('menu.native') or not canHijack() then
+                if nativeMenuWanted() or not canHijack() then
                     -- yerleşik menü serbest (oyuncu tercihi / giriş yapılmamış / ara sahne)
                 else
                     killPause()
@@ -378,6 +411,7 @@ end)
 
 RegisterNUICallback('setting', function(d, cb)
     if not isOpen or type(d) ~= 'table' then return cb({ ok = false }) end
+    if d.id == 'menu.native' and Config.Hijack.allowNativeMenu ~= true then return cb({ ok = false, value = false }) end
     local ok, value = Prefs.set(d.id, d.value)
     if not ok then return cb({ ok = false, value = type(d.id) == 'string' and Prefs.display(d.id) or nil }) end
     Apply.run(d.id)
@@ -440,6 +474,7 @@ RegisterNUICallback('quit', function(d, cb)
 end)
 
 Apply.actions['menu.opennative'] = function()
+    if Config.Hijack.allowNativeMenu ~= true then return { ok = false } end
     openNative('game')
     return { ok = true }
 end

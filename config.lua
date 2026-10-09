@@ -27,6 +27,8 @@ Config.Hijack = {
     nuiGraceMs       = 450,    -- başka bir NUI'nin odağı bu kadar yeni bıraktıysa ESC'yi yut
     reopenCooldownMs = 450,    -- kapanıştan hemen sonra gelen (sızan) ESC'yi yut
     blurGame         = false,  -- true: menü açıkken oyun ekranına bulanıklık (Background.mode = 'game' için anlamlı)
+    allowNativeMenu  = false,  -- false: yerleşik GTA duraklatma menüsü ESC/P ile ASLA açılmaz ve "Normal Menü" kategorisi gizlenir.
+                               -- true: oyuncular ayarlardan yerleşik menüye geçebilir (arıza durumunda kaçış kapısı).
 }
 
 -- ================================================================ ANA MENÜ
