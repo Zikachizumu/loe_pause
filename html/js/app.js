@@ -541,11 +541,18 @@ const enterRows = () => { S.zone = 'rows'; S.row = firstSelectable(); renderRows
 
 /* ============================================================ MODAL / TOAST */
 const modalEl = $('#modal');
+// Düğmeler yalnızca bir kez oluşturulur; seçim değişince sadece sınıf güncellenir. (Fare üstündeyken düğmeleri yeniden
+// çizmek mousedown ile mouseup arasında öğeyi değiştirir ve "click" hiç oluşmaz.)
+const paintModal = () => {
+    const m = S.modal;
+    if (!m) return;
+    $('#modalBtns').querySelectorAll('.btn').forEach((el, i) => el.classList.toggle('sel', i === m.idx));
+};
 const renderModal = () => {
     const m = S.modal;
     $('#modalBtns').replaceChildren(...m.buttons.map((b, i) => h('button', {
         class: 'btn' + (b.kind === 'ghost' ? ' ghost' : '') + (i === m.idx ? ' sel' : ''), type: 'button',
-        onmouseenter: () => { m.idx = i; renderModal(); },
+        onmouseenter: () => { m.idx = i; paintModal(); },
         onclick: () => runModalButton(b),
     }, b.label)));
 };
@@ -577,8 +584,8 @@ const onKey = (ev) => {
 
     if (S.modal) {
         const m = S.modal;
-        if (k === 'ArrowLeft') { m.idx = (m.idx - 1 + m.buttons.length) % m.buttons.length; renderModal(); }
-        else if (k === 'ArrowRight') { m.idx = (m.idx + 1) % m.buttons.length; renderModal(); }
+        if (k === 'ArrowLeft') { m.idx = (m.idx - 1 + m.buttons.length) % m.buttons.length; paintModal(); }
+        else if (k === 'ArrowRight') { m.idx = (m.idx + 1) % m.buttons.length; paintModal(); }
         else if (k === 'Enter' || k === ' ') runModalButton(m.buttons[m.idx]);
         else if (k === 'Backspace') closeModal();
         else return;

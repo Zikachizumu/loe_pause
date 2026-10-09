@@ -119,6 +119,13 @@ for c in cats:
 rows = sum(len(g['rows']) for c in cats for g in c['groups'])
 print(f'  {len(cats)} kategori, {rows} satır, {len(seen)} kimlikli ayar → _dev/schema.json')
 
+# NUI: hover/klavye ile seçim değişince onay penceresi düğmeleri YENİDEN OLUŞTURULMAMALI (mousedown ile mouseup arasında öğe
+# değişirse "click" hiç oluşmaz → "Vazgeç / Sunucudan ayrıl" çalışmaz hatası). Yalnızca sınıf güncellenir (paintModal).
+import re  # noqa: E402
+app_js = (ROOT / 'html/js/app.js').read_text(encoding='utf-8')
+check(not re.search(r'onmouseenter:[^\n]*renderModal\(', app_js), 'app.js: onmouseenter içinde renderModal() çağrılmamalı (düğmeler yeniden çizilir, click kaybolur)')
+check(len(re.findall(r'renderModal\(\)', app_js)) == 1, 'app.js: renderModal() yalnızca openModal içinde çağrılmalı')
+
 # ------------------------------------------------------------------ 3) Prefs mantığı
 print('[3] Prefs doğrulama / kalıcılık')
 pl = LuaRuntime(unpack_returned_tuples=True)
