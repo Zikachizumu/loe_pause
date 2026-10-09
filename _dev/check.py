@@ -63,6 +63,7 @@ check([c['id'] for c in cats] == expected, f'kategori sırası beklenenden farkl
 tr_names = ['Oyun Kolu', 'Klavye / Fare', 'Tuş Atamaları', 'Ses', 'Kamera', 'Görüntü', 'Grafikler', 'Gelişmiş Grafikler',
             'Sesli Sohbet', 'Rockstar Editor', 'Kayıt ve Başlangıç', 'Tercihler', 'Normal Menü']
 check([c['label']['tr'] for c in cats] == tr_names, 'Türkçe kategori adları/sırası beklenenle uyuşmuyor')
+check([c['id'] for c in cats if c.get('hidden')] == ['menu'], 'Normal Menü yalnızca allowNativeMenu=false iken gizli olmalı (başka gizli kategori olmamalı)')
 
 seen = {}
 for c in cats:
@@ -86,6 +87,9 @@ for c in cats:
                 check(r['min'] <= r['default'] <= r['max'], f'{r["id"]}: varsayılan aralık dışı')
             if t == 'native':
                 check(r['target'] in ('settings', 'keybinds', 'game', 'map'), f'native hedefi geçersiz: {r["target"]}')
+                if r.get('read'):
+                    check(r['read'] in ('subtitles', 'metric', 'safezone', 'resolution', 'language'), f'{r["label"]["tr"]}: bilinmeyen read anahtarı {r["read"]}')
+                    check(f"read('{r['read']}'" in (ROOT / 'client/main.lua').read_text(encoding='utf-8'), f'{r["read"]}: main.lua okuyucusu yok')
             if t in ('toggle', 'select', 'slider', 'key', 'native', 'action'):
                 check(bool(r['label'].get('tr')) and bool(r['label'].get('en')), f'{r.get("id") or r["label"]}: etiket eksik')
             if t == 'key':
@@ -415,6 +419,49 @@ sim.exported.Close(); sim.frames(700)
 sim.pause = true; sim.frames(64)
 check(sim.count(sim.serverEvents, hello) == n0 + 1, 'S7b: 10 sn içinde tekrar istenmemeli')
 sim.exported.Close()
+
+-- S8: GTA'nın güncel ayar değerleri (salt okunur) menü açılırken iletilir; okunamayan/geçersiz değer hiç gönderilmez
+sim.frames(700)
+IsSubtitlePreferenceSwitchedOn = function() return true end
+ShouldUseMetricMeasurements = function() return true end
+GetSafeZoneSize = function() return 0.95 end
+GetActualScreenResolution = function() return 2560, 1440 end
+GetCurrentLanguage = function() return 0 end
+sim.pause = true; sim.frames(64)
+local nv = sim.lastOpen().native
+check(type(nv) == 'table' and nv.subtitles == true and nv.metric == true and nv.safezone == 95
+    and nv.resolution == '2560x1440' and nv.language == 0, 'S8: GTA ayar değerleri menü açılırken iletilmeli')
+sim.exported.Close(); sim.frames(700)
+GetSafeZoneSize = function() return 5.0 end                 -- geçersiz aralık
+GetActualScreenResolution = function() return 0, 0 end
+GetCurrentLanguage = function() error('native yok') end     -- native patlarsa menü yine açılmalı
+sim.pause = true; sim.frames(64)
+nv = sim.lastOpen().native
+check(isOpen() == true, 'S8: okuma hatası menüyü bozmamalı')
+check(nv.safezone == nil and nv.resolution == nil and nv.language == nil, 'S8: geçersiz/okunamayan değer gönderilmemeli')
+sim.exported.Close(); sim.frames(700)
+
+-- S8b: yerleşik GTA menüsü KAPALI (allowNativeMenu = false): eski tercih true olsa bile ESC her zaman LOE menüsünü açar
+check(Config.Hijack.allowNativeMenu == false, 'S8b: allowNativeMenu varsayılanı false olmalı')
+Prefs.set('menu.native', true)
+sim.pause = true; sim.frames(64)
+check(isOpen() == true and sim.pause == false, 'S8b: tercih true olsa da ESC LOE menüsünü açmalı, yerleşik menü söndürülmeli')
+local rs = sim.nui('setting', { id = 'menu.native', value = true })
+check(rs and rs.ok == false, 'S8b: menu.native değişikliği reddedilmeli')
+local ra = sim.nui('action', { id = 'menu.opennative' })
+check(ra and ra.ok == false, 'S8b: menu.opennative reddedilmeli')
+local actBefore = sim.calls.Activate or 0
+sim.frames(800)
+check((sim.calls.Activate or 0) == actBefore and sim.pause == false, 'S8b: yerleşik menü açılmamalı')
+sim.exported.Close(); sim.frames(700)
+
+-- S8c: allowNativeMenu = true iken eski davranış (kaçış kapısı): tercih açıksa ESC yerleşik menüyü serbest bırakır
+Config.Hijack.allowNativeMenu = true
+sim.pause = true; sim.frames(160)
+check(isOpen() == false and sim.pause == true, 'S8c: izin verilmişse tercih açıkken yerleşik menü serbest kalmalı')
+sim.pause = false; sim.frames(700)
+Config.Hijack.allowNativeMenu = false
+Prefs.set('menu.native', false)
 return R
 '''
 

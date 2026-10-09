@@ -36,7 +36,7 @@ const STR = {
         menu_shop: 'Shop', menu_settings: 'Ayarlar', menu_quit: 'Oyundan Çık',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
         hint_move: 'Hareket', hint_change: 'Değiştir', hint_select: 'Seç', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
-        on: 'Açık', off: 'Kapalı', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
+        on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
         soon_pill: 'Yakında', soon_title: 'Yakında', soon_text: 'Bu özellik henüz sunucuda aktif değil. Çok yakında burada olacak.',
         quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılabilir ya da oyunu tamamen kapatabilirsin.',
         quit_disconnect: 'Sunucudan ayrıl', quit_game: 'Oyunu kapat', cancel: 'Vazgeç',
@@ -52,7 +52,7 @@ const STR = {
         menu_shop: 'Shop', menu_settings: 'Settings', menu_quit: 'Quit Game',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
         hint_move: 'Move', hint_change: 'Change', hint_select: 'Select', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
-        on: 'On', off: 'Off', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
+        on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
         soon_pill: 'Soon', soon_title: 'Coming soon', soon_text: 'This feature is not active on the server yet. It will be here soon.',
         quit_title: 'Quit the game?', quit_text: 'You can leave the server or close the game completely.',
         quit_disconnect: 'Leave server', quit_game: 'Close game', cancel: 'Cancel',
@@ -72,7 +72,7 @@ const DEFAULT_MENU = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].
 const S = {
     open: false, lang: 'tr',
     schema: [], brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' },
-    values: {}, keys: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
+    values: {}, keys: {}, native: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
     modal: null,
@@ -335,6 +335,22 @@ const runAction = (r) => {
 
 const openNative = (target) => post('native', { target: target || 'settings' });
 
+// GTA'nın güncel değeri (salt okunur; yalnızca Lua okuyabildiyse gelir). Değiştirmek için satır yerleşik ekranı açar.
+const LANG_NAMES = ['English', 'Français', 'Deutsch', 'Italiano', 'Español', 'Português (BR)', 'Polski', 'Русский', '한국어', '繁體中文', '日本語', 'Español (MX)', '简体中文'];
+const nativeValue = (r) => {
+    if (!r.read) return null;
+    const v = S.native[r.read];
+    if (v === undefined || v === null) return null;
+    switch (r.read) {
+        case 'subtitles': return v ? t('on') : t('off');
+        case 'metric': return v ? t('metric') : t('imperial');
+        case 'safezone': return typeof v === 'number' ? v + '%' : null;
+        case 'resolution': return typeof v === 'string' ? v : null;
+        case 'language': return LANG_NAMES[v] || null;
+        default: return null;
+    }
+};
+
 const activateRow = (e) => {
     const r = e.row;
     if (r.type === 'toggle') setValue(r, !S.values[r.id]);
@@ -397,8 +413,10 @@ const buildRow = (e, i) => {
     }
 
     if (r.type === 'native') {
+        const cur = nativeValue(r);
         return h('div', { class: base, onclick: () => { mark(); openNative(r.target); } }, label,
-            h('div', { class: 'r-ctl' }, h('span', { class: 'tag' }, t('native_tag')), ico('chevronR')));
+            h('div', { class: 'r-ctl' }, cur ? h('span', { class: 'ro-val' }, cur) : null,
+                h('span', { class: 'tag' }, t('native_tag')), ico('chevronR')));
     }
     return h('div', { class: base }, label);
 };
@@ -641,7 +659,7 @@ modalEl.addEventListener('click', (ev) => { if (ev.target === modalEl) closeModa
 document.querySelectorAll('[data-i]').forEach(el => { el.innerHTML = window.icon(el.dataset.i); });
 
 const onInit = (d) => {
-    S.schema = Array.isArray(d.schema) ? d.schema : [];
+    S.schema = Array.isArray(d.schema) ? d.schema.filter(c => c && !c.hidden) : [];
     if (d.brand) S.brand = d.brand;
     if (d.bg) S.bg = d.bg;
     indexSchema();
@@ -651,6 +669,7 @@ const onInit = (d) => {
 const onOpen = (d) => {
     S.values = d.values || {};
     S.keys = d.keys || {};
+    S.native = d.native || {};
     S.menu = (Array.isArray(d.menu) && d.menu.length) ? d.menu : DEFAULT_MENU;
     S.stats = d.stats || null;
     S.health = d.health || { known: false, conditions: [] };

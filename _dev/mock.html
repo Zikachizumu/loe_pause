@@ -43,7 +43,8 @@
            { id: 'gunshot', label: 'Gunshot wound', symptom: 'You are bleeding.', suppressed: false, bandaged: true }]) };
 
     const send = (d) => window.postMessage(d, '*');
-    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health });
+    const native = { subtitles: true, metric: true, safezone: 95, resolution: '2560x1440', language: 0 };
+    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, native });
 
     const handlers = {
         ready: () => { setTimeout(() => { send({ action: 'init', schema, brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' } }); open(); }, 50); return { ok: true }; },

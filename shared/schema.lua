@@ -12,10 +12,12 @@
 Schema = { categories = {}, actions = {} }
 
 local features = (Config and Config.Features) or {}
+local hijack = (Config and Config.Hijack) or {}
 
 local function L(tr, en) return { tr = tr, en = en or tr } end
 
-local function native(tr, en, target) return { type = 'native', label = L(tr, en), target = target or 'settings' } end
+-- read: GTA'nın GÜNCEL değerini okuyabildiğimiz satırlarda bir anahtar (client/main.lua buildNativeValues). Yoksa yalnızca bağlantıdır.
+local function native(tr, en, target, read) return { type = 'native', label = L(tr, en), target = target or 'settings', read = read } end
 local function info(tr, en) return { type = 'info', text = L(tr, en) } end
 local function key(tr, en, control) return { type = 'key', label = L(tr, en), control = control } end
 local function group(id, tr, en, rows) return { id = id, label = L(tr, en), rows = rows } end
@@ -295,10 +297,10 @@ Schema.categories[#Schema.categories + 1] = cat('display', 'monitor', 'Görünt�
     group('screen', 'Ekran', 'Screen', {
         NOTE_NATIVE,
         native('Parlaklık', 'Brightness'),
-        native('Güvenli alan', 'Safe zone'),
-        native('Altyazılar', 'Subtitles'),
-        native('Ölçü birimi', 'Measurement units'),
-        native('Oyun dili', 'Game language'),
+        native('Güvenli alan', 'Safe zone', nil, 'safezone'),
+        native('Altyazılar', 'Subtitles', nil, 'subtitles'),
+        native('Ölçü birimi', 'Measurement units', nil, 'metric'),
+        native('Oyun dili', 'Game language', nil, 'language'),
     }),
 })
 
@@ -306,7 +308,7 @@ Schema.categories[#Schema.categories + 1] = cat('display', 'monitor', 'Görünt�
 Schema.categories[#Schema.categories + 1] = cat('graphics', 'chip', 'Grafikler', 'Graphics', {
     group('screen', 'Ekran', 'Screen', {
         NOTE_NATIVE,
-        native('Çözünürlük', 'Resolution'),
+        native('Çözünürlük', 'Resolution', nil, 'resolution'),
         native('Ekran seçimi', 'Display selection'),
         native('FXAA', 'FXAA'),
         native('MSAA', 'MSAA'),
@@ -450,6 +452,8 @@ Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler',
 })
 
 -- ------------------------------------------------------------------ 13. Normal Menü
+-- Config.Hijack.allowNativeMenu = false (varsayılan) → bu kategori arayüzde GÖRÜNMEZ ve ESC her zaman bu menüyü açar
+-- (satırlar şemada kalır; böylece eski KVP değerleri doğrulanır ama hiçbir etkisi olmaz).
 Schema.categories[#Schema.categories + 1] = cat('menu', 'menu', 'Normal Menü', 'Standard Menu', {
     group('menu', 'Duraklatma Menüsü', 'Pause Menu', {
         toggle('menu.native', 'ESC ile yerleşik GTA menüsünü kullan', 'Use the built-in GTA menu on ESC', false, {
@@ -462,6 +466,7 @@ Schema.categories[#Schema.categories + 1] = cat('menu', 'menu', 'Normal Menü', 
              'If this menu ever misbehaves, switch to the built-in menu with the option above.'),
     }),
 })
+Schema.categories[#Schema.categories].hidden = hijack.allowNativeMenu ~= true
 
 -- ------------------------------------------------------------------ yardımcı indeksler
 -- Boş grupları at (özellik kapatılınca boş kalan gruplar arayüzde görünmesin).

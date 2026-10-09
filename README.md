@@ -41,11 +41,22 @@ runuser -u fivem -- git -C "/opt/fivem/txData/LegendsofEmpire_AC516C.base/resour
 3. Başka bir NUI (envanter, `loe_apt`, `loe_dealership`, `loe_cursor`...) ESC ile **kapanırken** aynı basış bu menüyü **açmaz** (`Config.Hijack.nuiGraceMs`). Menü kapanırken sızan ESC de yutulur (`reopenCooldownMs`).
 4. Giriş yapılmamışken (`LocalPlayer.state.isLoggedIn ~= true`), ara sahnede ve ekran kararmışken yerleşik menüye dokunulmaz → karakter seçimi/yaratma bozulmaz.
 5. Script ile açılan yerleşik menü/harita (`ActivateFrontendMenu`) ESC'de kendiliğinden kapanmaz — yalnızca bir seviye geri gider ve açık kalır. Bu yüzden akış sırasında ESC / P / Geri yakalanır, menü kapatılır, sızan yeniden açılış söndürülür ve (tercih açıksa) LOE menüsüne dönülür. Sorun giderme: `Config.Debug = true` yapınca F8 konsolunda `[loe_pause] native ...` satırları görünür.
-6. Güvenlik ağı: **Ayarlar → Normal Menü** ile oyuncu ESC'yi yerleşik menüye çevirebilir; `/loepause` her durumda bu menüyü açar. Sunucu tarafında `Config.Hijack.enabled = false` hepsini kapatır.
+6. Yerleşik GTA duraklatma menüsü **tamamen gizlidir** (`Config.Hijack.allowNativeMenu = false`, varsayılan): ESC/P her zaman bu menüyü açar, "Normal Menü" kategorisi arayüzde görünmez ve eski bir KVP tercihi (`menu.native`) etkisizdir. Arıza durumunda bir kaçış kapısı istenirse `allowNativeMenu = true` yapılır (kategori geri gelir). `Config.Hijack.enabled = false` hepsini kapatır; `/loepause` her durumda bu menüyü açar.
+7. Kaçınılmaz istisna: grafik/ses/kontrol ayarlarının değiştirilmesi yalnızca GTA'nın kendi ekranlarında mümkündür (aşağıya bak). `GTA Ayarları` satırına tıklayınca o ekran açılır; ESC ile kapanıp doğrudan oyuna dönülür.
 
 ## Kapsam: ne GERÇEKTEN çalışır, ne yerleşik menüye yönlenir
 
-GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yazılamaz** (CFX native dokümanında `SET_PROFILE_SETTING` yoktur; yalnızca `GET_PROFILE_SETTING` vardır). Bu yüzden ekrandaki her satır dürüstçe etiketlidir:
+GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den yazılamaz** (CFX native dokümanında `SET_PROFILE_SETTING` yoktur; `STAT_SET_PROFILE_SETTING_VALUE` yalnızca 936–938'i kabul eder ve anında uygulanmaz). Bu yüzden ekrandaki her satır dürüstçe etiketlidir. Okunabilen birkaç ayarın **güncel değeri** (salt okunur) satırda gösterilir:
+
+| Satır | Okunan değer |
+|---|---|
+| Altyazılar | `IS_SUBTITLE_PREFERENCE_SWITCHED_ON` |
+| Ölçü birimi | `SHOULD_USE_METRIC_MEASUREMENTS` |
+| Güvenli alan | `GET_SAFE_ZONE_SIZE` (yüzde) |
+| Çözünürlük | `GET_ACTUAL_SCREEN_RESOLUTION` |
+| Oyun dili | `GET_CURRENT_LANGUAGE` |
+
+Okuma başarısız olursa satırda değer görünmez (menü bozulmaz). Diğer `GTA Ayarları` satırlarının güncel değeri okunamaz.
 
 - **Uygulanan ayarlar** (anahtar/seçici/kaydırıcı; KVP'de saklanır, giriş yapınca yeniden uygulanır):
 
@@ -59,7 +70,7 @@ GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yaz�
 | Telsiz / arama ses seviyesi, mikrofon tıkı | `pma-voice` export'ları (`setRadioVolume`, `setCallVolume`, `setMicClick*Volume`, `setVoiceProperty`) |
 | Rockstar Editor kaydı (başlat / kaydet / iptal) | `StartRecording`, `StopRecordingAndSaveClip`, `StopRecordingAndDiscardClip` |
 | Tercihler: vurgu rengi, koyu mod, portre modu, dil, harita dönüş animasyonu, görünümü sıfırla | Yalnızca bu menünün kendi arayüzü |
-| Normal Menü: ESC'de yerleşik menü | Ana döngü bu tercihe bakar |
+| Normal Menü: ESC'de yerleşik menü | Yalnızca `allowNativeMenu = true` iken görünür; ana döngü bu tercihe bakar |
 
 - **`GTA Ayarları` etiketli satırlar** (çözünürlük, MSAA, VSync, doku/gölge kalitesi, ses seviyeleri, çıkış cihazı, fare/gamepad hassasiyeti, titreşim, altyazı, parlaklık, güvenli alan...): burada **değiştirilemez**. Satıra tıklamak yerleşik GTA/FiveM menüsünü açar (`Config.Native`).
 - **Tuş Atamaları** salt okunurdur: güncel tuş `GetControlInstructionalButton` ile okunur. Değiştirmek için "Tuşları değiştir" satırı FiveM tuş atamaları menüsünü açar (`FE_MENU_VERSION_LANDING_KEYMAPPING_MENU`). "FiveM" grubu `Config.KeyMappings` listesinden beslenir; atanmamış olanlar gizlenir.
@@ -90,7 +101,7 @@ GTA'nın grafik/ses/kontrol ayarlarının çoğu **FiveM'den okunamaz ya da yaz�
 5. Ayarlar'da bir `GTA Ayarları` satırı: yerleşik GTA menüsü açılmalı, ESC ile çıkınca oyuna dönmeli. **Çalışmazsa** `config.lua > Config.Native` hash'lerini düzelt.
 6. Ayarlar → Kamera/Görüntü/Ses vb.: değiştir, çık, tekrar gir: değerler korunmalı; yeniden bağlanınca da korunmalı (KVP).
 7. Tercihler → Görünümü Sıfırla: onay çıkmalı; sonra tema/renk/dil varsayılana dönmeli.
-8. Normal Menü → "ESC ile yerleşik menü": ESC yerleşik menüyü açmalı; `/loepause` bu menüyü açmalı.
+8. Ayarlar'da "Normal Menü" kategorisi **görünmemeli**; ESC/P her zaman LOE menüsünü açmalı. Görüntü → Ekran'da Altyazılar / Ölçü birimi / Güvenli alan / Oyun dili, Grafikler → Ekran'da Çözünürlük satırlarında güncel değer görünmeli.
 9. Karakter seçimi/ilk giriş ekranında ESC: yerleşik davranış bozulmamalı.
 
 > Doğrulanması gerekenler (oyun içi test yapılmadan kesinleştirilemez): `Config.Native` hash'lerinin ESC'deki gerçek menüye karşılığı, `GetControlInstructionalButton`'ın fare düğmeleri için döndürdüğü jeton adları (`html/js/app.js > MOUSE`), `SetBlipRoute`'un waypoint çizgisini kapatması.
