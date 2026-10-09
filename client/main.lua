@@ -470,12 +470,15 @@ RegisterNUICallback('quit', function(d, cb)
     close()
     CreateThread(function()
         Wait(150)
-        -- Kesin yol: sunucu bu oyuncuyu düşürür (server/main.lua). İstemci komutu yedek olarak da gönderilir:
-        -- ExecuteCommand('disconnect') bazı sürümlerde script'ten çalışmayabilir.
-        TriggerServerEvent('loe_pause:server:leave')
-        Wait(300)
+        -- 1) Sunucu bu oyuncuyu düşürür (server/main.lua, DropPlayer) → FiveM ana menüsüne "Sunucudan ayrıldın" mesajıyla düşer.
+        --    (ExecuteCommand('disconnect') script'ten çalışmıyor; bu yüzden kullanılmaz.)
         dbg('leave requested')
-        ExecuteCommand('disconnect')
+        TriggerServerEvent('loe_pause:server:leave')
+        -- 2) Yedek: birkaç saniye sonra hâlâ sunucudaysak (sunucu betiği yüklenmemiş vb.) oyunu kapatıp FiveM'i yeniden açar.
+        --    Düşürme başarılı olursa resource durur ve bu satıra hiç gelinmez.
+        Wait(3000)
+        dbg('leave fallback: RestartGame')
+        RestartGame()
     end)
 end)
 
