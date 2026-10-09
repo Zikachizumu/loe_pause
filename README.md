@@ -21,6 +21,9 @@ Resource ilk kez eklendiği için **sunucu restart** (ya da txAdmin'den `ensure 
 runuser -u fivem -- git -C "/opt/fivem/txData/LegendsofEmpire_AC516C.base/resources/[loe]/loe_pause" pull
 ```
 
+Sonra txAdmin konsolunda `restart loe_pause`. **`fxmanifest.lua` değiştiyse** (yeni script/dosya eklendiyse) önce `refresh` çalıştır:
+FXServer manifesti yalnızca `refresh`/sunucu açılışında okur; tek başına `restart` yeni eklenen script'i YÜKLEMEZ.
+
 ## Dosyalar
 
 | Dosya | Görev |
@@ -85,7 +88,7 @@ Okuma başarısız olursa satırda değer görünmez (menü bozulmaz). Diğer `G
 | İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik özet: karakter (ad, citizenid, meslek), finans (nakit/banka) ve **Sağlık** kartı. Sağlık kartı `loe_jobcreator` hastalık sisteminin istemciye gönderdiği `healthState` olayından beslenir (ad, belirti, "ilaç etkisinde" / "sargılı" durumu); hastalık yoksa "Hastalığın yok" yazar. Sistem `Config.Health` ile ayarlanır, `loe_jobcreator`'a dokunulmaz |
 | Battlepass / Shop | Sunucuda bu sistemler **yok**. `Config.Menu`'de `resource`/`export` (varsayılan `loe_battlepass`/`loe_shop` → `Open`) başlamışsa onları açar; değilse "Yakında" sayfası gösterir. |
 | Ayarlar | Ayarlar ekranı |
-| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; istemci `disconnect` komutu yedek olarak da gönderilir) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
+| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar. `ExecuteCommand('disconnect')` script'ten çalışmadığı için kullanılmaz) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
 
 ## Güvenlik
 

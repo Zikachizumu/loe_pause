@@ -471,8 +471,9 @@ Config.Hijack.allowNativeMenu = false
 Prefs.set('menu.native', false)
 
 -- S9: Oyundan Çık → yalnızca "sunucudan ayrıl" (disconnect) çalışır; oyunu kapatan 'quit' hiçbir yoldan çalışmaz
-local cmds = {}
+local cmds, restarts = {}, 0
 ExecuteCommand = function(c) cmds[#cmds + 1] = c end
+RestartGame = function() restarts = restarts + 1 end
 sim.pause = true; sim.frames(64)
 check(isOpen() == true, 'S9: menü açılmalı')
 sim.nui('quit', { mode = 'quit' }); sim.frames(400)
@@ -481,10 +482,14 @@ sim.nui('quit', {}); sim.nui('quit', 'x'); sim.frames(400)
 check(#cmds == 0 and isOpen() == true, 'S9: modsuz/bozuk istek reddedilmeli')
 local leave0 = sim.count(sim.serverEvents, 'loe_pause:server:leave')
 check(leave0 == 0, 'S9: reddedilen isteklerde sunucuya ayrılma olayı gitmemeli')
+check(restarts == 0, 'S9: reddedilen isteklerde oyun yeniden başlatılmamalı')
 sim.nui('quit', { mode = 'disconnect' }); sim.frames(800)
-check(sim.count(sim.serverEvents, 'loe_pause:server:leave') == 1, 'S9: sunucudan ayrıl, sunucuya ayrılma olayını (kesin yol) göndermeli')
-check(#cmds == 1 and cmds[1] == 'disconnect', 'S9: istemci yedeği yalnızca disconnect çalıştırmalı')
+check(sim.count(sim.serverEvents, 'loe_pause:server:leave') == 1, 'S9: sunucudan ayrıl, sunucuya ayrılma olayını göndermeli')
 check(isOpen() == false, 'S9: ayrılırken menü kapanmalı')
+check(restarts == 0, 'S9: sunucuya süre tanınmalı (yedek hemen çalışmamalı)')
+sim.frames(3000)
+check(restarts == 1, 'S9: sunucu düşürmezse yedek olarak RestartGame çalışmalı')
+check(#cmds == 0, 'S9: script\'ten çalışmayan disconnect komutu kullanılmamalı')
 return R
 '''
 
