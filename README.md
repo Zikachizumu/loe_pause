@@ -30,6 +30,7 @@ runuser -u fivem -- git -C "/opt/fivem/txData/LegendsofEmpire_AC516C.base/resour
 | `shared/schema.lua` | **Ayarlar ekranının tek doğruluk kaynağı** (kategoriler, gruplar, satırlar, tr/en metinler) |
 | `client/prefs.lua` | Şemaya göre doğrulama + oyuncu bazında KVP kalıcılığı |
 | `client/apply.lua` | Ayarları oyuna uygulayan native çağrıları + eylemler (kayıt, sıfırlama) |
+| `server/main.lua` | Yalnızca "Sunucudan ayrıl": olayı gönderen oyuncuyu `DropPlayer` ile düşürür (3 sn sınırı) |
 | `client/main.lua` | ESC/P yakalama, aç/kapat, NUI odağı, NUI callback'leri, harita/yerleşik menü geçişleri |
 | `html/` | NUI (vanilla HTML/CSS/JS), `html/img/bg.jpg` arka plan |
 | `_dev/` | Yalnızca geliştirme: `check.py` (Lua/şema/doğrulama testleri), `mock.html` (tarayıcıda önizleme) |
@@ -84,7 +85,7 @@ Okuma başarısız olursa satırda değer görünmez (menü bozulmaz). Diğer `G
 | İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik özet: karakter (ad, citizenid, meslek), finans (nakit/banka) ve **Sağlık** kartı. Sağlık kartı `loe_jobcreator` hastalık sisteminin istemciye gönderdiği `healthState` olayından beslenir (ad, belirti, "ilaç etkisinde" / "sargılı" durumu); hastalık yoksa "Hastalığın yok" yazar. Sistem `Config.Health` ile ayarlanır, `loe_jobcreator`'a dokunulmaz |
 | Battlepass / Shop | Sunucuda bu sistemler **yok**. `Config.Menu`'de `resource`/`export` (varsayılan `loe_battlepass`/`loe_shop` → `Open`) başlamışsa onları açar; değilse "Yakında" sayfası gösterir. |
 | Ayarlar | Ayarlar ekranı |
-| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (`disconnect`: sunucudan çıkar, FiveM ana menüsüne döner) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
+| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; istemci `disconnect` komutu yedek olarak da gönderilir) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
 
 ## Güvenlik
 

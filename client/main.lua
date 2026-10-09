@@ -470,6 +470,11 @@ RegisterNUICallback('quit', function(d, cb)
     close()
     CreateThread(function()
         Wait(150)
+        -- Kesin yol: sunucu bu oyuncuyu düşürür (server/main.lua). İstemci komutu yedek olarak da gönderilir:
+        -- ExecuteCommand('disconnect') bazı sürümlerde script'ten çalışmayabilir.
+        TriggerServerEvent('loe_pause:server:leave')
+        Wait(300)
+        dbg('leave requested')
         ExecuteCommand('disconnect')
     end)
 end)
