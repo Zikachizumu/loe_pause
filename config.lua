@@ -47,6 +47,11 @@ Config.Menu = {
 -- Harita: loe_3dmap varsa onu açar, yoksa yerleşik GTA haritasına düşer.
 Config.MapResource = { resource = 'loe_3dmap', open = 'Open', isOpen = 'IsOpen' }
 
+-- Büyük harita tuşu: bu tuşa basınca (menü açılmadan) doğrudan büyük harita açılır; harita açıkken aynı tuş ya da ESC kapatır.
+-- Oyuncu tuşu FiveM tuş atamalarından değiştirebilir. Boş bırakırsan tuş kaydedilmez (komut yine çalışır).
+Config.MapCommand = 'loe_bigmap'
+Config.MapKey     = 'M'
+
 -- İstatistik sayfasındaki "Sağlık" kartı: hastalık sistemi loe_jobcreator'dadır. Menü o resource'a dokunmaz; yalnızca sunucunun
 -- bu oyuncuya zaten gönderdiği durum olayını dinler (resource/olay adları değişirse buradan güncelle).
 Config.Health = {
@@ -93,7 +98,8 @@ Config.Defaults = {
 -- aces verilirse satır yalnızca o ACE'lerden birine sahip oyunculara görünür (sunucu doğrular). Asıl yetki kontrolü yine komutun
 -- kendi resource'unda yapılır; bu liste yalnızca görünürlüğü belirler.
 Config.Shortcuts = {
-    { id = 'cursor',    command = 'imlec',               tr = 'Fare imlecini aç/kapat',    en = 'Toggle mouse cursor' },
+    { id = 'bigmap',    command = 'loe_bigmap',          tr = 'Büyük harita',              en = 'Big map' },
+    { id = 'cursor',   command = 'imlec',               tr = 'Fare imlecini aç/kapat',    en = 'Toggle mouse cursor' },
     { id = 'photo',     command = 'loe_hud_photomode',   tr = 'Fotoğraf modu (HUD gizle)', en = 'Photo mode (hide HUD)' },
     { id = 'minimap',   command = 'loe_hud_minimapzoom', tr = 'Minimap uzaklaştır (5 sn)', en = 'Minimap zoom out (5 s)' },
     { id = 'vehkeys',   command = 'aractuslari',         tr = 'Araç tuş ayarları',         en = 'Vehicle key settings' },
@@ -108,7 +114,6 @@ Config.Shortcuts = {
 -- RegisterKeyMapping ile kayıtlı komutların GÜNCEL tuşu okunur (salt okunur). Okunamayan/atanmamış olanlar listelenmez.
 -- command: RegisterKeyMapping'e verilen tam ad ('+inv' gibi ox_lib keybind'leri '+' ile başlar).
 Config.KeyMappings = {
-    { tr = '3D Harita',             en = '3D map',               command = '3dmap' },
     { tr = 'Fare imleci',           en = 'Mouse cursor',         command = 'imlec' },
     { tr = 'Minimap uzaklaştır',    en = 'Minimap zoom out',     command = 'loe_hud_minimapzoom' },
     { tr = 'Fotoğraf modu',         en = 'Photo mode',           command = 'loe_hud_photomode' },
