@@ -215,7 +215,7 @@ print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
 
 SIM_PRELUDE = r'''
 sim = { now = 5000, pause = false, nuiFocus = false, msgs = {}, calls = {}, handlers = {}, exported = {}, threads = {}, events = {}, escFrame = false,
-        netHandlers = {}, started = {}, serverEvents = {} }
+        netHandlers = {}, started = {}, serverEvents = {}, commands = {} }
 local S = sim
 setmetatable(_G, { __index = function(_, k) return function() end end })   -- bilinmeyen native → no-op
 
@@ -251,7 +251,7 @@ function PauseMenuceptionGoDeeper(p) S.calls.GoDeeper = p end
 local function addHandler(name, fn) S.netHandlers[name] = S.netHandlers[name] or {}; table.insert(S.netHandlers[name], fn) end
 function AddEventHandler(name, fn) addHandler(name, fn) end
 function RegisterNetEvent(name, fn) if fn then addHandler(name, fn) end end
-function RegisterCommand() end
+function RegisterCommand(name, fn) S.commands[name] = fn end
 function RegisterKeyMapping() end
 function TriggerServerEvent(name) S.serverEvents[#S.serverEvents + 1] = name end
 exports = setmetatable({}, {
@@ -542,6 +542,39 @@ sim.frames(700)
 sim.pause = true; sim.frames(64)
 check(next(sim.lastOpen().caps) == nil, 'S10: oyuncu çıkınca yetki silinmeli')
 sim.exported.Close(); sim.frames(700)
+
+-- S11: M tuşu (loe_bigmap) → menüsüz doğrudan büyük harita; aynı tuş / ESC kapatır; LOE menüsü geri gelmez
+check(type(sim.commands.loe_bigmap) == 'function', 'S11: loe_bigmap komutu kayıtlı olmalı')
+Prefs.set('pref.mapReturn', true)                            -- dönüş tercihi AÇIK olsa bile tuştan açılan harita menüye dönmemeli
+local act11, open11 = sim.calls.Activate or 0, sim.openCount()
+sim.commands.loe_bigmap(); sim.frames(1300)
+check((sim.calls.Activate or 0) == act11 + 1 and sim.calls.GoDeeper == 0, 'S11: M büyük haritayı doğrudan açmalı (GoDeeper(0))')
+check(sim.pause == true and isOpen() == false and sim.openCount() == open11, 'S11: harita açık, LOE menüsü açılmamalı')
+sim.escFrame = true; sim.step(16); sim.frames(1500)
+check(sim.pause == false and isOpen() == false and sim.openCount() == open11, 'S11: ESC haritayı kapatmalı, LOE menüsü dönmemeli (mapReturn açık olsa da)')
+
+sim.frames(700)
+sim.commands.loe_bigmap(); sim.frames(1300)
+check(sim.pause == true, 'S11: M ikinci kez haritayı açmalı')
+sim.commands.loe_bigmap(); sim.frames(1500)                  -- harita açıkken aynı tuş kapatır
+check(sim.pause == false and isOpen() == false and sim.openCount() == open11, 'S11: harita açıkken M haritayı kapatmalı')
+sim.frames(700)
+
+local act11b = sim.calls.Activate or 0
+sim.pause = true; sim.frames(64)                             -- LOE menüsü açıkken M işlemez
+check(isOpen() == true, 'S11: menü açılmalı')
+sim.commands.loe_bigmap(); sim.frames(600)
+check((sim.calls.Activate or 0) == act11b and isOpen() == true, 'S11: LOE menüsü açıkken M harita açmamalı')
+sim.exported.Close(); sim.frames(700)
+LocalPlayer.state.isLoggedIn = false
+sim.commands.loe_bigmap(); sim.frames(600)
+check((sim.calls.Activate or 0) == act11b, 'S11: giriş yapılmamışken M harita açmamalı')
+LocalPlayer.state.isLoggedIn = true; sim.frames(300)
+sim.nuiFocus = true
+sim.commands.loe_bigmap(); sim.frames(600)
+check((sim.calls.Activate or 0) == act11b, 'S11: başka bir arayüz odaktayken M harita açmamalı')
+sim.nuiFocus = false; sim.frames(600)
+Prefs.set('pref.mapReturn', false)
 return R
 '''
 

@@ -288,11 +288,13 @@ local function canOpenManually()
 end
 
 -- ================================================================ YERLEŞİK GTA MENÜSÜ / HARİTA
-local function activateNative(target)
+local function activateNative(target, noReturn)
     local n = Config.Native[target]
     if not n then return false end
     -- Akış başladı: ana döngü menü AÇILANA kadar (en çok 4 sn) ve açık kaldığı sürece ona dokunmaz.
+    -- noReturn: harita tuşuyla (menüden değil) açıldı → kapanınca LOE menüsüne dönülmez.
     native.target, native.since, native.seen, native.closingAt, native.returnAt = target, GetGameTimer(), false, nil, nil
+    native.noReturn = noReturn == true
     dbg('native start', target)
     ActivateFrontendMenu(GetHashKey(n.menu), n.pause == true, n.component or -1)
     if n.deeper ~= nil then
@@ -309,9 +311,10 @@ end
 --- Yerleşik menü akışı bitti. wasOpen = menü gerçekten açılmıştı → (tercih açıksa) LOE menüsüne dön.
 local function finishNative(wasOpen)
     dbg('native finished, wasOpen =', wasOpen)
-    native.target, native.seen, native.closingAt = nil, false, nil
+    local noReturn = native.noReturn
+    native.target, native.seen, native.closingAt, native.noReturn = nil, false, nil, false
     closedAt = GetGameTimer()
-    if wasOpen and Prefs.get('pref.mapReturn') then
+    if wasOpen and not noReturn and Prefs.get('pref.mapReturn') then
         native.returnAt = closedAt + Config.Hijack.reopenCooldownMs + 60
     end
 end
@@ -347,15 +350,19 @@ local function watchMapReturn(m)
     end)
 end
 
-local function openMap()
+local function openMap(fromKey)
     local m = Config.MapResource
+    local wasOpen = isOpen
     close()
-    Wait(200)
+    if wasOpen then Wait(200) end
     if m and resourceStarted(m.resource) then
         local ok = callExport(m.resource, m.open)
-        if ok then watchMapReturn(m) return end
+        if ok then
+            if not fromKey then watchMapReturn(m) end
+            return
+        end
     end
-    activateNative('map')
+    activateNative('map', fromKey)
 end
 
 -- ================================================================ ANA DÖNGÜ: ESC / P YAKALAMA
@@ -554,6 +561,24 @@ RegisterCommand(Config.Command, function()
     end
 end, false)
 RegisterKeyMapping(Config.Command, 'LOE duraklatma menüsü', 'keyboard', Config.OpenKey or '')
+
+-- Büyük harita tuşu (varsayılan M): menü açılmadan doğrudan büyük harita. Harita açıkken aynı tuş (ESC gibi) kapatır.
+-- Harita menüden değil tuştan açıldığı için kapanınca LOE menüsüne dönülmez.
+RegisterCommand(Config.MapCommand or 'loe_bigmap', function()
+    if native.target == 'map' then
+        if not native.closingAt and GetGameTimer() - native.since > 500 then
+            native.closingAt = GetGameTimer()
+            dbg('map key -> closing')
+        end
+        return
+    end
+    if canOpenManually() and not IsScreenFadedOut() then
+        CreateThread(function() openMap(true) end)
+    end
+end, false)
+if (Config.MapKey or '') ~= '' then
+    RegisterKeyMapping(Config.MapCommand or 'loe_bigmap', 'Büyük harita', 'keyboard', Config.MapKey)
+end
 
 exports('Open',   function() if canOpenManually() then open('open') end end)
 exports('Close',  function() close() end)
