@@ -574,7 +574,7 @@ RegisterCommand(Config.Command, function()
         open('open')
     end
 end, false)
-RegisterKeyMapping(Config.Command, 'LOE duraklatma menüsü', 'keyboard', Config.OpenKey or '')
+RegisterKeyMapping(Config.Command, 'LOE pause menu', 'keyboard', Config.OpenKey or '')
 
 -- Büyük harita tuşu (varsayılan M): menü açılmadan doğrudan büyük harita. Harita açıkken aynı tuş (ESC gibi) kapatır.
 -- Harita menüden değil tuştan açıldığı için kapanınca LOE menüsüne dönülmez.
@@ -591,7 +591,7 @@ RegisterCommand(Config.MapCommand or 'loe_bigmap', function()
     end
 end, false)
 if (Config.MapKey or '') ~= '' then
-    RegisterKeyMapping(Config.MapCommand or 'loe_bigmap', 'Büyük harita', 'keyboard', Config.MapKey)
+    RegisterKeyMapping(Config.MapCommand or 'loe_bigmap', 'Big map', 'keyboard', Config.MapKey)
 end
 
 exports('Open',   function() if canOpenManually() then open('open') end end)

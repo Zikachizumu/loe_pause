@@ -61,7 +61,7 @@ const STR = {
         hint_move: 'Navigate', hint_change: 'Change', hint_select: 'Select', hint_resume: 'Resume', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
         on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
         soon_pill: 'Soon', soon_title: 'Coming soon', soon_text: 'This feature is not active on the server yet. It will be here soon.',
-        quit_title: 'Quit the game?', quit_text: 'You will leave the server and return to the FiveM main menu.',
+        quit_title: 'Disconnect?', quit_text: 'You will leave the server and return to the FiveM main menu.',
         quit_disconnect: 'Leave server', cancel: 'Cancel',
         stats_title: 'Statistics', st_character: 'Character', st_name: 'Name', st_cid: 'Citizen ID', st_job: 'Job',
         st_finance: 'Finances', st_cash: 'Cash', st_bank: 'Bank',
@@ -79,7 +79,7 @@ const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
 
 /* ============================================================ DURUM */
 const S = {
-    open: false, lang: 'tr',
+    open: false, lang: 'en',
     allSchema: [], schema: [], scope: 'game', links: [], gta: true, bg: { mode: 'game' },
     values: {}, keys: {}, native: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
@@ -107,7 +107,7 @@ const hexToRgb = (hex) => {
 };
 
 const applyPrefs = () => {
-    S.lang = S.values['pref.lang'] === 'en' ? 'en' : 'tr';
+    S.lang = S.values['pref.lang'] === 'tr' ? 'tr' : 'en';
     document.documentElement.lang = S.lang;
 
     const def = rowIndex['pref.accent'];
