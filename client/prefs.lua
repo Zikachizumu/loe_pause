@@ -4,6 +4,9 @@
 Prefs = { values = {}, loaded = false }
 
 local KVP_KEY = 'loe_pause:prefs:v1'
+-- Tek seferlik geçiş: menü varsayılanı İngilizce oldu; daha önce kaydedilmiş dil tercihi (eski varsayılan TR) bir kez silinir.
+-- Oyuncu sonra Language ayarından yine Türkçe seçebilir ve bu tercih kalıcı olur.
+local MIGRATE_LANG_KEY = 'loe_pause:migrated:lang-en-v1'
 local saving, dirty = false, false
 
 local function finite(n)
@@ -125,6 +128,11 @@ function Prefs.load()
                 end
             end
         end
+    end
+    if GetResourceKvpString(MIGRATE_LANG_KEY) ~= '1' then
+        Prefs.values['pref.lang'] = nil
+        SetResourceKvp(MIGRATE_LANG_KEY, '1')
+        Prefs.flush()
     end
     Prefs.loaded = true
 end

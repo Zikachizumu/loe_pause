@@ -231,6 +231,18 @@ kvp['loe_pause:prefs:v1'] = 'not json {{'
 pl.execute('Prefs.values = {}; Prefs.load()')
 check(lua_to_py(pl.eval('Prefs.values')) == {}, 'çözülemeyen KVP boş sonuç vermeli')
 
+# tek seferlik dil geçişi: eski kayıtlı TR silinir, sonraki TR seçimi kalıcıdır
+kvp['loe_pause:prefs:v1'] = json.dumps({'pref.lang': 'tr', 'pref.accent': 'blue'})
+kvp.pop('loe_pause:migrated:lang-en-v1', None)
+pl.execute('Prefs.values = {}; Prefs.load()')
+check(pl.eval("Prefs.get('pref.lang')") == 'en', 'geçiş: eski kayıtlı TR tercihi silinip varsayılan EN gelmeli')
+check(pl.eval("Prefs.get('pref.accent')") == 'blue', 'geçiş: diğer tercihler korunmalı')
+check(kvp.get('loe_pause:migrated:lang-en-v1') == '1', 'geçiş: işaret yazılmalı')
+check('pref.lang' not in json.loads(kvp['loe_pause:prefs:v1']), 'geçiş: kayıttan pref.lang silinmeli')
+pl.execute("Prefs.set('pref.lang', 'tr'); Prefs.flush(); Prefs.values = {}; Prefs.load()")
+check(pl.eval("Prefs.get('pref.lang')") == 'tr', 'geçiş: oyuncunun sonradan seçtiği TR kalıcı olmalı (geçiş yeniden çalışmamalı)')
+pl.execute("Prefs.values = {}; Prefs.reset({'pref.lang'}); Prefs.flush()")
+
 pl.execute("Prefs.values = {}; Prefs.set('pref.accent', 'red'); Prefs.set('pref.dark', false)")
 pl.execute("Prefs.reset({'pref.accent', 'pref.dark'})")
 check(pl.eval("Prefs.get('pref.accent')") == 'white' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
