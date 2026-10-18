@@ -46,9 +46,6 @@
            { id: 'gunshot', label: 'Gunshot wound', symptom: 'You are bleeding.', suppressed: false, bandaged: true }]) };
 
     const send = (d) => window.postMessage(d, '*');
-    // Büyük harita arama paneli örnek verisi (gerçekte Lua blip taramasından gelir)
-    const mapNames = ['Gas Station', 'Hospital', 'Police Station', 'Ammu-Nation', 'Clothes Store', 'Barber', 'Tattoo Parlor', 'Car Wash', 'Garage', 'Bank', 'ATM', 'Burger Shot', 'Cluckin Bell', 'Strip Club', 'Airport', 'Harbor', 'Mechanic', 'Point of interest'];
-    const mapItems = Array.from({ length: 72 }, (_, i) => ({ id: i + 1, n: mapNames[i % mapNames.length], d: 120 + i * 173 })).sort((a, b) => a.n.localeCompare(b.n) || a.d - b.d).map((e, i) => ({ ...e, id: i + 1 }));
     const native = { subtitles: true, metric: true, safezone: 95, resolution: '2560x1440', language: 0 };
     const caps = params.get('admin') === '1' ? { admin: true } : {};   // ?admin=1 → "Yönetici paneli" satırı görünür
     const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, native, caps });
@@ -72,8 +69,6 @@
         native: (b) => { console.log('[mock] native menu →', b.target); return { ok: true }; },
         menu: (b) => ({ ok: true, page: b.id === 'stats' ? 'stats' : (b.id === 'settings' ? 'settings' : (['battlepass', 'shop'].includes(b.id) ? 'soon' : undefined)) }),
         quit: (b) => { console.log('[mock] quit', b.mode); return { ok: true }; },
-        mapPick: (b) => { const e = mapItems.find(i => i.id === b.id); if (!e) return { ok: false }; console.log('[mock] GPS ->', e.n); setTimeout(() => send({ action: 'mapFocus', on: false }), 0); return { ok: true, name: e.n }; },
-        mapSearchExit: () => { console.log('[mock] map search exit'); send({ action: 'mapFocus', on: false }); return { ok: true }; },
     };
 
     const realFetch = window.fetch.bind(window);
@@ -96,8 +91,6 @@
         btn('open', () => open('open')); btn('open (return)', () => open('return'));
         btn('light', () => { values['pref.dark'] = false; open(); }); btn('dark', () => { values['pref.dark'] = true; open(); });
         btn('portrait', () => { values['pref.portrait'] = !values['pref.portrait']; open(); });
-        btn('map panel', () => send({ action: 'mapPanel', show: true, items: mapItems, key: 't_F', geo: { left: 0.76, right: 0.98, top: 0.06, bottom: 0.94 } }));
-        btn('map search on', () => send({ action: 'mapFocus', on: true })); btn('map panel off', () => send({ action: 'mapPanel', show: false }));
         document.body.append(bar);
     });
 })();

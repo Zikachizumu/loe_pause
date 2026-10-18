@@ -342,36 +342,6 @@ html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-/* ============================================================ BÜYÜK HARİTA ARAMA PANELİ */
-#mapSearch {
-    position: fixed; z-index: 5; pointer-events: none;
-    left: calc(var(--ms-l, .76) * 100vw); right: calc((1 - var(--ms-r, .98)) * 100vw);
-    top: calc(var(--ms-t, .06) * 100vh); bottom: calc((1 - var(--ms-b, .94)) * 100vh);
-}
-#mapSearch.active { pointer-events: auto; }
-.ms-box {
-    height: 100%; display: flex; flex-direction: column; gap: .7rem; padding: 1rem 1rem .8rem;
-    background: rgba(9, 9, 11, .95); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 1rem 2.4rem rgba(0, 0, 0, .55);
-    transition: border-color .15s;
-}
-#mapSearch.active .ms-box { border-color: rgba(255, 255, 255, .45); }
-.ms-search { display: flex; align-items: center; gap: .7rem; height: 2.7rem; padding: 0 .9rem; background: var(--card); border: 1px solid var(--line); border-radius: var(--r2); }
-#mapSearch.active .ms-search { border-color: rgba(255, 255, 255, .6); }
-.ms-search .ic { font-size: 1.15rem; color: var(--dim); }
-.ms-search input { flex: 1; min-width: 0; font-size: .88rem; font-weight: 500; color: var(--txt); }
-.ms-search input::placeholder { color: var(--dim); }
-.ms-meta { display: flex; justify-content: space-between; gap: .8rem; font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); min-height: .9rem; }
-.ms-meta #msHint { text-align: right; }
-.ms-meta #msHint.ok { color: #34d399; }
-.ms-list { flex: 1; min-height: 0; overflow-y: auto; padding-right: .3rem; }
-.ms-list::-webkit-scrollbar { width: .35rem; }
-.ms-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .25); border-radius: 9px; }
-.ms-row { display: flex; align-items: center; justify-content: space-between; gap: .8rem; width: 100%; min-height: 2.3rem; padding: .35rem .8rem; margin-bottom: .2rem; border: 1px solid transparent; border-radius: var(--r2); text-align: left; font-size: .84rem; font-weight: 600; color: var(--mut); }
-.ms-row b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-row span { flex: none; font-size: .7rem; font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
-.ms-row.sel { background: var(--card-hover); border-color: rgba(255, 255, 255, .5); color: #fff; }
-.ms-empty { padding: 1.6rem .5rem; text-align: center; color: var(--dim); font-size: .84rem; }
-
 /* ============================================================ PORTRE / DAR EKRANLAR */
 html.portrait .pm-head, html.portrait .pm-list, html.portrait .pm-quit, html.portrait .hints-main { left: 3rem; }
 html.portrait .pm-card { left: 7.34rem; }
