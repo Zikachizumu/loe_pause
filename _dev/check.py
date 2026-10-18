@@ -144,6 +144,29 @@ for mid in menu_ids:
     check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
 check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
 check(all(x in menu_ids for x in ('resume', 'map', 'game', 'ui', 'position', 'quit')), 'Config.Menu: videodaki altı madde eksik')
+# İngilizce varsayılan: arayüz metinlerinde TR/EN anahtar seti aynı olmalı, İngilizce metinlerde Türkçe harf olmamalı
+def str_keys(block):
+    body = re.search(rf"\n    {block}: \{{(.*?)\n    \}},", app_js, re.S).group(1)
+    return set(re.findall(r"\b([a-z_0-9]+): ", body))
+tr_keys, en_keys = str_keys('tr'), str_keys('en')
+check(tr_keys == en_keys, f"app.js STR: TR/EN anahtarları farklı: yalnızca TR={sorted(tr_keys - en_keys)} yalnızca EN={sorted(en_keys - tr_keys)}")
+TR_CHARS = set('çğıöşüÇĞİÖŞÜ')
+def walk_en(o, path=''):
+    if isinstance(o, dict):
+        if 'tr' in o and 'en' in o and isinstance(o['en'], str):
+            if (TR_CHARS & set(o['en'])) and o['en'] != 'Türkçe':
+                check(False, f"İngilizce metinde Türkçe harf: {path} → {o['en'][:60]}")
+        for k, v in o.items(): walk_en(v, f'{path}.{k}')
+    elif isinstance(o, list):
+        for i, v in enumerate(o): walk_en(v, f'{path}[{i}]')
+walk_en(cats, 'schema')
+for name in ('Shortcuts', 'KeyMappings'):
+    items = lua_to_py(lua.eval(f'(function() local t = {{}} for i, s in ipairs(Config.{name}) do t[i] = s end return t end)()'))
+    for it in (items.values() if isinstance(items, dict) else items):
+        check(not (TR_CHARS & set(it.get('en', ''))), f"Config.{name}: İngilizce metinde Türkçe harf: {it.get('en')}")
+        if it.get('desc'): check(not (TR_CHARS & set(it['desc'].get('en', ''))), f"Config.{name}: desc.en Türkçe harf içeriyor")
+check(lua.eval("Config.Defaults['pref.lang']") == 'en', "Config.Defaults['pref.lang'] 'en' olmalı (menü İngilizce varsayılan)")
+check('lang="en"' in (ROOT / 'html/index.html').read_text(encoding='utf-8'), 'index.html lang="en" olmalı')
 check('invokeNative' in app_js and 'SAFE_URL' in app_js, 'app.js: bağlantılar yalnızca SAFE_URL ile invokeNative(openUrl) üzerinden açılmalı')
 check('onmouseenter' in app_js and "setSuffix" in app_js, 'app.js: başlık karıştırma efekti bağlı olmalı')
 
@@ -211,7 +234,7 @@ check(lua_to_py(pl.eval('Prefs.values')) == {}, 'çözülemeyen KVP boş sonuç 
 pl.execute("Prefs.values = {}; Prefs.set('pref.accent', 'red'); Prefs.set('pref.dark', false)")
 pl.execute("Prefs.reset({'pref.accent', 'pref.dark'})")
 check(pl.eval("Prefs.get('pref.accent')") == 'white' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
-check(pl.eval("Prefs.get('pref.lang')") == 'tr', "varsayılan dil 'tr' olmalı")
+check(pl.eval("Prefs.get('pref.lang')") == 'en', "varsayılan dil 'en' olmalı")
 check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık olmalı')
 
 # sunucu varsayılan geçersiz kılma

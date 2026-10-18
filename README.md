@@ -3,7 +3,7 @@
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
 - Ana menü (tasarım: `PMenü.mp4` referans videosu): **RESUME · MAP · GAME SETTINGS · UI SETTINGS · POSITION MODE** ve altta **DISCONNECT**; başlıkta seçili maddenin adı "karıştırma" efektiyle yazılır, sol altta oyuncu kartı (ad [id], meslek, nakit / banka), sağ üstte bağlantılar, sağ altta "ALL GTA SETTINGS"
-- Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, Türkçe/İngilizce
+- Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, **İngilizce (varsayılan)** / Türkçe (Arayüz Ayarları → Language). Yeni metinler önce İngilizce yazılır (`Config.Defaults['pref.lang']`)
 - Bağımlılık yok: `qbx_core`, `pma-voice`, `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez.
 
 ## Kurulum

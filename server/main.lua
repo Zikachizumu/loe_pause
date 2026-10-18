@@ -2,7 +2,7 @@
 -- İstemcideki ExecuteCommand('disconnect') her sürümde güvenilir çalışmadığı için kesin yol sunucudan DropPlayer'dır.
 -- Yalnızca olayı gönderen oyuncunun KENDİSİ düşürülür; başka oyuncu hedeflenemez.
 
-local REASON = 'Sunucudan ayrıldın. Tekrar görüşmek üzere!'
+local REASON = 'You left the server. See you again!'
 local lastLeave = {}
 
 RegisterNetEvent('loe_pause:server:leave', function()

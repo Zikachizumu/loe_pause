@@ -95,7 +95,7 @@ Config.Features = {
 -- Oyuncu bir şeyi değiştirmediyse geçerli olan değerler. Verilmeyen id'ler schema.lua'daki varsayılanı kullanır.
 -- Görünüm tercihleri oyuncu bazında KVP'de saklanır; buradaki değerler yalnızca başlangıç değeridir.
 Config.Defaults = {
-    ['pref.lang']      = 'tr',        -- 'tr' | 'en'
+    ['pref.lang']      = 'en',        -- 'en' | 'tr' (menü varsayılan olarak İngilizce; oyuncu Arayüz Ayarları'ndan değiştirebilir)
     ['pref.accent']    = 'white',     -- white | magenta | purple | blue | green | orange | red
     ['pref.dark']      = true,
     ['pref.portrait']  = false,
