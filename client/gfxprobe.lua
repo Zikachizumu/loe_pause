@@ -21,6 +21,7 @@ local SETTINGS_MENU = (Config.Native and Config.Native.settings and Config.Nativ
 local C_DOWN, C_UP, C_DELETE = 187, 188, 214
 
 local log, t0, busy, watching, hidden = {}, 0, false, false, false
+local drain   -- aşağıda tanımlanır (izleme thread'i kullanır)
 
 local function now() return GetGameTimer() - t0 end
 
@@ -124,7 +125,7 @@ local function startWatch()
     watching = true
     CreateThread(function()
         local last = {}
-        local prevSnap, lastSnapAt = profileSnap(), 0
+        local prevSnap, lastSnapAt, lastDrainAt = profileSnap(), 0, 0
         local function poll(key, fn)
             local ok, a, b = pcall(fn)
             local v = ok and (b ~= nil and (tostring(a) .. '/' .. tostring(b)) or tostring(a)) or ('ERR ' .. tostring(a))
@@ -158,6 +159,10 @@ local function startWatch()
                 local d = profileDiff(prevSnap, snap)
                 if #d > 0 then add('profile', { diff = d }) end
                 prevSnap = snap
+            end
+            if t - lastDrainAt >= 150 then
+                lastDrainAt = t
+                drain('w')
             end
             Wait(0)
         end
@@ -202,7 +207,12 @@ end
 
 local function info(tag)
     local d = { tag = tag }
-    local function put(k, fn) local ok, a, b = pcall(fn); d[k] = ok and (b ~= nil and { a, b } or a) or ('ERR ' .. tostring(a)) end
+    local function put(k, fn)
+        local ok, a, b = pcall(fn)
+        if not ok then d[k] = 'ERR ' .. tostring(a)
+        elseif b ~= nil then d[k] = { a, b }
+        else d[k] = a end
+    end
     put('build', GetGameBuildNumber)
     put('active', IsPauseMenuActive)
     put('state', menuState)
@@ -255,16 +265,58 @@ local SF_CANDIDATES = {
     { false, 'GET_COLUMN_SELECTION', { 0 } },
     { false, 'GET_COLUMN_SELECTION', { 1 } },
     { false, 'GET_COLUMN_SELECTION', { 2 } },
+    { false, 'GET_COLUMN_SELECTION', { 3 } },
     { false, 'GET_CURRENT_SELECTION' },
-    { false, 'GET_CURRENT_COLUMN' },
-    { false, 'GET_SELECTED_INDEX' },
-    { false, 'GET_CURRENT_ITEM' },
-    { false, 'GET_MENU_LEVEL' },
-    { false, 'GET_DATA_SLOT', { 0, 0 } },
-    { false, 'GET_DATA_SLOT', { 1, 0 } },
-    { true,  'GET_CURRENT_TAB' },
-    { true,  'GET_CURRENT_SELECTION' },
 }
+
+-- ---------------------------------------------------------------- LOE scaleform kancası (stream/pause_menu_sp_content.gfx)
+-- Yamalı içerik filmi, oyunun ayar sayfasına gönderdiği çağrıları (SET_DATA_SLOT, SET_VIDEO_MEMORY_BAR...) kaydeder.
+-- LOE_PING → "LOE_OK" (yama yüklü mü), LOE_DUMP(n) → kaydın ilk n karakteri (okunan kısım silinir).
+local patched = false
+
+local function sfStr(name, params)
+    local okB, started = pcall(BeginScaleformMovieMethodOnFrontend, name)
+    if not okB or not started then return nil end
+    for _, p in ipairs(params or {}) do ScaleformMovieMethodAddParamInt(p) end
+    local okE, h = pcall(EndScaleformMovieMethodReturnValue)
+    if not okE or type(h) ~= 'number' then return nil end
+    local s = GetGameTimer()
+    while GetGameTimer() - s < 400 do
+        local okR, r = pcall(IsScaleformMovieMethodReturnValueReady, h)
+        if okR and r then
+            local okS, v = pcall(GetScaleformMovieMethodReturnValueString, h)
+            return okS and v or nil
+        end
+        tick(); Wait(0)
+    end
+    return nil
+end
+
+-- Kaydı boşaltır (yalnızca izleme thread'i ve kapanışta çağrılır → parçalar sırayla gelir)
+drain = function(tag)
+    if not patched then return 0 end
+    local total = 0
+    for _ = 1, 60 do
+        local chunk = sfStr('LOE_DUMP', { 2000 })
+        if type(chunk) ~= 'string' or chunk == '' then break end
+        add('sflog', { s = chunk, tag = tag })
+        total = total + #chunk
+    end
+    return total
+end
+
+local function sfSince(t, words)
+    for i = #log, 1, -1 do
+        local e = log[i]
+        if e.t < t then break end
+        if e.k == 'sflog' then
+            for _, w in ipairs(words) do
+                if e.s:find(w, 1, true) then return true end
+            end
+        end
+    end
+    return false
+end
 
 -- ---------------------------------------------------------------- menü aç / kapat
 local function openSettings()
@@ -296,7 +348,7 @@ local function send(kind, extra)
 end
 
 local function begin()
-    log, t0 = {}, GetGameTimer()
+    log, t0, patched = {}, GetGameTimer(), false
     LoeProbe.active = true
     -- Güvenlik: test ne olursa olsun 200 sn sonra ESC yakalama geri gelir
     local token = {}
@@ -311,6 +363,8 @@ end
 
 local function finish()
     watching = false
+    Wait(300)          -- izleme thread'i dursun; kalan kaydı sırayla buradan oku
+    drain('final')
     closeMenu()
     SetTimeout(1000, function() LoeProbe.active = false; busy = false end)
 end
@@ -329,8 +383,12 @@ local function runAuto()
         send('auto', { failed = 'open' })
         return
     end
-    startWatch()
     sleep(1200)
+    phase('patch')
+    local ping = sfStr('LOE_PING')
+    patched = ping == 'LOE_OK'
+    add('patch', { ping = ping, active = patched })
+    startWatch()
     info('opened')
 
     phase('deeper0')
@@ -338,19 +396,28 @@ local function runAuto()
     sleep(900)
     info('afterDeeper')
 
-    -- Script girdisi gezinme yapabiliyor mu? (önce frontend grubu 2, olmazsa oyuncu grubu 0)
+    -- Hangi girdi grubu menüyü hareket ettiriyor? (yamalı film her hareketi kaydeder; yama yoksa eski olay okuyucu)
+    local NAV_WORDS = { 'SET_COLUMN_HIGHLIGHT', 'LAYOUT_CHANGED', 'SET_INPUT_EVENT', 'SET_HIGHLIGHT', 'SET_DESCRIPTION' }
     local group
     for _, g in ipairs({ 2, 0 }) do
         phase('nav-g' .. g)
         local t = now()
-        press(g, C_DOWN); sleep(450)
-        press(g, C_DOWN); sleep(450)
-        press(g, C_UP); sleep(450)
-        local n = navEventsSince(t)
-        add('navResult', { group = g, events = n })
-        if n > 0 then group = g break end
+        press(g, C_DOWN); sleep(700)
+        press(g, C_UP); sleep(700)
+        local moved = sfSince(t, NAV_WORDS) or navEventsSince(t) > 0
+        add('navResult', { group = g, moved = moved })
+        if moved and not group then group = g end
     end
     info('afterNav')
+
+    -- Kategori listesinde aşağı doğru gez: her kategori seçildiğinde oyun sağ sütuna o kategorinin satırlarını ve
+    -- güncel değerlerini gönderir (yalnızca gezinme, hiçbir değer değişmez)
+    phase('walk')
+    for _ = 1, 15 do
+        press(group or 2, C_DOWN)
+        sleep(650)
+    end
+    info('afterWalk')
 
     -- Menü görünmezken (SuppressFrontendRenderingThisFrame) açık kalıp girdi almaya devam ediyor mu?
     phase('hidden')
@@ -362,7 +429,7 @@ local function runAuto()
     press(group or 2, C_UP); sleep(700)
     info('whileHidden')
     hidden = false
-    add('hiddenResult', { events = navEventsSince(t), stillActive = IsPauseMenuActive() })
+    add('hiddenResult', { events = navEventsSince(t), moved = sfSince(t, NAV_WORDS), stillActive = IsPauseMenuActive() })
     beep()
     sleep(800)
 
@@ -374,8 +441,9 @@ local function runAuto()
     local snap1 = profileSnap()
     add('profileEndDiff', { diff = profileDiff(snap0, snap1) })
     finish()
-    say(('Auto test finished. Script input: %s'):format(group and ('worked (group ' .. group .. ')') or 'no response'))
-    send('auto', { navGroup = group })
+    say(('Auto test finished. Patch: %s, script input: %s'):format(patched and 'active' or 'NOT loaded',
+        group and ('group ' .. group) or 'not detected'))
+    send('auto', { navGroup = group, patched = patched })
 end
 
 -- ---------------------------------------------------------------- /loe_gfxrec: elle gezinme kaydı
@@ -392,6 +460,10 @@ local function runRecord()
         send('record', { failed = 'open' })
         return
     end
+    sleep(800)
+    local ping = sfStr('LOE_PING')
+    patched = ping == 'LOE_OK'
+    add('patch', { ping = ping, active = patched })
     startWatch()
     beep()
     phase('record')
@@ -417,8 +489,8 @@ local function runRecord()
     add('profileEndDiff', { diff = profileDiff(snap0, snap1) })
     finish()
     beep()
-    say('Recording finished (' .. reason .. ').')
-    send('record', { reason = reason })
+    say('Recording finished (' .. reason .. '). Patch: ' .. (patched and 'active' or 'NOT loaded'))
+    send('record', { reason = reason, patched = patched })
 end
 
 -- ---------------------------------------------------------------- komutlar (sunucu yetkiyi onaylayınca başlar)
