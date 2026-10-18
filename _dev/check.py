@@ -735,15 +735,45 @@ check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S1
 check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'auto', 'S15: sonuç sunucuya gönderilmeli')
 local phases = {}
 for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'phase' then phases[#phases + 1] = e.name end end
-check(table.concat(phases, ',') == 'open,deeper0,nav-g2,nav-g0,hidden,scaleform,end', 'S15: faz sırası: ' .. table.concat(phases, ','))
+check(table.concat(phases, ',') == 'open,patch,deeper0,nav-g2,nav-g0,walk,hidden,scaleform,end', 'S15: faz sırası: ' .. table.concat(phases, ','))
 check(sim.calls.GoDeeper == 0, 'S15: ayar sayfasına GoDeeper(0) ile girilmeli')
+check(sim.encoded and sim.encoded.patched == false, 'S15: yama yokken patched=false raporlanmalı')
+
+-- yamalı scaleform (sahte): LOE_PING / LOE_DUMP; yalnızca grup 2 girdisi menüyü hareket ettirir
+local fake = { buf = '', all = '', handles = {} }
+local function feed(s) fake.buf = fake.buf .. s; fake.all = fake.all .. s end
+BeginScaleformMovieMethodOnFrontend = function(name) fake.last = { name = name, params = {} }; return true end
+ScaleformMovieMethodAddParamInt = function(v) fake.last.params[#fake.last.params + 1] = v end
+EndScaleformMovieMethodReturnValue = function()
+    local c, r = fake.last, ''
+    if c.name == 'LOE_PING' then r = 'LOE_OK'
+    elseif c.name == 'LOE_DUMP' then r = fake.buf:sub(1, c.params[1]); fake.buf = fake.buf:sub(c.params[1] + 1) end
+    fake.handles[#fake.handles + 1] = r
+    return #fake.handles
+end
+IsScaleformMovieMethodReturnValueReady = function(h) return fake.handles[h] ~= nil end
+GetScaleformMovieMethodReturnValueString = function(h) return fake.handles[h] end
+SetControlValueNextFrame = function(g, c) if g == 2 then feed('SET_COLUMN_HIGHLIGHT\31' .. c .. '\30') end end
+feed(string.rep('x', 4500))
+sim.latent, sim.encoded = nil, nil
+sim.frames(800)
+sim.commands['loe_gfxtest']()
+sim.fire('loe_pause:client:gfxprobeGo', 'auto', true)
+sim.frames(32000)
+local chunks = {}
+for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sflog' then chunks[#chunks + 1] = e.s end end
+check(sim.encoded and sim.encoded.patched == true and sim.encoded.navGroup == 2, 'S15: yama algılanmalı, çalışan girdi grubu 2 bulunmalı')
+check(table.concat(chunks) == fake.all and fake.buf == '', 'S15: scaleform kaydı sırayla ve eksiksiz okunmalı')
+check(LoeProbe.active == false and sim.pause == false, 'S15: yamalı testten sonra her şey kapanmalı')
+BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethodReturnValue = nil, nil, nil
+IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString, SetControlValueNextFrame = nil, nil, nil
 
 -- kayıt: profil değişikliği yakalanmalı, ESC kaydı bitirmemeli, Delete bitirmeli
 sim.latent, sim.encoded = nil, nil
 sim.frames(800)
 sim.commands['loe_gfxrec']()
 sim.fire('loe_pause:client:gfxprobeGo', 'record', true)
-sim.frames(2000)
+sim.frames(3000)
 check(LoeProbe.active == true and sim.pause == true, 'S15: kayıt GTA ayar menüsünü açmalı')
 sim.profile[203] = 1; sim.frames(600); sim.profile[203] = nil; sim.frames(600)
 sim.escFrame = true; sim.step(16); sim.frames(300)
