@@ -54,7 +54,7 @@ RegisterNetEvent('loe_pause:server:gfxprobeAsk', function(mode)
     local now = GetGameTimer()
     if lastProbeAsk[src] and now - lastProbeAsk[src] < 3000 then return end
     lastProbeAsk[src] = now
-    TriggerClientEvent('loe_pause:client:gfxprobeGo', src, mode == 'record' and 'record' or 'auto', probeAllowed(src))
+    TriggerClientEvent('loe_pause:client:gfxprobeGo', src, (mode == 'record' or mode == 'path') and mode or 'auto', probeAllowed(src))
 end)
 
 RegisterNetEvent('loe_pause:server:gfxprobe', function(payload)
