@@ -79,6 +79,18 @@
     </div>
     <div class="toast" id="toast"></div>
 </div>
+<!-- Büyük harita (M) arama paneli: #app'ten bağımsız; yalnızca yerleşik harita açıkken görünür -->
+<div id="mapSearch" class="hidden">
+    <div class="ms-box">
+        <div class="ms-search">
+            <i data-i="search"></i>
+            <input id="msq" type="text" autocomplete="off" spellcheck="false" maxlength="40">
+            <kbd id="msKey"></kbd>
+        </div>
+        <div class="ms-meta"><span id="msCount"></span><span id="msHint"></span></div>
+        <div class="ms-list" id="msList"></div>
+    </div>
+</div>
 <script src="js/icons.js"></script>
 <script src="js/app.js"></script>
 </body>

@@ -3,6 +3,9 @@ local openedAt, closedAt, lastNuiFocusAt = 0, 0, 0
 local radarWasHidden, radarOffAtOpen, blurred = false, false, false
 -- Bizim başlattığımız yerleşik GTA menüsü akışı: target = hangi menü, seen = gerçekten açıldı mı, returnAt = LOE menüsüne dönüş zamanı
 local native = { target = nil, since = 0, seen = false, closingAt = nil, returnAt = nil }
+-- Büyük harita arama paneli durumu (ayrıntı: aşağıdaki BÜYÜK HARİTA ARAMA PANELİ bölümü)
+local mapPanel = { shown = false, focused = false, token = 0, byId = {}, escGraceUntil = 0 }
+local hideMapPanel, showMapPanel
 
 -- ================================================================ YARDIMCILAR
 local function menuItem(id)
@@ -326,6 +329,7 @@ end
 --- Yerleşik menü akışı bitti. wasOpen = menü gerçekten açılmıştı → (tercih açıksa) LOE menüsüne dön.
 local function finishNative(wasOpen)
     dbg('native finished, wasOpen =', wasOpen)
+    if hideMapPanel then hideMapPanel() end
     local noReturn = native.noReturn
     native.target, native.seen, native.closingAt, native.noReturn = nil, false, nil, false
     closedAt = GetGameTimer()
@@ -380,6 +384,114 @@ local function openMap(fromKey)
     activateNative('map', fromKey)
 end
 
+-- ================================================================ BÜYÜK HARİTA ARAMA PANELİ
+-- M ile açılan yerleşik büyük haritanın sağında kendi panelimiz: üstte arama kutusu, altta haritadaki işaretlerin (blip) listesi.
+-- GTA'nın kendi sağ listesi (Legend) script'ten değiştirilemez; panel onu örter. Blip'lere DOKUNULMAZ (yalnızca okunur).
+-- Yazmak ve listeye tıklamak için NUI odağı gerekir; odak varken oyun fare girişini almaz (harita sürüklenemez). Bu yüzden
+-- panel yalnızca "arama modunda" odak alır: tuşla (Config.MapSearch.key) ya da panele tıklayınca girilir; ESC / panel dışına
+-- tıklama ile çıkılır. Arama modundaki ESC haritayı KAPATMAZ (yalnızca modu bitirir).
+local MS = Config.MapSearch or {}
+
+--- Oyundaki blip'leri sprite sprite tarar (thread içinden çağrılmalı: Wait kullanır). Ad: GXT 'BLIP_<sprite>' etiketi.
+local function scanBlips()
+    local out, seen, dedupe = {}, {}, {}
+    local pc = GetEntityCoords(PlayerPedId()) or { x = 0.0, y = 0.0, z = 0.0 }
+    local ignore, names = MS.ignoreSprites or {}, MS.spriteNames or {}
+    for sprite = 1, MS.maxSprite or 900 do
+        if not ignore[sprite] then
+            local blip = GetFirstBlipInfoId(sprite)
+            local guard = 0
+            while DoesBlipExist(blip) and guard < 300 do
+                guard = guard + 1
+                if not seen[blip] then
+                    seen[blip] = true
+                    if GetBlipInfoIdDisplay(blip) ~= 0 and GetBlipAlpha(blip) > 0 and not DoesEntityExist(GetBlipInfoIdEntityIndex(blip)) then
+                        local c = GetBlipInfoIdCoord(blip)
+                        if c and (c.x ~= 0.0 or c.y ~= 0.0) then
+                            local key = ('%d:%d:%d'):format(sprite, math.floor(c.x), math.floor(c.y))
+                            if not dedupe[key] then
+                                dedupe[key] = true
+                                local name = names[sprite]
+                                if not name then
+                                    local t = GetLabelText('BLIP_' .. sprite)
+                                    name = (t and t ~= 'NULL' and t ~= '') and t or (MS.fallbackName or 'Point of interest')
+                                end
+                                local dx, dy = c.x - pc.x, c.y - pc.y
+                                out[#out + 1] = { n = tostring(name):sub(1, 60), x = c.x + 0.0, y = c.y + 0.0, d = math.floor(math.sqrt(dx * dx + dy * dy)) }
+                            end
+                        end
+                    end
+                end
+                blip = GetNextBlipInfoId(sprite)
+            end
+        end
+        if sprite % 150 == 0 then Wait(0) end
+    end
+    table.sort(out, function(a, b) if a.n ~= b.n then return a.n < b.n end return a.d < b.d end)
+    while #out > (MS.maxItems or 600) do out[#out] = nil end
+    for i, e in ipairs(out) do e.id = i end
+    return out
+end
+
+showMapPanel = function()
+    if mapPanel.shown or MS.enabled == false then return end
+    mapPanel.shown = true
+    mapPanel.token = mapPanel.token + 1
+    local token = mapPanel.token
+    CreateThread(function()
+        local items = scanBlips()
+        if not mapPanel.shown or mapPanel.token ~= token then return end      -- tarama sırasında harita kapandı
+        mapPanel.byId = {}
+        local payload = {}
+        for _, e in ipairs(items) do
+            mapPanel.byId[e.id] = { x = e.x, y = e.y, n = e.n }
+            payload[#payload + 1] = { id = e.id, n = e.n, d = e.d }
+        end
+        SendNUIMessage({ action = 'mapPanel', show = true, items = payload, key = keyToken({ command = 'loe_mapsearch' }), geo = MS.panel })
+        dbg('map panel shown,', #payload, 'places')
+    end)
+end
+
+hideMapPanel = function()
+    if not mapPanel.shown then return end
+    mapPanel.shown = false
+    mapPanel.token = mapPanel.token + 1
+    mapPanel.byId = {}
+    if mapPanel.focused then
+        mapPanel.focused = false
+        SetNuiFocus(false, false)
+    end
+    SendNUIMessage({ action = 'mapPanel', show = false })
+end
+
+local function enterSearch()
+    if not mapPanel.shown or mapPanel.focused or native.target ~= 'map' or native.closingAt then return end
+    mapPanel.focused = true
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'mapFocus', on = true })
+    dbg('map search on')
+end
+
+local function leaveSearch()
+    if not mapPanel.focused then return end
+    mapPanel.focused = false
+    SetNuiFocus(false, false)
+    mapPanel.escGraceUntil = GetGameTimer() + 500          -- arayüzde basılan ESC haritayı kapatmasın
+    SendNUIMessage({ action = 'mapFocus', on = false })
+    dbg('map search off')
+end
+
+--- Fare sol tuşu bırakıldığında imleç panel bölgesindeyse true (arama moduna girmek için).
+local function cursorClickInPanel()
+    if not (IsDisabledControlJustReleased(0, 237) or IsControlJustReleased(2, 237)) then return false end
+    local x, y = GetDisabledControlNormal(0, 239), GetDisabledControlNormal(0, 240)
+    if x == 0.0 and y == 0.0 then x, y = GetControlNormal(2, 239), GetControlNormal(2, 240) end
+    local g = MS.panel or {}
+    dbg('map click', x, y)
+    return x >= (g.left or 0.76) and x <= (g.right or 0.98) and y >= (g.top or 0.06) and y <= (g.bottom or 0.94)
+end
+
 -- ================================================================ ANA DÖNGÜ: ESC / P YAKALAMA
 local function canHijack()
     return Config.Hijack.enabled and loggedIn() and not IsPlayerSwitchInProgress()
@@ -415,12 +527,16 @@ CreateThread(function()
                     native.seen = true
                     -- Script ile açılan (ActivateFrontendMenu) menü ESC'de kendiliğinden KAPANMAZ; yalnızca bir seviye geri gider
                     -- ve harita açık kalır. Bu yüzden ESC / P / Geri'yi biz yakalayıp menüyü kapatırız.
-                    if not native.closingAt and now - native.since > 500
+                    if not native.closingAt and now - native.since > 500 and not mapPanel.focused and now >= mapPanel.escGraceUntil
                         and (IsControlJustPressed(0, 200) or IsControlJustPressed(0, 199) or IsControlJustPressed(2, 202)) then
                         native.closingAt = now
                         dbg('ESC in native menu -> closing')
                     end
-                    if native.closingAt then killPause() end
+                    if native.target == 'map' and not native.closingAt then
+                        if not mapPanel.shown then showMapPanel() end
+                        if mapPanel.shown and not mapPanel.focused and cursorClickInPanel() then enterSearch() end
+                    end
+                    if native.closingAt then hideMapPanel(); killPause() end
                 end
                 if native.closingAt then
                     -- Kapanışta sızan ESC yerleşik menüyü yeniden açabilir: pencere boyunca her karede söndür.
@@ -526,6 +642,28 @@ RegisterNUICallback('menu', function(d, cb)
     end
 end)
 
+-- Haritadaki listeden seçilen yere GPS kurar. Yalnızca arama modunda ve yalnızca taramadan çıkan kimliklerle çalışır (koordinat arayüzden ALINMAZ).
+RegisterNUICallback('mapPick', function(d, cb)
+    local id = type(d) == 'table' and d.id
+    local e = mapPanel.focused and type(id) == 'number' and mapPanel.byId[id]
+    if not e then return cb({ ok = false }) end
+    SetNewWaypoint(e.x, e.y)
+    cb({ ok = true, name = e.n })
+    leaveSearch()
+end)
+
+RegisterNUICallback('mapSearchExit', function(_, cb)
+    cb({ ok = true })
+    leaveSearch()
+end)
+
+RegisterCommand('loe_mapsearch', function()
+    if mapPanel.focused then leaveSearch() else enterSearch() end
+end, false)
+if MS.enabled ~= false and (MS.key or '') ~= '' then
+    RegisterKeyMapping('loe_mapsearch', 'Big map: search places', 'keyboard', MS.key)
+end
+
 RegisterNUICallback('quit', function(d, cb)
     cb({ ok = true })
     local mode = type(d) == 'table' and d.mode
@@ -579,6 +717,7 @@ RegisterKeyMapping(Config.Command, 'LOE pause menu', 'keyboard', Config.OpenKey 
 -- Büyük harita tuşu (varsayılan M): menü açılmadan doğrudan büyük harita. Harita açıkken aynı tuş (ESC gibi) kapatır.
 -- Harita menüden değil tuştan açıldığı için kapanınca LOE menüsüne dönülmez.
 RegisterCommand(Config.MapCommand or 'loe_bigmap', function()
+    if mapPanel.focused then return end
     if native.target == 'map' then
         if not native.closingAt and GetGameTimer() - native.since > 500 then
             native.closingAt = GetGameTimer()
@@ -599,7 +738,9 @@ exports('Close',  function() close() end)
 exports('IsOpen', function() return isOpen end)
 
 AddEventHandler('onResourceStop', function(res)
-    if res ~= GetCurrentResourceName() or not isOpen then return end
+    if res ~= GetCurrentResourceName() then return end
+    if mapPanel.focused then SetNuiFocus(false, false) end      -- harita arama modunda kapanırsa fare/klavye oyuna dönsün
+    if not isOpen then return end
     isOpen = false
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
