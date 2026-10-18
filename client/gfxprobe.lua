@@ -1,0 +1,466 @@
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını (Grafik, Ses, Fare...) LOE menüsünde gösterebilir miyiz?
+--
+--   /loe_gfxtest : otomatik test (~20 sn). GTA ayar menüsünü açar; script girdisiyle gezinmeyi, menüyü gizlemeyi,
+--                  seçili satırı ve değerleri okumayı dener. Hiçbir ayarın DEĞERİNİ değiştirmez (yalnızca aşağı/yukarı gezinir).
+--   /loe_gfxrec  : kayıt (en çok 150 sn, Delete ile biter). Oyuncu GTA ayar menüsünde elle gezinir; menü olayları ve
+--                  değişen profil ayarları zaman damgasıyla kaydedilir.
+--
+-- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
+-- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
+
+LoeProbe = { active = false }   -- client/main.lua: true iken ESC yakalama döngüsü yerleşik menüye dokunmaz
+
+local P = Config.GfxProbe or {}
+if P.enabled ~= true then return end
+
+local PROFILE_MAX = 1200
+local MAX_LOG = 6000
+local SETTINGS_MENU = (Config.Native and Config.Native.settings and Config.Native.settings.menu) or 'FE_MENU_VERSION_LANDING_MENU'
+
+-- Kontrol kimlikleri (INPUT_FRONTEND_*)
+local C_DOWN, C_UP, C_DELETE = 187, 188, 214
+
+local log, t0, busy, watching, hidden = {}, 0, false, false, false
+
+local function now() return GetGameTimer() - t0 end
+
+local function add(kind, data)
+    if #log >= MAX_LOG then return end
+    data = data or {}
+    data.t, data.k = now(), kind
+    log[#log + 1] = data
+end
+
+local function say(msg)
+    print('[loe_gfxtest] ' .. msg)
+    BeginTextCommandThefeedPost('STRING')
+    AddTextComponentSubstringPlayerName(msg)
+    EndTextCommandThefeedPostTicker(false, true)
+end
+
+local function beep()
+    PlaySoundFrontend(-1, 'SELECT', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
+end
+
+-- ---------------------------------------------------------------- native sarmalayıcıları (isim yoksa hash ile çağır)
+local function call(name, hash, ...)
+    local f = _G[name]
+    if type(f) == 'function' then return f(...) end
+    return Citizen.InvokeNative(hash, ...)
+end
+
+local function callInt(name, hash)
+    local f = _G[name]
+    if type(f) == 'function' then return f() end
+    return Citizen.InvokeNative(hash, Citizen.ResultAsInteger())
+end
+
+local function callBool(name, hash)
+    local f = _G[name]
+    if type(f) == 'function' then return f() == true end
+    return Citizen.InvokeNative(hash, Citizen.ResultAsInteger()) ~= 0
+end
+
+local function layoutEvent()
+    if not callBool('HasMenuLayoutChangedEventOccurred', 0x2E22FEFA0100275E) then return nil end
+    if type(GetMenuLayoutChangedEventDetails) == 'function' then return GetMenuLayoutChangedEventDetails() end
+    return Citizen.InvokeNative(0x7E17BE53E1AAABAF, Citizen.PointerValueInt(), Citizen.PointerValueInt(), Citizen.PointerValueInt())
+end
+
+local function triggerEvent()
+    if not callBool('HasMenuTriggerEventOccurred', 0xF284AC67940C6812) then return nil end
+    return true
+end
+
+-- _GET_PAUSE_MENU_SELECTION (GET_MENU_TRIGGER_EVENT_DETAILS): son menü kimliği + seçili öğenin benzersiz kimliği
+local function pauseSel()
+    local f = GetPauseMenuSelection or GetMenuTriggerEventDetails
+    if type(f) == 'function' then return f() end
+    return Citizen.InvokeNative(0x36C1451A88A09630, Citizen.PointerValueInt(), Citizen.PointerValueInt())
+end
+
+local function hoverIdx() return callInt('PauseMenuGetMouseHoverIndex', 0x359AF31A4B52F5ED) end
+local function menuState() return callInt('GetPauseMenuState', 0x272ACD84970869C5) end
+local function feVersion() return callInt('GetCurrentFrontendMenuVersion', 0x2309595AD6145265) end
+local function feReady() return callBool('IsFrontendReadyForControl', 0x3BAB9A4E4F2FF5C7) end
+
+local function setControl(group, control, value)
+    local f = SetControlValueNextFrame or SetControlNormal
+    if type(f) == 'function' then return f(group, control, value) end
+    return Citizen.InvokeNative(0xE8A25867FBA3B05E, group, control, value)
+end
+
+-- ---------------------------------------------------------------- profil ayarları (GET_PROFILE_SETTING) anlık görüntüsü
+local function profileSnap()
+    local s = {}
+    local ok = pcall(function()
+        for id = 0, PROFILE_MAX do
+            local v = GetProfileSetting(id)
+            if type(v) == 'number' and v ~= 0 then s[id] = v end
+        end
+    end)
+    return s, ok
+end
+
+local function profileDiff(a, b)
+    local d = {}
+    for id = 0, PROFILE_MAX do
+        local x, y = a[id] or 0, b[id] or 0
+        if x ~= y then d[#d + 1] = { id, x, y } end
+    end
+    return d
+end
+
+local function profileList(s)
+    local out = {}
+    for id = 0, PROFILE_MAX do
+        if s[id] then out[#out + 1] = { id, s[id] } end
+    end
+    return out
+end
+
+-- ---------------------------------------------------------------- olay kaydı (her kare)
+local function startWatch()
+    watching = true
+    CreateThread(function()
+        local last = {}
+        local prevSnap, lastSnapAt = profileSnap(), 0
+        local function poll(key, fn)
+            local ok, a, b = pcall(fn)
+            local v = ok and (b ~= nil and (tostring(a) .. '/' .. tostring(b)) or tostring(a)) or ('ERR ' .. tostring(a))
+            if v ~= last[key] then
+                last[key] = v
+                add('poll', { key = key, v = v })
+            end
+        end
+        while watching do
+            local ok, a, b, c = pcall(layoutEvent)
+            if not ok then
+                if last.layoutErr == nil then last.layoutErr = true; add('err', { what = 'layout', e = tostring(a) }) end
+            elseif a ~= nil then
+                add('layout', { prev = a, screen = b, uid = c })
+            end
+            local okT, trig = pcall(triggerEvent)
+            if okT and trig then
+                local okS, m, u = pcall(pauseSel)
+                add('trigger', { menu = okS and m or nil, uid = okS and u or nil })
+            end
+            poll('sel', pauseSel)
+            poll('hover', hoverIdx)
+            poll('state', menuState)
+            poll('active', IsPauseMenuActive)
+            poll('version', feVersion)
+            poll('ready', feReady)
+            local t = GetGameTimer()
+            if t - lastSnapAt >= 250 then
+                lastSnapAt = t
+                local snap = profileSnap()
+                local d = profileDiff(prevSnap, snap)
+                if #d > 0 then add('profile', { diff = d }) end
+                prevSnap = snap
+            end
+            Wait(0)
+        end
+    end)
+end
+
+-- ---------------------------------------------------------------- zamanlama yardımcıları (gizleme her karede sürer)
+local function tick()
+    if hidden then SuppressFrontendRenderingThisFrame() end
+end
+
+local function sleep(ms)
+    local s = GetGameTimer()
+    repeat tick(); Wait(0) until GetGameTimer() - s >= ms
+end
+
+-- Tuşa basmayı taklit eder: değer 2 kare boyunca 1.0, sonra bırakılır
+local function press(group, control)
+    add('press', { group = group, control = control })
+    for _ = 1, 2 do
+        tick()
+        local ok, e = pcall(setControl, group, control, 1.0)
+        if not ok then add('err', { what = 'press', e = tostring(e) }) end
+        Wait(0)
+    end
+end
+
+local function navEventsSince(t)
+    local n = 0
+    for i = #log, 1, -1 do
+        local e = log[i]
+        if e.t < t then break end
+        if e.k == 'layout' or e.k == 'trigger' or (e.k == 'poll' and (e.key == 'sel' or e.key == 'hover')) then n = n + 1 end
+    end
+    return n
+end
+
+local function phase(name)
+    add('phase', { name = name })
+    print('[loe_gfxtest] phase: ' .. name)
+end
+
+local function info(tag)
+    local d = { tag = tag }
+    local function put(k, fn) local ok, a, b = pcall(fn); d[k] = ok and (b ~= nil and { a, b } or a) or ('ERR ' .. tostring(a)) end
+    put('build', GetGameBuildNumber)
+    put('active', IsPauseMenuActive)
+    put('state', menuState)
+    put('version', feVersion)
+    put('ready', feReady)
+    put('sel', pauseSel)
+    put('hover', hoverIdx)
+    put('res', GetActualScreenResolution)
+    put('lang', GetCurrentLanguage)
+    put('subtitles', IsSubtitlePreferenceSwitchedOn)
+    put('metric', ShouldUseMetricMeasurements)
+    put('safezone', GetSafeZoneSize)
+    add('info', d)
+end
+
+-- ---------------------------------------------------------------- scaleform dönüş değeri denemeleri
+local function sfCall(header, name, params)
+    local begin = header and BeginScaleformMovieMethodOnFrontendHeader or BeginScaleformMovieMethodOnFrontend
+    local res = { name = name, header = header, params = params }
+    local okB, started = pcall(begin, name)
+    if not okB or not started then
+        res.started = false
+        if not okB then res.e = tostring(started) end
+        add('sf', res)
+        return
+    end
+    for _, p in ipairs(params or {}) do ScaleformMovieMethodAddParamInt(p) end
+    local okE, h = pcall(EndScaleformMovieMethodReturnValue)
+    if not okE or type(h) ~= 'number' then
+        res.e = 'end: ' .. tostring(h)
+        add('sf', res)
+        return
+    end
+    res.handle = h
+    local s = GetGameTimer()
+    while GetGameTimer() - s < 400 do
+        local okR, r = pcall(IsScaleformMovieMethodReturnValueReady, h)
+        if okR and r then res.ready = true break end
+        tick(); Wait(0)
+    end
+    if res.ready then
+        local o1, vi = pcall(GetScaleformMovieMethodReturnValueInt, h); if o1 then res.int = vi end
+        local o2, vs = pcall(GetScaleformMovieMethodReturnValueString, h); if o2 then res.str = vs end
+        local o3, vb = pcall(GetScaleformMovieMethodReturnValueBool, h); if o3 then res.bool = vb end
+    end
+    add('sf', res)
+end
+
+local SF_CANDIDATES = {
+    { false, 'GET_COLUMN_SELECTION', { 0 } },
+    { false, 'GET_COLUMN_SELECTION', { 1 } },
+    { false, 'GET_COLUMN_SELECTION', { 2 } },
+    { false, 'GET_CURRENT_SELECTION' },
+    { false, 'GET_CURRENT_COLUMN' },
+    { false, 'GET_SELECTED_INDEX' },
+    { false, 'GET_CURRENT_ITEM' },
+    { false, 'GET_MENU_LEVEL' },
+    { false, 'GET_DATA_SLOT', { 0, 0 } },
+    { false, 'GET_DATA_SLOT', { 1, 0 } },
+    { true,  'GET_CURRENT_TAB' },
+    { true,  'GET_CURRENT_SELECTION' },
+}
+
+-- ---------------------------------------------------------------- menü aç / kapat
+local function openSettings()
+    ActivateFrontendMenu(GetHashKey(SETTINGS_MENU), true, -1)
+    local deadline = GetGameTimer() + 3000
+    while not IsPauseMenuActive() and GetGameTimer() < deadline do Wait(0) end
+    return IsPauseMenuActive()
+end
+
+local function closeMenu()
+    hidden = false
+    for _ = 1, 40 do
+        if not IsPauseMenuActive() then break end
+        pcall(SetFrontendActive, false)
+        Wait(50)
+    end
+end
+
+local function send(kind, extra)
+    local payload = { kind = kind, log = log }
+    for k, v in pairs(extra or {}) do payload[k] = v end
+    local ok, data = pcall(json.encode, payload)
+    if not ok or type(data) ~= 'string' then
+        say('Could not pack the result: ' .. tostring(data))
+        return
+    end
+    TriggerLatentServerEvent('loe_pause:server:gfxprobe', 200000, data)
+    say(('Result sent to the server (%d events, %d KB).'):format(#log, math.ceil(#data / 1024)))
+end
+
+local function begin()
+    log, t0 = {}, GetGameTimer()
+    LoeProbe.active = true
+    -- Güvenlik: test ne olursa olsun 200 sn sonra ESC yakalama geri gelir
+    local token = {}
+    LoeProbe.token = token
+    SetTimeout(200000, function()
+        if LoeProbe.token == token and LoeProbe.active then
+            watching, hidden, busy = false, false, false
+            LoeProbe.active = false
+        end
+    end)
+end
+
+local function finish()
+    watching = false
+    closeMenu()
+    SetTimeout(1000, function() LoeProbe.active = false; busy = false end)
+end
+
+-- ---------------------------------------------------------------- /loe_gfxtest: otomatik test
+local function runAuto()
+    begin()
+    info('start')
+    local snap0 = profileSnap()
+    add('profileStart', { list = profileList(snap0) })
+
+    phase('open')
+    if not openSettings() then
+        say('Could not open the GTA settings menu.')
+        finish()
+        send('auto', { failed = 'open' })
+        return
+    end
+    startWatch()
+    sleep(1200)
+    info('opened')
+
+    phase('deeper0')
+    pcall(call, 'PauseMenuceptionGoDeeper', 0x77F16B447824DA6C, 0)
+    sleep(900)
+    info('afterDeeper')
+
+    -- Script girdisi gezinme yapabiliyor mu? (önce frontend grubu 2, olmazsa oyuncu grubu 0)
+    local group
+    for _, g in ipairs({ 2, 0 }) do
+        phase('nav-g' .. g)
+        local t = now()
+        press(g, C_DOWN); sleep(450)
+        press(g, C_DOWN); sleep(450)
+        press(g, C_UP); sleep(450)
+        local n = navEventsSince(t)
+        add('navResult', { group = g, events = n })
+        if n > 0 then group = g break end
+    end
+    info('afterNav')
+
+    -- Menü görünmezken (SuppressFrontendRenderingThisFrame) açık kalıp girdi almaya devam ediyor mu?
+    phase('hidden')
+    beep()
+    hidden = true
+    local t = now()
+    sleep(800)
+    press(group or 2, C_DOWN); sleep(700)
+    press(group or 2, C_UP); sleep(700)
+    info('whileHidden')
+    hidden = false
+    add('hiddenResult', { events = navEventsSince(t), stillActive = IsPauseMenuActive() })
+    beep()
+    sleep(800)
+
+    phase('scaleform')
+    for _, c in ipairs(SF_CANDIDATES) do sfCall(c[1], c[2], c[3]) end
+
+    phase('end')
+    info('end')
+    local snap1 = profileSnap()
+    add('profileEndDiff', { diff = profileDiff(snap0, snap1) })
+    finish()
+    say(('Auto test finished. Script input: %s'):format(group and ('worked (group ' .. group .. ')') or 'no response'))
+    send('auto', { navGroup = group })
+end
+
+-- ---------------------------------------------------------------- /loe_gfxrec: elle gezinme kaydı
+local function runRecord()
+    begin()
+    info('start')
+    local snap0 = profileSnap()
+    add('profileStart', { list = profileList(snap0) })
+
+    phase('open')
+    if not openSettings() then
+        say('Could not open the GTA settings menu.')
+        finish()
+        send('record', { failed = 'open' })
+        return
+    end
+    startWatch()
+    beep()
+    phase('record')
+
+    local started, offSince, reason = GetGameTimer(), nil, 'timeout'
+    while GetGameTimer() - started < 150000 do
+        if IsControlJustPressed(2, C_DELETE) or IsDisabledControlJustPressed(2, C_DELETE)
+            or IsControlJustPressed(0, C_DELETE) or IsDisabledControlJustPressed(0, C_DELETE) then
+            reason = 'delete' break
+        end
+        if not IsPauseMenuActive() then
+            offSince = offSince or GetGameTimer()
+            if GetGameTimer() - offSince > 1500 then reason = 'closed' break end
+        else
+            offSince = nil
+        end
+        Wait(0)
+    end
+    add('recordEnd', { reason = reason })
+    phase('end')
+    info('end')
+    local snap1 = profileSnap()
+    add('profileEndDiff', { diff = profileDiff(snap0, snap1) })
+    finish()
+    beep()
+    say('Recording finished (' .. reason .. ').')
+    send('record', { reason = reason })
+end
+
+-- ---------------------------------------------------------------- komutlar (sunucu yetkiyi onaylayınca başlar)
+local function request(mode)
+    if busy then say('A test is already running.') return end
+    if (Apply and Apply.menuOpen and Apply.menuOpen()) or IsPauseMenuActive() then
+        say('Close the menu first, then run the command again.')
+        return
+    end
+    busy = true
+    TriggerServerEvent('loe_pause:server:gfxprobeAsk', mode)
+    SetTimeout(5000, function()
+        if busy and not LoeProbe.active then busy = false end   -- sunucu yanıt vermedi / yetki yok
+    end)
+end
+
+RegisterNetEvent('loe_pause:client:gfxprobeGo', function(mode, allowed)
+    if not allowed then
+        busy = false
+        say('You are not allowed to run this test.')
+        return
+    end
+    CreateThread(function()
+        Wait(1200)   -- sohbet / F8 kapansın
+        if IsPauseMenuActive() or (Apply and Apply.menuOpen and Apply.menuOpen()) then
+            busy = false
+            say('Cannot start while a menu is open.')
+            return
+        end
+        local ok, err = pcall(mode == 'record' and runRecord or runAuto)
+        if not ok then
+            add('err', { what = 'run', e = tostring(err) })
+            finish()
+            say('Test error: ' .. tostring(err))
+            send(mode, { error = tostring(err) })
+        end
+    end)
+end)
+
+RegisterNetEvent('loe_pause:client:gfxprobeSaved', function(name)
+    if name then say('Saved on the server: ' .. tostring(name)) else say('The server could not save the result.') end
+end)
+
+RegisterCommand('loe_gfxtest', function() request('auto') end, false)
+RegisterCommand('loe_gfxrec', function() request('record') end, false)

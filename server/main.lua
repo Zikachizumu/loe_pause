@@ -39,7 +39,41 @@ RegisterNetEvent('loe_pause:server:caps', function()
     TriggerClientEvent('loe_pause:client:caps', src, allowed)
 end)
 
+-- GEÇİCİ: GTA ayarları araştırması (client/gfxprobe.lua). Yalnızca Config.GfxProbe.ace yetkisi olan oyuncu testi başlatabilir;
+-- sonucu resource klasörüne gfxprobe_<tarih>_<oyuncu>.json olarak yazılır. Araştırma bitince kaldırılacak.
+local lastProbeAsk, lastProbe = {}, {}
+
+local function probeAllowed(src)
+    local P = Config.GfxProbe or {}
+    return P.enabled == true and type(src) == 'number' and src > 0 and IsPlayerAceAllowed(src, P.ace or 'admin')
+end
+
+RegisterNetEvent('loe_pause:server:gfxprobeAsk', function(mode)
+    local src = source
+    if type(src) ~= 'number' or src <= 0 then return end
+    local now = GetGameTimer()
+    if lastProbeAsk[src] and now - lastProbeAsk[src] < 3000 then return end
+    lastProbeAsk[src] = now
+    TriggerClientEvent('loe_pause:client:gfxprobeGo', src, mode == 'record' and 'record' or 'auto', probeAllowed(src))
+end)
+
+RegisterNetEvent('loe_pause:server:gfxprobe', function(payload)
+    local src = source
+    if not probeAllowed(src) then return end
+    if type(payload) ~= 'string' or #payload == 0 or #payload > 1500000 then return end
+    local now = GetGameTimer()
+    if lastProbe[src] and now - lastProbe[src] < 10000 then return end
+    lastProbe[src] = now
+
+    local name = ('gfxprobe_%s_%d.json'):format(os.date('%Y%m%d_%H%M%S'), src)
+    local ok = SaveResourceFile(GetCurrentResourceName(), name, payload, -1)
+    print(('[loe_pause] gfxprobe: %s (%d bayt, oyuncu %d, kayıt=%s)'):format(name, #payload, src, tostring(ok)))
+    TriggerClientEvent('loe_pause:client:gfxprobeSaved', src, ok and name or false)
+end)
+
 AddEventHandler('playerDropped', function()
     lastLeave[source] = nil
     lastCaps[source] = nil
+    lastProbeAsk[source] = nil
+    lastProbe[source] = nil
 end)
