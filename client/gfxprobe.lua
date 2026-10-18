@@ -292,6 +292,20 @@ local function sfStr(name, params)
     return nil
 end
 
+-- Yama yüklü mü? Film henüz hazır olmayabilir → birkaç kez dene; kontrol olarak oyunun kendi metodunu da çağır
+-- (kontrol dönerse kanal çalışıyor, yalnızca LOE_PING yoksa yamalı dosya yüklenmemiştir)
+local function detectPatch()
+    local ping
+    for _ = 1, 4 do
+        ping = sfStr('LOE_PING')
+        if ping == 'LOE_OK' then break end
+        sleep(400)
+    end
+    patched = ping == 'LOE_OK'
+    local ctrl = sfStr('GET_COLUMN_SELECTION', { 0 })
+    add('patch', { ping = ping, active = patched, control = ctrl })
+end
+
 -- Kaydı boşaltır (yalnızca izleme thread'i ve kapanışta çağrılır → parçalar sırayla gelir)
 drain = function(tag)
     if not patched then return 0 end
@@ -385,9 +399,7 @@ local function runAuto()
     end
     sleep(1200)
     phase('patch')
-    local ping = sfStr('LOE_PING')
-    patched = ping == 'LOE_OK'
-    add('patch', { ping = ping, active = patched })
+    detectPatch()
     startWatch()
     info('opened')
 
@@ -461,9 +473,7 @@ local function runRecord()
         return
     end
     sleep(800)
-    local ping = sfStr('LOE_PING')
-    patched = ping == 'LOE_OK'
-    add('patch', { ping = ping, active = patched })
+    detectPatch()
     startWatch()
     beep()
     phase('record')

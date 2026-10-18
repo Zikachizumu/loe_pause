@@ -10,6 +10,8 @@ Gereksinim: pip install lupa
 """
 import json
 import pathlib
+import importlib.util
+import struct
 import sys
 
 from lupa.lua54 import LuaRuntime
@@ -773,7 +775,7 @@ sim.latent, sim.encoded = nil, nil
 sim.frames(800)
 sim.commands['loe_gfxrec']()
 sim.fire('loe_pause:client:gfxprobeGo', 'record', true)
-sim.frames(3000)
+sim.frames(6000)
 check(LoeProbe.active == true and sim.pause == true, 'S15: kayıt GTA ayar menüsünü açmalı')
 sim.profile[203] = 1; sim.frames(600); sim.profile[203] = nil; sim.frames(600)
 sim.escFrame = true; sim.step(16); sim.frames(300)
@@ -917,6 +919,22 @@ sv.execute('Config.GfxProbe.enabled = false')
 check(PUT(12, 20000, True, '{"d":1}') == 2 and ASK(13, 0, True, 'auto') and lua_to_py(sv.eval('sent[#sent]')).get('allowed') is False,
       'sunucu: GfxProbe kapalıyken hiçbir şey kabul edilmemeli')
 sv.execute('Config.GfxProbe.enabled = true')
+
+
+# ------------------------------------------------------------------ 6) GEÇİCİ: yamalı scaleform dosyası
+print('[6] Yamalı pause menü içerik filmi (stream_enhanced)')
+import subprocess  # noqa: E402
+check(not (ROOT / 'stream').exists(), "stream/ klasörü olmamalı (FiveM Enhanced için stream_enhanced/ ister)")
+gfx = ROOT / 'stream_enhanced/pause_menu_sp_content.gfx'
+check(gfx.exists(), 'stream_enhanced/pause_menu_sp_content.gfx yok')
+if gfx.exists():
+    spec_g = importlib.util.spec_from_file_location('patch_gfx', ROOT / '_dev/gfx/patch_gfx.py')
+    pgx = importlib.util.module_from_spec(spec_g); spec_g.loader.exec_module(pgx)
+    raw = gfx.read_bytes()
+    check(raw[:3] == b'GFX' and struct.unpack_from('<I', raw, 4)[0] == len(raw), 'GFX başlığı: imza ve dosya uzunluğu tutmalı')
+    check(pgx.tag_bytes(12, pgx.build_hook()) in raw, 'dosyada güncel kanca bytecode\'u bulunmalı (patch_gfx.py ile yeniden üret)')
+vr = subprocess.run([sys.executable, str(ROOT / '_dev/gfx/verify_hook.py')], capture_output=True, text=True, encoding='utf-8')
+check(vr.returncode == 0, 'AS2 kanca doğrulayıcısı: ' + (vr.stdout + vr.stderr).strip()[-300:])
 
 print()
 if failures:
