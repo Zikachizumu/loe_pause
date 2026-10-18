@@ -77,7 +77,21 @@ local function buildMenu()
                 id = item.id,
                 available = (not item.resource) or resourceStarted(item.resource),
                 external = item.resource ~= nil,
+                soon = item.soon == true,
             }
+        end
+    end
+    return out
+end
+
+--- Sağ üst bağlantılar: yalnızca https:// ile başlayan, boşluk/tırnak içermeyen adresler NUI'ye gider (en çok 4).
+local function buildLinks()
+    local out = {}
+    for _, l in ipairs(Config.Links or {}) do
+        if type(l) == 'table' and type(l.id) == 'string' and type(l.url) == 'string'
+            and l.url:match("^https://[^%s\"'<>]+$") then
+            out[#out + 1] = { id = l.id, label = tostring(l.label or l.id), url = l.url }
+            if #out >= 4 then break end
         end
     end
     return out
@@ -88,6 +102,7 @@ local function buildStats()
     local ok, pd = pcall(function() return exports.qbx_core:GetPlayerData() end)
     if ok and type(pd) == 'table' then
         local ci = pd.charinfo or {}
+        out.id = GetPlayerServerId(PlayerId())
         out.name = trim((ci.firstname or '') .. ' ' .. (ci.lastname or ''))
         out.cid = pd.citizenid
         if type(pd.job) == 'table' then
@@ -443,8 +458,9 @@ RegisterNUICallback('ready', function(_, cb)
     SendNUIMessage({
         action = 'init',
         schema = Schema.categories,
-        brand  = Config.Brand,
         bg     = Config.Background,
+        links  = buildLinks(),
+        gta    = (Config.Features or {}).allGtaSettings ~= false,
     })
     cb({ ok = true })
     if pendingOpen then
@@ -493,8 +509,6 @@ RegisterNUICallback('menu', function(d, cb)
     if id == 'map' then
         cb({ ok = true })
         CreateThread(openMap)
-    elseif id == 'settings' then
-        cb({ ok = true, page = 'settings' })
     elseif id == 'stats' or id == 'battlepass' or id == 'shop' then
         if item.resource and resourceStarted(item.resource) and item.export then
             cb({ ok = true })

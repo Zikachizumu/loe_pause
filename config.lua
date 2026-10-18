@@ -11,11 +11,11 @@ Config.Brand = {
     footer = 'LEGENDS OF EMPIRE ROLEPLAY',
 }
 
--- Arka plan. mode = 'image' → html/img/bg.jpg (tasarım referansı), 'game' → canlı oyun + bulanıklık.
--- Kendi görselini kullanmak için html/img/bg.jpg dosyasını değiştirmen yeterli (16:9, tercihen 1920x1080+).
+-- Arka plan. mode = 'game' → canlı oyun görüntüsü (koyu katman + oyun bulanıklığı; videodaki tasarım),
+-- 'image' → image dosyası (html/ altında olmalı ve fxmanifest.lua 'files' listesine eklenmeli).
 Config.Background = {
-    mode = 'image',
-    image = 'img/bg.jpg',
+    mode = 'game',
+    image = '',
 }
 
 -- ================================================================ ESC / P YAKALAMA
@@ -26,22 +26,33 @@ Config.Hijack = {
     requireLogin     = true,   -- LocalPlayer.state.isLoggedIn == true olmadan devralma (karakter seçimi/yaratma bozulmasın)
     nuiGraceMs       = 450,    -- başka bir NUI'nin odağı bu kadar yeni bıraktıysa ESC'yi yut
     reopenCooldownMs = 450,    -- kapanıştan hemen sonra gelen (sızan) ESC'yi yut
-    blurGame         = false,  -- true: menü açıkken oyun ekranına bulanıklık (Background.mode = 'game' için anlamlı)
+    blurGame         = true,   -- menü açıkken oyun ekranı bulanıklaşır (TriggerScreenblurFadeIn); false → yalnızca koyu katman
     allowNativeMenu  = false,  -- false: yerleşik GTA duraklatma menüsü ESC/P ile ASLA açılmaz ve "Normal Menü" kategorisi gizlenir.
                                -- true: oyuncular ayarlardan yerleşik menüye geçebilir (arıza durumunda kaçış kapısı).
 }
 
 -- ================================================================ ANA MENÜ
--- Sıra sabittir (Harita, İstatistikler, Battlepass, Shop, Ayarlar, Oyundan Çık).
--- enabled = false → satır gizlenir.
--- resource/export: bu resource 'started' ise export çağrılır; değilse satır "Yakında" sayfası gösterir.
+-- Sıra = ekrandaki sıra. 'quit' (DISCONNECT) her zaman altta ayrı gösterilir. enabled = false → gizlenir.
+-- resume / map / game (Oyun Ayarları) / ui (Arayüz Ayarları) / quit yerleşiktir. soon = true → "Yakında" etiketli, tıklanınca bilgi verir.
+-- stats / battlepass / shop varsayılan kapalıdır; açarsan aynı listede görünür (resource/export verilirse harici sistem açılır).
 Config.Menu = {
-    { id = 'map',        enabled = true },
-    { id = 'stats',      enabled = true },   -- resource verirsen harici istatistik sistemi açılır; yoksa yerleşik karakter özeti (+ hastalık durumu)
-    { id = 'battlepass', enabled = true, resource = 'loe_battlepass', export = 'Open' },
-    { id = 'shop',       enabled = true, resource = 'loe_shop',       export = 'Open' },
-    { id = 'settings',   enabled = true },
-    { id = 'quit',       enabled = true },
+    { id = 'resume' },
+    { id = 'map' },
+    { id = 'game' },
+    { id = 'ui' },
+    { id = 'position',   soon = true },   -- KONUM MODU: henüz bir işlevi yok (HUD konumlandırma gibi bir özellik bağlanabilir)
+    { id = 'stats',      enabled = false },   -- yerleşik karakter / sağlık özeti sayfası
+    { id = 'battlepass', enabled = false, resource = 'loe_battlepass', export = 'Open' },
+    { id = 'shop',       enabled = false, resource = 'loe_shop',       export = 'Open' },
+    { id = 'quit' },
+}
+
+-- Sağ üstteki bağlantılar (videodaki YOUTUBE / STORE / DISCORD). Yalnızca url'si https:// ile başlayan dolu girdiler gösterilir.
+-- Adresi boş bırakılan bağlantı hiç görünmez. Tıklayınca oyuncunun tarayıcısında açılır.
+Config.Links = {
+    { id = 'youtube', label = 'YouTube', url = '' },
+    { id = 'store',   label = 'Store',   url = '' },
+    { id = 'discord', label = 'Discord', url = '' },
 }
 
 -- Harita: loe_3dmap varsa onu açar, yoksa yerleşik GTA haritasına düşer.
@@ -73,6 +84,7 @@ Config.Native = {
 -- ================================================================ ÖZELLİKLER
 -- false yapılan özellik arayüzden tamamen kalkar ve uygulanmaz.
 Config.Features = {
+    allGtaSettings = true, -- sağ alttaki "Tüm GTA ayarları" düğmesi (yerleşik GTA ayar ekranını açar)
     recording = true,    -- Rockstar Editor: kayıt başlat / kaydet / iptal
     lodScale  = true,    -- Gelişmiş Grafikler: mesafe ayrıntısı ölçeği (OverrideLodscaleThisFrame, performansı etkiler)
     voice     = true,    -- Sesli Sohbet: pma-voice seviyeleri (pma-voice yoksa satırlar çalışmaz)
@@ -84,7 +96,7 @@ Config.Features = {
 -- Görünüm tercihleri oyuncu bazında KVP'de saklanır; buradaki değerler yalnızca başlangıç değeridir.
 Config.Defaults = {
     ['pref.lang']      = 'tr',        -- 'tr' | 'en'
-    ['pref.accent']    = 'magenta',   -- magenta | purple | blue | green | orange | red
+    ['pref.accent']    = 'white',     -- white | magenta | purple | blue | green | orange | red
     ['pref.dark']      = true,
     ['pref.portrait']  = false,
     ['pref.mapReturn'] = false,       -- true: harita / yerleşik menü kapanınca LOE menüsüne animasyonla dön (false: doğrudan oyuna)

@@ -7,7 +7,7 @@
     html, body { margin: 0; height: 100%; background: #111; color: #ddd; font: 13px system-ui; }
     #dev { position: fixed; right: 8px; top: 8px; z-index: 99999; display: flex; gap: 6px; flex-wrap: wrap; max-width: 60vw; justify-content: flex-end; }
     #dev button { background: #222; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 5px 9px; cursor: pointer; font: inherit; }
-    #dev button:hover { border-color: #ff2e93; }
+    #dev button:hover { border-color: #fff; }
 </style>
 </head>
 <body>
@@ -15,7 +15,8 @@
   Yalnızca geliştirme: gerçek html/index.html'i FiveM olmadan tarayıcıda çalıştırır.
   Lua tarafını taklit eder (fetch → https://loe_pause/*). Önce:  python _dev/check.py   (schema.json üretir)
   Sonra:  python -m http.server 8123   →   http://localhost:8123/_dev/mock.html
-  Parametreler:  ?lang=en  ?dark=0  ?portrait=1  ?accent=blue
+  Parametreler:  ?lang=en  ?dark=0  ?portrait=1  ?accent=blue  ?links=0  ?admin=1
+  Arka plan: _dev/mock_bg.jpg (git'e girmez; herhangi bir oyun ekran görüntüsü koyabilirsin)
 -->
 <script>
 (async () => {
@@ -27,14 +28,16 @@
         'aim.mode': 'game', 'cam.foot': 'game', 'cam.vehicle': 'game', 'cam.cinematic': true,
         'disp.radar': true, 'disp.reticle': true, 'disp.gps': true, 'audio.vehradio': true, 'gfx.lod': 1.0,
         'voice.radio': 60, 'voice.call': 60, 'voice.clicks': true, 'voice.click_on': 10, 'voice.click_off': 3,
-        'pref.accent': params.get('accent') || 'magenta', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
+        'pref.accent': params.get('accent') || 'white', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
         'pref.lang': params.get('lang') || 'tr', 'pref.mapReturn': true, 'menu.native': false,
     };
-    const defaults = { 'pref.accent': 'magenta', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'tr', 'pref.mapReturn': true };
+    const defaults = { 'pref.accent': 'white', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'tr', 'pref.mapReturn': true };
     const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
                    'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:loe_hud_photomode': 't_F11', 'm:aractuslari': 't_F7', 'm:loecik': 't_F6', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
-    const menu = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: !['battlepass', 'shop'].includes(id), external: ['battlepass', 'shop'].includes(id) }));
-    const stats = { name: 'Arda Kaya', cid: 'LOE48213', job: 'Polis', grade: 'Memur', cash: 12500, bank: 248900 };
+    const menu = ['resume', 'map', 'game', 'ui', 'position', 'quit'].map(id => ({ id, available: true, soon: id === 'position' }));
+    const stats = { id: 2, name: 'Mark Smith', cid: 'LOE48213', job: 'LSPD', grade: 'Lieutenant', cash: 0, bank: 27640295 };
+    // ?links=0 → bağlantı yok (adresler boş) ; varsayılan: üç örnek bağlantı
+    const links = params.get('links') === '0' ? [] : [{ id: 'youtube', label: 'YouTube', url: 'https://example.com/yt' }, { id: 'store', label: 'Store', url: 'https://example.com/store' }, { id: 'discord', label: 'Discord', url: 'https://example.com/dc' }];
     // ?health=none → hastalık yok, ?health=quiet → ilaç etkisinde, varsayılan: aktif grip + sargılı kurşun yarası
     const healthMode = params.get('health') || 'sick';
     const health = { known: true, conditions: healthMode === 'none' ? [] : (healthMode === 'quiet'
@@ -48,7 +51,7 @@
     const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, native, caps });
 
     const handlers = {
-        ready: () => { setTimeout(() => { send({ action: 'init', schema, brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' } }); open(); }, 50); return { ok: true }; },
+        ready: () => { setTimeout(() => { send({ action: 'init', schema, links, gta: true, bg: { mode: 'image', image: '/_dev/mock_bg.jpg' } }); open(); }, 50); return { ok: true }; },
         close: () => { send({ action: 'close' }); console.log('[mock] close'); return { ok: true }; },
         setting: (b) => {
             const row = schema.flatMap(c => c.groups).flatMap(g => g.rows).find(r => r.id === b.id);
@@ -79,7 +82,7 @@
         return realFetch(url, opts);
     };
 
-    html = html.replace('<head>', '<head><base href="../html/">');
+    html = html.replace('<head>', '<head><base href="../html/"><style>#bg{filter:blur(4px) brightness(.9);transform:scale(1.04)}</style>');
     document.open(); document.write(html); document.close();
 
     window.addEventListener('load', () => {
