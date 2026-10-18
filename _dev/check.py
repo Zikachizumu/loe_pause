@@ -137,6 +137,16 @@ app_js = (ROOT / 'html/js/app.js').read_text(encoding='utf-8')
 check(not re.search(r'onmouseenter:[^\n]*renderModal\(', app_js), 'app.js: onmouseenter içinde renderModal() çağrılmamalı (düğmeler yeniden çizilir, click kaybolur)')
 check(len(re.findall(r'renderModal\(\)', app_js)) == 1, 'app.js: renderModal() yalnızca openModal içinde çağrılmalı')
 
+# Ana menü: Config.Menu'deki her madde için arayüzde TR + EN etiket çifti olmalı ('menu_<id>: [kalın, ince]')
+menu_ids = lua_to_py(lua.eval('(function() local t = {} for i, m in ipairs(Config.Menu) do t[i] = m.id end return t end)()'))
+menu_ids = list(menu_ids.values()) if isinstance(menu_ids, dict) else list(menu_ids)
+for mid in menu_ids:
+    check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
+check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
+check(all(x in menu_ids for x in ('resume', 'map', 'game', 'ui', 'position', 'quit')), 'Config.Menu: videodaki altı madde eksik')
+check('invokeNative' in app_js and 'SAFE_URL' in app_js, 'app.js: bağlantılar yalnızca SAFE_URL ile invokeNative(openUrl) üzerinden açılmalı')
+check('onmouseenter' in app_js and "setSuffix" in app_js, 'app.js: başlık karıştırma efekti bağlı olmalı')
+
 # ------------------------------------------------------------------ 3) Prefs mantığı
 print('[3] Prefs doğrulama / kalıcılık')
 pl = LuaRuntime(unpack_returned_tuples=True)
@@ -200,7 +210,7 @@ check(lua_to_py(pl.eval('Prefs.values')) == {}, 'çözülemeyen KVP boş sonuç 
 
 pl.execute("Prefs.values = {}; Prefs.set('pref.accent', 'red'); Prefs.set('pref.dark', false)")
 pl.execute("Prefs.reset({'pref.accent', 'pref.dark'})")
-check(pl.eval("Prefs.get('pref.accent')") == 'magenta' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
+check(pl.eval("Prefs.get('pref.accent')") == 'white' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
 check(pl.eval("Prefs.get('pref.lang')") == 'tr', "varsayılan dil 'tr' olmalı")
 check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık olmalı')
 
@@ -208,7 +218,7 @@ check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık o
 pl.execute("Config.Defaults['pref.accent'] = 'blue'")
 check(pl.eval("Prefs.default('pref.accent')") == 'blue', 'Config.Defaults uygulanmalı')
 pl.execute("Config.Defaults['pref.accent'] = 'invalid'")
-check(pl.eval("Prefs.default('pref.accent')") == 'magenta', 'geçersiz Config.Defaults yok sayılmalı')
+check(pl.eval("Prefs.default('pref.accent')") == 'white', 'geçersiz Config.Defaults yok sayılmalı')
 
 # ------------------------------------------------------------------ 4) ana döngü simülasyonu
 print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
@@ -575,6 +585,46 @@ sim.commands.loe_bigmap(); sim.frames(600)
 check((sim.calls.Activate or 0) == act11b, 'S11: başka bir arayüz odaktayken M harita açmamalı')
 sim.nuiFocus = false; sim.frames(600)
 Prefs.set('pref.mapReturn', false)
+
+-- S12: ana menü verisi — bağlantılar süzülür, GTA düğmesi anahtarı, menü sırası, oyuncu kartı
+local function lastInit() local l; for _, m in ipairs(sim.msgs) do if m.action == 'init' then l = m end end return l end
+sim.nui('ready')
+check(lastInit() and type(lastInit().links) == 'table' and #lastInit().links == 0, 'S12: adresi boş bağlantı NUI\'ye gitmemeli')
+check(lastInit().gta == true, 'S12: GTA ayarları düğmesi varsayılan açık olmalı')
+local oldLinks = Config.Links
+Config.Links = {
+    { id = 'youtube', label = 'YouTube', url = 'https://example.com/yt' },
+    { id = 'discord', label = 'Discord', url = 'http://example.com/insecure' },
+    { id = 'store',   label = 'Store',   url = 'javascript:alert(1)' },
+    { id = 'x1',      label = 'X',       url = 'https://exa mple.com' },
+    { id = 'x2',      label = 'X',       url = 'https://a.com/"onload="x' },
+    'çöp', { id = 5, url = 'https://ok.example' },
+}
+sim.nui('ready')
+local lk = lastInit().links
+check(#lk == 1 and lk[1].id == 'youtube' and lk[1].url == 'https://example.com/yt', 'S12: yalnızca geçerli https adresleri gönderilmeli (' .. tostring(#lk) .. ')')
+Config.Links = oldLinks
+Config.Features.allGtaSettings = false
+sim.nui('ready')
+check(lastInit().gta == false, 'S12: allGtaSettings=false iken düğme gizlenmeli')
+Config.Features.allGtaSettings = nil
+sim.nui('ready')
+
+rawset(exports, 'qbx_core', { GetPlayerData = function() return {
+    citizenid = 'ABC123', charinfo = { firstname = 'Mark', lastname = 'Smith' },
+    job = { label = 'LSPD', grade = { name = 'Lieutenant' } }, money = { cash = 0, bank = 27640295 } } end })
+sim.pause = true; sim.frames(64)
+local op = sim.lastOpen()
+check(isOpen() == true and op.stats.id == 7 and op.stats.name == 'Mark Smith' and op.stats.job == 'LSPD'
+    and op.stats.grade == 'Lieutenant' and op.stats.cash == 0 and op.stats.bank == 27640295, 'S12: oyuncu kartı verisi (kimlik/ad/meslek/para) iletilmeli')
+local ids, soonId = {}, nil
+for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soonId = m.id end end
+check(table.concat(ids, ',') == 'resume,map,game,ui,position,quit', 'S12: ana menü sırası videodaki gibi olmalı: ' .. table.concat(ids, ','))
+check(soonId == 'position', 'S12: KONUM MODU "yakında" olarak işaretlenmeli')
+check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok == false, 'S12: kapalı menü maddesi (stats) reddedilmeli')
+check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
+rawset(exports, 'qbx_core', nil)
+sim.exported.Close(); sim.frames(700)
 return R
 '''
 

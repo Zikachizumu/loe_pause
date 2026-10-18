@@ -13,28 +13,17 @@
 
     <!-- ANA MENÜ -->
     <section class="screen" id="screenMain">
-        <div class="panel menu-panel">
-            <div class="brand">
-                <svg class="crown" viewBox="0 0 120 80" aria-hidden="true">
-                    <defs>
-                        <linearGradient id="crownGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0" style="stop-color:var(--accent)"/>
-                            <stop offset="1" style="stop-color:var(--accent);stop-opacity:.45"/>
-                        </linearGradient>
-                    </defs>
-                    <path d="M12 64 L21 27 L43 46 L60 13 L77 46 L99 27 L108 64 Z" fill="url(#crownGrad)" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>
-                    <path d="M13 64h94v9a2 2 0 0 1-2 2H15a2 2 0 0 1-2-2z" fill="var(--accent)"/>
-                    <circle cx="21" cy="22" r="4.4" fill="var(--accent)"/>
-                    <circle cx="60" cy="8" r="4.4" fill="var(--accent)"/>
-                    <circle cx="99" cy="22" r="4.4" fill="var(--accent)"/>
-                </svg>
-                <h1><span id="brandName">LEGENDS OF</span> <em id="brandAccent">EMPIRE</em></h1>
-            </div>
-            <div class="divider"><i data-i="chevron"></i></div>
-            <nav id="menuList" class="menu-list" role="menu"></nav>
-            <div class="divider"><i data-i="chevron"></i></div>
-            <footer id="brandFooter" class="brand-foot"></footer>
-        </div>
+        <header class="pm-head">
+            <span class="pm-logo" aria-hidden="true"><i></i><i></i><i></i></span>
+            <h1 class="pm-title"><b id="pmTitleA">PAUSE</b><span id="pmTitleB">MENU</span><span class="pm-suffix" id="pmSuffix"></span></h1>
+        </header>
+
+        <nav id="menuList" class="pm-list" role="menu"></nav>
+        <nav id="menuQuit" class="pm-quit" role="menu"></nav>
+
+        <aside class="pm-card hidden" id="pmCard"></aside>
+        <div class="pm-links" id="pmLinks"></div>
+        <button class="pm-gta" id="pmGta" type="button"></button>
     </section>
 
     <!-- AYARLAR -->

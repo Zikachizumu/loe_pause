@@ -32,10 +32,14 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 /* ============================================================ METİNLER */
 const STR = {
     tr: {
-        menu_map: 'Harita', menu_stats: 'İstatistikler', menu_battlepass: 'Battlepass',
-        menu_shop: 'Shop', menu_settings: 'Ayarlar', menu_quit: 'Oyundan Çık',
+        // Ana menü etiketleri [kalın kısım, ince kısım]; başlıkta ve maddelerde boşluksuz birleşik yazılır (tasarım gereği)
+        pm_title: ['DURAKLATMA', 'MENÜSÜ'],
+        menu_resume: ['DEVAM', 'ET'], menu_map: ['HARİTA', ''], menu_game: ['OYUN', 'AYARLARI'], menu_ui: ['ARAYÜZ', 'AYARLARI'],
+        menu_position: ['KONUM', 'MODU'], menu_stats: ['İSTATİSTİKLER', ''], menu_battlepass: ['BATTLE', 'PASS'],
+        menu_shop: ['SHOP', ''], menu_quit: ['AYRIL', ''],
+        all_gta: 'Tüm GTA ayarları', game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
-        hint_move: 'Hareket', hint_change: 'Değiştir', hint_select: 'Seç', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
+        hint_move: 'Gezin', hint_change: 'Değiştir', hint_select: 'Seç', hint_resume: 'Devam', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
         on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
         soon_pill: 'Yakında', soon_title: 'Yakında', soon_text: 'Bu özellik henüz sunucuda aktif değil. Çok yakında burada olacak.',
         quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılıp FiveM ana menüsüne dönersin.',
@@ -48,10 +52,13 @@ const STR = {
         back: 'Geri', close: 'Kapat',
     },
     en: {
-        menu_map: 'Map', menu_stats: 'Statistics', menu_battlepass: 'Battlepass',
-        menu_shop: 'Shop', menu_settings: 'Settings', menu_quit: 'Quit Game',
+        pm_title: ['PAUSE', 'MENU'],
+        menu_resume: ['RESUME', ''], menu_map: ['MAP', ''], menu_game: ['GAME', 'SETTINGS'], menu_ui: ['UI', 'SETTINGS'],
+        menu_position: ['POSITION', 'MODE'], menu_stats: ['STATISTICS', ''], menu_battlepass: ['BATTLE', 'PASS'],
+        menu_shop: ['SHOP', ''], menu_quit: ['DISCONNECT', ''],
+        all_gta: 'All GTA settings', game_title: 'Game Settings', ui_title: 'UI Settings',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
-        hint_move: 'Move', hint_change: 'Change', hint_select: 'Select', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
+        hint_move: 'Navigate', hint_change: 'Change', hint_select: 'Select', hint_resume: 'Resume', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
         on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
         soon_pill: 'Soon', soon_title: 'Coming soon', soon_text: 'This feature is not active on the server yet. It will be here soon.',
         quit_title: 'Quit the game?', quit_text: 'You will leave the server and return to the FiveM main menu.',
@@ -65,13 +72,15 @@ const STR = {
     },
 };
 
-const MENU_ICONS = { map: 'map', stats: 'bars', battlepass: 'pass', shop: 'shop', settings: 'gear', quit: 'exit' };
-const DEFAULT_MENU = ['map', 'stats', 'battlepass', 'shop', 'settings', 'quit'].map(id => ({ id, available: true }));
+const DEFAULT_MENU = ['resume', 'map', 'game', 'ui', 'position', 'quit'].map(id => ({ id, available: true, soon: id === 'position' }));
+const LINK_ICONS = { youtube: 'youtube', store: 'globe', discord: 'discord' };
+// Yalnızca bu ana makineden gelen (Lua yapılandırmasından) https adresleri açılır; arayüzden adres alınmaz.
+const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
 
 /* ============================================================ DURUM */
 const S = {
     open: false, lang: 'tr',
-    schema: [], brand: { name: 'LEGENDS OF', accent: 'EMPIRE', footer: 'LEGENDS OF EMPIRE ROLEPLAY' }, bg: { mode: 'image', image: 'img/bg.jpg' },
+    allSchema: [], schema: [], scope: 'game', links: [], gta: true, bg: { mode: 'game' },
     values: {}, keys: {}, native: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
@@ -88,13 +97,13 @@ const norm = (s) => String(s || '').toLocaleLowerCase('tr').normalize('NFD').rep
 const rowIndex = {};
 const indexSchema = () => {
     for (const k of Object.keys(rowIndex)) delete rowIndex[k];
-    for (const c of S.schema) for (const g of c.groups) for (const r of g.rows) if (r.id && !rowIndex[r.id]) rowIndex[r.id] = r;
+    for (const c of S.allSchema) for (const g of c.groups) for (const r of g.rows) if (r.id && !rowIndex[r.id]) rowIndex[r.id] = r;
 };
 
 /* ============================================================ TERCİHLER (görünüm) */
 const hexToRgb = (hex) => {
     const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
-    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [255, 46, 147];
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [255, 255, 255];
 };
 
 const applyPrefs = () => {
@@ -103,9 +112,12 @@ const applyPrefs = () => {
 
     const def = rowIndex['pref.accent'];
     const cur = def && (def.options.find(o => o.value === S.values['pref.accent']) || def.options[0]);
-    const color = (cur && cur.color) || '#ff2e93';
+    const color = (cur && cur.color) || '#ffffff';
+    const rgb = hexToRgb(color);
+    const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
     document.documentElement.style.setProperty('--accent', color);
-    document.documentElement.style.setProperty('--accent-rgb', hexToRgb(color).join(', '));
+    document.documentElement.style.setProperty('--accent-rgb', rgb.join(', '));
+    document.documentElement.style.setProperty('--on-accent', lum > 0.55 ? '#0b0b0d' : '#ffffff');   // vurgunun üstündeki yazı okunur kalsın
 
     app.dataset.theme = S.values['pref.dark'] === false ? 'light' : 'dark';
     app.classList.toggle('bg-game', S.bg && S.bg.mode === 'game');
@@ -130,48 +142,112 @@ const showScreen = (name) => {
 const hintSpan = (keys, label) => h('span', {}, keys.map(k => h('kbd', {}, k)), label);
 const renderHints = () => {
     const main = $('#hintsMain'), st = $('#hintsSettings'), pg = $('#hintsPage');
-    main.replaceChildren(hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['Enter'], t('hint_select')), hintSpan(['ESC'], t('hint_close')));
+    main.replaceChildren(hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['ENTER'], t('hint_select')), hintSpan(['ESC'], t('hint_resume')));
     st.replaceChildren(
         hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['←', '→'], t('hint_change')), hintSpan(['Enter'], t('hint_select')),
         hintSpan(['Backspace'], t('hint_back')), hintSpan(['/'], t('hint_search')), hintSpan(['ESC'], t('hint_close')));
     pg.replaceChildren(hintSpan(['Backspace'], t('hint_back')), hintSpan(['ESC'], t('hint_close')));
 };
 
-/* ============================================================ ANA MENÜ */
+/* ============================================================ ANA MENÜ (PAUSE MENU) */
+const REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+// Etiket çifti [kalın, ince]; tek sözcüklü etiketlerde ince kısım boştur.
+const pair = (id) => { const v = t('menu_' + id); return Array.isArray(v) ? v : [String(v), '']; };
+const lblText = (id) => pair(id).join('');
+
+// Başlık sonekinin "karıştırma" efekti: seçili maddenin adı soldan sağa çözülür, kalan harfler rastgele görünür.
+const SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+let scrambleTimer = null;
+const setSuffix = (id) => {
+    const el = $('#pmSuffix');
+    clearInterval(scrambleTimer);
+    if (!id || id === 'resume') { el.replaceChildren(); return; }
+    const [a, b] = pair(id);
+    const full = a + b, n = full.length, cut = a.length, TOTAL = 14;
+    let step = REDUCED ? TOTAL : 0;
+    const paint = () => {
+        const reveal = Math.floor(n * step / TOTAL);
+        let out = '';
+        for (let i = 0; i < n; i++) out += i < reveal ? full[i] : SCRAMBLE[(Math.random() * SCRAMBLE.length) | 0];
+        el.replaceChildren(h('span', { class: 'sl' }, '//'), h('b', {}, out.slice(0, cut)), h('i', {}, out.slice(cut)));
+    };
+    paint();
+    if (step >= TOTAL) return;
+    scrambleTimer = setInterval(() => { step++; paint(); if (step >= TOTAL) clearInterval(scrambleTimer); }, 32);
+};
+
+const openLink = (url) => {
+    if (typeof url !== 'string' || !SAFE_URL.test(url)) return;
+    if (typeof window.invokeNative === 'function') window.invokeNative('openUrl', url);
+};
+
+const renderLinks = () => {
+    $('#pmLinks').replaceChildren(...S.links.map(l => h('button', { class: 'pm-link', type: 'button', onclick: () => openLink(l.url) },
+        ico(LINK_ICONS[l.id] || 'globe'), String(l.label || l.id))));
+};
+
+const fmtNum = (v) => String(Math.trunc(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+const moneyStr = (v) => (typeof v === 'number' && isFinite(v) ? '$' + fmtNum(v) : '—');
+
+const renderCard = () => {
+    const el = $('#pmCard');
+    const st = S.stats || {};
+    if (!st.name) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.replaceChildren(
+        h('div', { class: 'nm' }, st.name, st.id != null ? h('em', {}, `[${st.id}]`) : null),
+        st.job ? h('div', { class: 'jb' }, h('b', {}, st.job), st.grade || '') : null,
+        h('div', { class: 'mn' }, h('span', {}, ico('cash'), moneyStr(st.cash)), h('span', {}, ico('card'), moneyStr(st.bank))));
+};
+
 const renderStatic = () => {
-    $('#brandName').textContent = S.brand.name || '';
-    $('#brandAccent').textContent = S.brand.accent || '';
-    $('#brandFooter').textContent = S.brand.footer || '';
-    $('#sTitle').textContent = t('settings');
+    const [ta, tb] = t('pm_title');
+    $('#pmTitleA').textContent = ta; $('#pmTitleB').textContent = tb;
+    $('#sTitle').textContent = t(S.scope === 'ui' ? 'ui_title' : 'game_title');
     $('#sBack').title = t('back'); $('#pBack').title = t('back');
     $('#sClose').title = t('close'); $('#pClose').title = t('close');
     q.placeholder = t('search');
     const bg = $('#bg');
     bg.style.backgroundImage = (S.bg && S.bg.mode !== 'game' && S.bg.image) ? `url("${S.bg.image}")` : 'none';
+    const gta = $('#pmGta');
+    gta.textContent = t('all_gta');
+    gta.classList.toggle('hidden', !S.gta);
+    renderLinks();
+    renderCard();
     renderHints();
 };
 
 const renderMenu = () => {
-    const list = $('#menuList');
-    list.replaceChildren(...S.menu.map((item, i) => {
-        const soon = item.external && !item.available;
+    const make = (item, n) => {
+        const i = S.menu.indexOf(item);
+        const [a, b] = pair(item.id);
         return h('button', {
-            class: 'menu-btn' + (i === S.mainIdx ? ' sel' : ''), role: 'menuitem', type: 'button',
+            class: 'pm-item' + (i === S.mainIdx ? ' sel' : ''), role: 'menuitem', type: 'button', 'data-idx': i, style: `--n:${n}`,
             onmouseenter: () => setMainIdx(i),
             onclick: () => { setMainIdx(i); activateMenu(item.id); },
-        }, ico(MENU_ICONS[item.id] || 'menu'), h('span', {}, t('menu_' + item.id)),
-        soon ? h('span', { class: 'soon-pill' }, t('soon_pill')) : null);
-    }));
+        }, h('span', { class: 'ind' }), h('span', { class: 'lbl' }, h('b', {}, a), b ? h('i', {}, b) : null),
+        item.soon ? h('span', { class: 'pill' }, t('soon_pill')) : null);
+    };
+    const main = S.menu.filter(it => it.id !== 'quit');
+    $('#menuList').replaceChildren(...main.map((it, n) => make(it, n)));
+    $('#menuQuit').replaceChildren(...S.menu.filter(it => it.id === 'quit').map(it => make(it, main.length + 1)));
 };
 
 const setMainIdx = (i) => {
+    if (!S.menu[i]) return;
+    const changed = i !== S.mainIdx;
     S.mainIdx = i;
-    document.querySelectorAll('#menuList .menu-btn').forEach((el, n) => el.classList.toggle('sel', n === i));
+    document.querySelectorAll('.pm-item').forEach((el) => el.classList.toggle('sel', Number(el.dataset.idx) === i));
+    if (changed) setSuffix(S.menu[i].id);
 };
 
 const activateMenu = async (id) => {
-    if (id === 'settings') return openSettings();
+    if (id === 'resume') return post('close');
+    if (id === 'game') return openSettings('game');
+    if (id === 'ui') return openSettings('ui');
     if (id === 'quit') return confirmQuit();
+    const item = S.menu.find(it => it.id === id);
+    if (item && item.soon) return toast(t('soon_text'));
     const res = await post('menu', { id });
     if (!res || !res.ok) return;
     if (res.page === 'stats') showPage('stats', id);
@@ -225,7 +301,7 @@ const renderPage = () => {
                 kv(t('st_cash'), fmtMoney(st.cash)), kv(t('st_bank'), fmtMoney(st.bank))),
             h('div', { class: 'cardx' }, h('h4', {}, ico('heart'), t('st_health')), ...healthRows())));
     } else {
-        $('#pTitle').textContent = t('menu_' + S.page.id);
+        $('#pTitle').textContent = lblText(S.page.id);
         body.replaceChildren(h('div', { class: 'soon' }, h('span', { class: 'big' }, ico('clock')), h('h3', {}, t('soon_title')), h('p', {}, t('soon_text'))));
     }
 };
@@ -234,6 +310,7 @@ const renderPage = () => {
 const curCat = () => S.schema[S.cat];
 const curGrp = () => (curCat() ? curCat().groups[S.grp] : null);
 const hasGroupCol = () => !S.query && !!curCat() && curCat().groups.length > 1;
+const hasCatCol = () => S.schema.length > 1;                    // tek kategorili kapsamda (Arayüz Ayarları) kategori sütunu yok
 
 const KEYNAMES = {
     LSHIFT: 'Shift', RSHIFT: 'Shift', SHIFT: 'Shift', LCONTROL: 'Ctrl', RCONTROL: 'Ctrl', CONTROL: 'Ctrl', LMENU: 'Alt', RMENU: 'Alt', MENU: 'Alt',
@@ -463,6 +540,7 @@ const buildSlider = (e, base, label, mark) => {
 
 const renderCats = () => {
     const col = $('#colCats');
+    $('#sBody').classList.toggle('no-cats', !hasCatCol());
     col.replaceChildren(...S.schema.map((c, i) => h('button', {
         class: 'nav-item' + (i === S.cat ? ' cur' : ''), type: 'button',
         onclick: () => { S.cat = i; S.grp = 0; S.zone = 'cats'; S.query = ''; q.value = ''; refreshSettings(true); },
@@ -514,10 +592,17 @@ const scrollSelected = () => {
     if (el) el.scrollIntoView({ block: 'nearest' });
 };
 
-const openSettings = () => {
-    S.zone = 'cats'; S.query = ''; q.value = '';
+// scope: 'game' → tüm ayar kategorileri (Tercihler hariç), 'ui' → yalnızca Tercihler (arayüz görünümü)
+const scopeSchema = (scope) => S.allSchema.filter(c => (scope === 'ui' ? c.id === 'prefs' : c.id !== 'prefs'));
+
+const openSettings = (scope = 'game') => {
+    S.scope = scope; S.schema = scopeSchema(scope);
+    S.cat = 0; S.grp = 0; S.row = 0; S.query = ''; q.value = '';
+    S.zone = hasCatCol() ? 'cats' : (hasGroupCol() ? 'grps' : 'rows');
+    $('#sTitle').textContent = t(scope === 'ui' ? 'ui_title' : 'game_title');
     showScreen('settings');
     refreshSettings(true);
+    if (S.zone === 'rows') paintZones();
 };
 
 /* ============================================================ GERİ / NAVİGASYON */
@@ -526,8 +611,8 @@ const goBack = () => {
     if (S.screen === 'page') { showScreen('main'); return; }
     if (S.screen !== 'settings') return;
     if (S.query) { S.query = ''; q.value = ''; S.zone = 'rows'; refreshSettings(true); return; }
-    if (S.zone === 'rows') { S.zone = hasGroupCol() ? 'grps' : 'cats'; renderRows(); paintZones(); return; }
-    if (S.zone === 'grps') { S.zone = 'cats'; renderRows(); paintZones(); return; }
+    if (S.zone === 'rows' && (hasGroupCol() || hasCatCol())) { S.zone = hasGroupCol() ? 'grps' : 'cats'; renderRows(); paintZones(); return; }
+    if (S.zone === 'grps' && hasCatCol()) { S.zone = 'cats'; renderRows(); paintZones(); return; }
     showScreen('main');
 };
 
@@ -631,7 +716,7 @@ const onKey = (ev) => {
         const n = curCat().groups.length;
         if (k === 'ArrowUp' || k === 'ArrowDown') { S.grp = (S.grp + (k === 'ArrowDown' ? 1 : -1) + n) % n; refreshSettings(true); S.zone = 'grps'; paintZones(); }
         else if (k === 'ArrowRight' || k === 'Enter') enterRows();
-        else if (k === 'ArrowLeft') { S.zone = 'cats'; paintZones(); }
+        else if (k === 'ArrowLeft' && hasCatCol()) { S.zone = 'cats'; paintZones(); }
         else return;
     } else {
         const e = S.entries[S.row];
@@ -669,8 +754,10 @@ modalEl.addEventListener('click', (ev) => { if (ev.target === modalEl) closeModa
 document.querySelectorAll('[data-i]').forEach(el => { el.innerHTML = window.icon(el.dataset.i); });
 
 const onInit = (d) => {
-    S.schema = Array.isArray(d.schema) ? d.schema.filter(c => c && !c.hidden) : [];
-    if (d.brand) S.brand = d.brand;
+    S.allSchema = Array.isArray(d.schema) ? d.schema.filter(c => c && !c.hidden) : [];
+    S.schema = scopeSchema(S.scope);
+    S.links = Array.isArray(d.links) ? d.links.filter(l => l && typeof l.url === 'string' && SAFE_URL.test(l.url)).slice(0, 4) : [];
+    S.gta = d.gta !== false;
     if (d.bg) S.bg = d.bg;
     indexSchema();
     renderAll();
@@ -685,10 +772,12 @@ const onOpen = (d) => {
     S.stats = d.stats || null;
     S.health = d.health || { known: false, conditions: [] };
     S.mainIdx = 0; S.cat = 0; S.grp = 0; S.row = 0; S.zone = 'cats'; S.query = ''; q.value = '';
+    S.scope = 'game'; S.schema = scopeSchema('game');
     closeModal();
     applyPrefs();
     showScreen('main');
     renderAll();
+    setSuffix(S.menu[0] && S.menu[0].id);
 
     app.classList.remove('hidden', 'anim-open', 'anim-return', 'on');
     void app.offsetWidth;

@@ -2,7 +2,7 @@
 
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
-- Ana menü: **Harita · İstatistikler · Battlepass · Shop · Ayarlar · Oyundan Çık**
+- Ana menü (tasarım: `PMenü.mp4` referans videosu): **RESUME · MAP · GAME SETTINGS · UI SETTINGS · POSITION MODE** ve altta **DISCONNECT**; başlıkta seçili maddenin adı "karıştırma" efektiyle yazılır, sol altta oyuncu kartı (ad [id], meslek, nakit / banka), sağ üstte bağlantılar, sağ altta "ALL GTA SETTINGS"
 - Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, Türkçe/İngilizce
 - Bağımlılık yok: `qbx_core`, `pma-voice`, `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez.
 
@@ -35,7 +35,7 @@ FXServer manifesti yalnızca `refresh`/sunucu açılışında okur; tek başına
 | `client/apply.lua` | Ayarları oyuna uygulayan native çağrıları + eylemler (kayıt, sıfırlama) |
 | `server/main.lua` | "Sunucudan ayrıl": olayı gönderen oyuncuyu `DropPlayer` ile düşürür (3 sn sınırı); Hızlı Eylemler için yetki (ACE) görünürlüğü |
 | `client/main.lua` | ESC/P yakalama, aç/kapat, NUI odağı, NUI callback'leri, harita/yerleşik menü geçişleri |
-| `html/` | NUI (vanilla HTML/CSS/JS), `html/img/bg.jpg` arka plan |
+| `html/` | NUI (vanilla HTML/CSS/JS), `html/fonts/` yerel Montserrat (OFL, bkz. NOTICE.txt) |
 | `_dev/` | Yalnızca geliştirme: `check.py` (Lua/şema/doğrulama testleri), `mock.html` (tarayıcıda önizleme) |
 
 ## ESC nasıl yönetiliyor
@@ -84,13 +84,22 @@ Okuma başarısız olursa satırda değer görünmez (menü bozulmaz). Diğer `G
 
 ### Ana menü
 
-| Satır | Davranış |
+Referans videodaki yerleşim 1280x720 ölçülerinden birebir alınmıştır (soldan 10 rem, başlık / madde / kart konumları, 48 px seçili çizgi, iki ağırlıklı Montserrat). İngilizce etiketler videodaki gibi bitişik yazılır (`GAMESETTINGS`); Türkçede iki sözcük arasında küçük bir boşluk vardır. Videodaki üçüncü taraf tanıtım yazısı/logosu menünün parçası değildir ve kullanılmamıştır.
+
+| Madde | Davranış |
 |---|---|
-| Harita | `loe_3dmap` çalışıyorsa onu açar; yoksa **doğrudan yerleşik büyük harita** (`ActivateFrontendMenu` + `PauseMenuceptionGoDeeper(0)`, bkz. `Config.Native.map`). Varsayılan: ESC ile harita kapanınca doğrudan oyuna dönülür. Tercih (`pref.mapReturn`, varsayılan **kapalı**) açıksa harita / yerleşik menü ESC ile kapanınca LOE menüsü animasyonla geri gelir; ESC'nin yerleşik menüyü yeniden açan sızıntısı söndürülür |
-| İstatistikler | `Config.Menu`'de harici `resource/export` verilirse onu açar; yoksa yerleşik özet: karakter (ad, citizenid, meslek), finans (nakit/banka) ve **Sağlık** kartı. Sağlık kartı `loe_jobcreator` hastalık sisteminin istemciye gönderdiği `healthState` olayından beslenir (ad, belirti, "ilaç etkisinde" / "sargılı" durumu); hastalık yoksa "Hastalığın yok" yazar. Sistem `Config.Health` ile ayarlanır, `loe_jobcreator`'a dokunulmaz |
-| Battlepass / Shop | Sunucuda bu sistemler **yok**. `Config.Menu`'de `resource`/`export` (varsayılan `loe_battlepass`/`loe_shop` → `Open`) başlamışsa onları açar; değilse "Yakında" sayfası gösterir. |
-| Ayarlar | Ayarlar ekranı |
-| Oyundan Çık | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar. `ExecuteCommand('disconnect')` script'ten çalışmadığı için kullanılmaz) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
+| RESUME (DEVAM ET) | Menüyü kapatır (ESC ile aynı) |
+| MAP (HARİTA) | `loe_3dmap` çalışıyorsa onu açar; yoksa **doğrudan yerleşik büyük harita** (`ActivateFrontendMenu` + `PauseMenuceptionGoDeeper(0)`, bkz. `Config.Native.map`). Varsayılan: ESC ile harita kapanınca doğrudan oyuna dönülür. `pref.mapReturn` açıksa menüye animasyonla dönülür |
+| GAME SETTINGS (OYUN AYARLARI) | Ayarlar ekranı: tüm kategoriler (Oyun Kolu … Kayıt ve Başlangıç), "Tercihler" hariç. Bkz. aşağıdaki kapsam tablosu |
+| UI SETTINGS (ARAYÜZ AYARLARI) | Ayarlar ekranı, yalnızca "Tercihler": vurgu rengi (varsayılan beyaz), koyu mod, portre modu, dil, harita dönüş animasyonu, görünümü sıfırla |
+| POSITION MODE (KONUM MODU) | **Henüz işlevi yok**: "Yakında" etiketli; tıklayınca bilgi verir. Bir HUD konumlandırma özelliği bağlanınca `Config.Menu`'den `soon = true` kaldırılır |
+| DISCONNECT (AYRIL) | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar. `ExecuteCommand('disconnect')` script'ten çalışmadığı için kullanılmaz) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
+| ALL GTA SETTINGS | Sağ alt düğme: yerleşik GTA ayar ekranını açar (`Config.Native.settings`); `Config.Features.allGtaSettings = false` ile gizlenir |
+| Oyuncu kartı | Sol altta ad [sunucu kimliği], meslek + rütbe, nakit ve banka (`qbx_core` GetPlayerData). Veri yoksa kart gizlenir |
+| YOUTUBE / STORE / DISCORD | Sağ üstte; `Config.Links` içinde `https://` adresi **doldurulan** bağlantılar görünür (varsayılan: boş → hiçbiri görünmez). Yalnızca config'teki adresler açılır |
+| İstatistikler / Battlepass / Shop | Varsayılan **kapalı** (`Config.Menu` → `enabled = false`). Açılırsa aynı listede görünür; `resource`/`export` başlamışsa onu açar, yoksa yerleşik özet / "Yakında" sayfası gösterir. İstatistik sayfasındaki Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
+
+Arka plan: oyun görüntüsü + koyu katman; `Config.Hijack.blurGame = true` iken oyun ekranı `TriggerScreenblurFadeIn` ile bulanıklaşır (videodaki derinlik). Bulanıklık fazla gelirse `false` yap.
 
 ## Güvenlik
 
@@ -120,4 +129,4 @@ python _dev/check.py                      # Lua sözdizimi + şema + doğrulama 
 python -m http.server 8123                # sonra http://localhost:8123/_dev/mock.html  (?lang=en &dark=0 &portrait=1 &accent=blue)
 ```
 
-Arka plan: `html/img/bg.jpg` (tasarım referansından). Kendi görselini koymak için aynı adla değiştir.
+Geliştirme arka planı: `_dev/mock_bg.jpg` (git'e girmez). Gerçek oyunda arka plan oyun görüntüsüdür.

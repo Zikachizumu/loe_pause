@@ -28,7 +28,7 @@ files {
     'html/index.html',
     'html/css/*.css',
     'html/js/*.js',
-    'html/img/*'
+    'html/fonts/*'
 }
 
 -- Bagimlilik YOK (bilerek): qbx_core, pma-voice ve loe_3dmap yalnizca varsa pcall ile kullanilir.

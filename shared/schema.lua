@@ -438,8 +438,9 @@ Schema.categories[#Schema.categories + 1] = cat('startup', 'save', 'Kayıt ve Ba
 -- ------------------------------------------------------------------ 12. Tercihler (LOE arayüzü; oyuncu bazında KVP)
 Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler', 'Preferences', {
     group('look', 'Görünüm', 'Appearance', {
-        { id = 'pref.accent', type = 'select', default = 'magenta', label = L('Vurgu rengi', 'Accent colour'),
+        { id = 'pref.accent', type = 'select', default = 'white', label = L('Vurgu rengi', 'Accent colour'),
           options = {
+              opt('white',   'Beyaz',   'White',   { color = '#ffffff' }),
               opt('magenta', 'Magenta', 'Magenta', { color = '#ff2e93' }),
               opt('purple',  'Mor',     'Purple',  { color = '#a855f7' }),
               opt('blue',    'Mavi',    'Blue',    { color = '#38bdf8' }),

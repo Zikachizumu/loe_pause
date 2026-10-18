@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 _dev/schema.json
 *.bak
+_dev/mock_bg.jpg
