@@ -143,7 +143,8 @@ menu_ids = list(menu_ids.values()) if isinstance(menu_ids, dict) else list(menu_
 for mid in menu_ids:
     check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
 check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
-check(all(x in menu_ids for x in ('resume', 'map', 'game', 'ui', 'position', 'quit')), 'Config.Menu: videodaki altı madde eksik')
+check(all(x in menu_ids for x in ('resume', 'game', 'ui', 'position', 'quit')), 'Config.Menu: ana maddeler eksik')
+check(lua.eval("(function() for _, m in ipairs(Config.Menu) do if m.id == 'map' then return m.enabled end end end)()") is False, 'Config.Menu: MAP varsayılan kapalı olmalı (harita yalnızca M)')
 # İngilizce varsayılan: arayüz metinlerinde TR/EN anahtar seti aynı olmalı, İngilizce metinlerde Türkçe harf olmamalı
 def str_keys(block):
     body = re.search(rf"\n    {block}: \{{(.*?)\n    \}},", app_js, re.S).group(1)
@@ -231,17 +232,18 @@ kvp['loe_pause:prefs:v1'] = 'not json {{'
 pl.execute('Prefs.values = {}; Prefs.load()')
 check(lua_to_py(pl.eval('Prefs.values')) == {}, 'çözülemeyen KVP boş sonuç vermeli')
 
-# tek seferlik dil geçişi: eski kayıtlı TR silinir, sonraki TR seçimi kalıcıdır
-kvp['loe_pause:prefs:v1'] = json.dumps({'pref.lang': 'tr', 'pref.accent': 'blue'})
-kvp.pop('loe_pause:migrated:lang-en-v1', None)
+# tek seferlik arayüz sıfırlaması: kayıtlı pref.* silinir (varsayılanlar gelir), oyun ayarları korunur; sonraki seçimler kalıcıdır
+kvp['loe_pause:prefs:v1'] = json.dumps({'pref.lang': 'tr', 'pref.accent': 'blue', 'pref.dark': False, 'pref.mapReturn': True, 'aim.mode': 'free'})
+kvp.pop('loe_pause:migrated:ui-reset-v1', None)
 pl.execute('Prefs.values = {}; Prefs.load()')
-check(pl.eval("Prefs.get('pref.lang')") == 'en', 'geçiş: eski kayıtlı TR tercihi silinip varsayılan EN gelmeli')
-check(pl.eval("Prefs.get('pref.accent')") == 'blue', 'geçiş: diğer tercihler korunmalı')
-check(kvp.get('loe_pause:migrated:lang-en-v1') == '1', 'geçiş: işaret yazılmalı')
-check('pref.lang' not in json.loads(kvp['loe_pause:prefs:v1']), 'geçiş: kayıttan pref.lang silinmeli')
+check(pl.eval("Prefs.get('pref.lang')") == 'en' and pl.eval("Prefs.get('pref.accent')") == 'white'
+      and pl.eval("Prefs.get('pref.dark')") is True and pl.eval("Prefs.get('pref.mapReturn')") is False, 'sıfırlama: arayüz tercihleri varsayılana dönmeli')
+check(pl.eval("Prefs.get('aim.mode')") == 'free', 'sıfırlama: oyun ayarları (aim.mode) korunmalı')
+check(kvp.get('loe_pause:migrated:ui-reset-v1') == '1', 'sıfırlama: işaret yazılmalı')
+check(not any(k.startswith('pref.') for k in json.loads(kvp['loe_pause:prefs:v1'])), 'sıfırlama: kayıttan pref.* silinmeli')
 pl.execute("Prefs.set('pref.lang', 'tr'); Prefs.flush(); Prefs.values = {}; Prefs.load()")
-check(pl.eval("Prefs.get('pref.lang')") == 'tr', 'geçiş: oyuncunun sonradan seçtiği TR kalıcı olmalı (geçiş yeniden çalışmamalı)')
-pl.execute("Prefs.values = {}; Prefs.reset({'pref.lang'}); Prefs.flush()")
+check(pl.eval("Prefs.get('pref.lang')") == 'tr', 'sıfırlama: sonradan seçilen tercih kalıcı olmalı (sıfırlama yeniden çalışmamalı)')
+pl.execute("Prefs.values = {}; Prefs.flush()")
 
 pl.execute("Prefs.values = {}; Prefs.set('pref.accent', 'red'); Prefs.set('pref.dark', false)")
 pl.execute("Prefs.reset({'pref.accent', 'pref.dark'})")
@@ -287,6 +289,11 @@ function IsPauseMenuActive() return S.pause end
 function SetFrontendActive(v) if not v then S.pause = false end end
 function SetPauseMenuActive(v) if not v then S.pause = false end end
 function IsDisabledControlJustPressed(_, c) return S.escFrame and (c == 200) end
+function IsDisabledControlJustReleased(_, c) return S.clickFrame and c == 237 end
+function GetDisabledControlNormal(_, c) if c == 239 then return S.cx or 0.0 elseif c == 240 then return S.cy or 0.0 end return 0.0 end
+function GetControlNormal() return 0.0 end
+function PlayerPedId() return 1 end
+function GetEntityCoords() return { x = 0.0, y = 0.0, z = 0.0 } end
 function IsControlJustPressed(g, c) return S.escFrame and g == 0 and c == 200 end
 function ActivateFrontendMenu()
     S.calls.Activate = (S.calls.Activate or 0) + 1
@@ -326,6 +333,7 @@ function sim.step(ms)
         end
     end
     S.escFrame = false
+    S.clickFrame = false
 end
 function sim.frames(ms) for _ = 1, math.ceil(ms / 16) do sim.step(16) end end
 function sim.lastOpen() local l; for _, m in ipairs(S.msgs) do if m.action == 'open' then l = m end end return l end
@@ -343,6 +351,8 @@ local isOpen = function() return sim.exported.IsOpen() end
 sim.frames(100)
 sim.nui('ready')
 check(isOpen() == false, 'başlangıçta menü kapalı olmalı')
+local function setMapItem(on) for _, it in ipairs(Config.Menu) do if it.id == 'map' then it.enabled = on end end end
+setMapItem(true)   -- S1b..S3b: menüden harita akışı (varsayılan kapalı; açılırsa hâlâ çalışmalı)
 
 -- S1: ESC → yerleşik menü söndürülür, LOE menüsü açılır
 sim.pause = true; sim.frames(64)
@@ -588,6 +598,7 @@ sim.pause = true; sim.frames(64)
 check(next(sim.lastOpen().caps) == nil, 'S10: oyuncu çıkınca yetki silinmeli')
 sim.exported.Close(); sim.frames(700)
 
+setMapItem(false)   -- varsayılan: MAP menüde yok, harita yalnızca M ile
 -- S11: M tuşu (loe_bigmap) → menüsüz doğrudan büyük harita; aynı tuş / ESC kapatır; LOE menüsü geri gelmez
 check(type(sim.commands.loe_bigmap) == 'function', 'S11: loe_bigmap komutu kayıtlı olmalı')
 Prefs.set('pref.mapReturn', true)                            -- dönüş tercihi AÇIK olsa bile tuştan açılan harita menüye dönmemeli
@@ -654,12 +665,90 @@ check(isOpen() == true and op.stats.id == 7 and op.stats.name == 'Mark Smith' an
     and op.stats.grade == 'Lieutenant' and op.stats.cash == 0 and op.stats.bank == 27640295, 'S12: oyuncu kartı verisi (kimlik/ad/meslek/para) iletilmeli')
 local ids, soonId = {}, nil
 for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soonId = m.id end end
-check(table.concat(ids, ',') == 'resume,map,game,ui,position,quit', 'S12: ana menü sırası videodaki gibi olmalı: ' .. table.concat(ids, ','))
+check(table.concat(ids, ',') == 'resume,game,ui,position,quit', 'S12: ana menü sırası (MAP yok, harita yalnızca M): ' .. table.concat(ids, ','))
+check(sim.nui('menu', { id = 'map' }).ok == false, 'S12: MAP menüden kaldırıldı, menu callback reddetmeli')
 check(soonId == 'position', 'S12: KONUM MODU "yakında" olarak işaretlenmeli')
 check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok == false, 'S12: kapalı menü maddesi (stats) reddedilmeli')
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
+
+-- S13: büyük harita arama paneli (blip taraması, arama modu odağı, ESC çakışması, GPS seçimi)
+local function lastMsg(action) local l; for _, m in ipairs(sim.msgs) do if m.action == action then l = m end end return l end
+local function countMsg(action, show) local n = 0; for _, m in ipairs(sim.msgs) do if m.action == action and (show == nil or m.show == show) then n = n + 1 end end return n end
+local world = { [361] = { { 1, 100.0, 200.0 }, { 2, 300.0, 400.0 } }, [61] = { { 3, 0.0, 0.0 }, { 4, -1500.0, 800.0 } }, [60] = { { 5, 441.2, -981.9 } } }
+local cursor, byBlip, wp = {}, {}, nil
+for sprite, l in pairs(world) do for _, e in ipairs(l) do byBlip[e[1]] = { sprite = sprite, x = e[2], y = e[3] } end end
+GetFirstBlipInfoId = function(sprite) local l = world[sprite]; cursor[sprite] = 1; return l and l[1][1] or 0 end
+GetNextBlipInfoId = function(sprite) local l = world[sprite]; if not l then return 0 end cursor[sprite] = (cursor[sprite] or 1) + 1; local e = l[cursor[sprite]]; return e and e[1] or 0 end
+DoesBlipExist = function(b) return byBlip[b] ~= nil end
+GetBlipInfoIdDisplay = function() return 2 end
+GetBlipAlpha = function() return 255 end
+DoesEntityExist = function() return false end
+GetBlipInfoIdEntityIndex = function() return 0 end
+GetBlipInfoIdCoord = function(b) local e = byBlip[b]; return { x = e.x, y = e.y, z = 0.0 } end
+GetLabelText = function(l) if l == 'BLIP_61' then return 'Hospital' elseif l == 'BLIP_60' then return 'Police Station' end return 'NULL' end
+SetNewWaypoint = function(x, y) wp = { x = x, y = y } end
+
+sim.frames(700)
+sim.commands.loe_bigmap(); sim.frames(1500)
+check(sim.pause == true, 'S13: harita açılmalı')
+local mp = lastMsg('mapPanel')
+check(mp and mp.show == true and #mp.items == 4, 'S13: panel 4 yerle açılmalı (sıfır nokta atlanır): ' .. tostring(mp and #mp.items))
+check(mp.items[1].n == 'Gas Station' and mp.items[1].d == 223 and mp.items[2].d == 500 and mp.items[3].n == 'Hospital' and mp.items[4].n == 'Police Station',
+    'S13: adlar / mesafeler / ada göre sıralama doğru olmalı')
+check(mp.items[1].x == nil and mp.items[1].y == nil and mp.items[1].z == nil, 'S13: koordinat arayüze gitmemeli')
+check(mp.geo and mp.geo.left == 0.76 and mp.key ~= nil, 'S13: panel bölgesi ve tuş bilgisi iletilmeli')
+check(sim.nuiFocus == false, 'S13: panel ilk başta odak almamalı (harita sürüklenebilir kalsın)')
+check(sim.nui('mapPick', { id = 1 }).ok == false, 'S13: arama modu dışında seçim reddedilmeli')
+
+sim.cx, sim.cy = 0.3, 0.5; sim.clickFrame = true; sim.step(16); sim.frames(100)
+check(sim.nuiFocus == false, 'S13: panel dışına tıklama odak almamalı')
+sim.cx, sim.cy = 0.9, 0.5; sim.clickFrame = true; sim.step(16); sim.frames(100)
+check(sim.nuiFocus == true and lastMsg('mapFocus').on == true, 'S13: panele tıklayınca arama modu açılmalı')
+
+sim.escFrame = true; sim.step(16); sim.frames(800)
+check(sim.pause == true, 'S13: arama modundaki ESC haritayı kapatmamalı')
+check(sim.nui('mapPick', { id = 99 }).ok == false and sim.nui('mapPick', { id = 'x' }).ok == false and sim.nui('mapPick', {}).ok == false and sim.nui('mapPick', 'z').ok == false,
+    'S13: geçersiz kimlikler reddedilmeli')
+check(wp == nil, 'S13: reddedilen seçim GPS kurmamalı')
+local pick = sim.nui('mapPick', { id = 3, x = 1.0, y = 2.0 })
+check(pick.ok == true and pick.name == 'Hospital', 'S13: geçerli seçim kabul edilmeli')
+check(wp and wp.x == -1500.0 and wp.y == 800.0, 'S13: GPS yalnızca Lua tarafındaki koordinata kurulmalı (arayüzden gelen x/y yok sayılır)')
+check(sim.nuiFocus == false and lastMsg('mapFocus').on == false, 'S13: seçimden sonra arama modu bitmeli')
+check(sim.pause == true, 'S13: seçimden sonra harita açık kalmalı')
+
+sim.escFrame = true; sim.step(16); sim.frames(100)
+check(sim.pause == true, 'S13: arama modundan çıkışın hemen ardındaki (sızan) ESC haritayı kapatmamalı')
+sim.frames(700)
+sim.commands.loe_mapsearch(); sim.frames(50)
+check(sim.nuiFocus == true, 'S13: loe_mapsearch arama modunu açmalı')
+sim.commands.loe_bigmap(); sim.frames(600)
+check(sim.pause == true and sim.nuiFocus == true, 'S13: arama modundayken M haritayı kapatmamalı')
+sim.commands.loe_mapsearch(); sim.frames(50)
+check(sim.nuiFocus == false, 'S13: loe_mapsearch tekrar basınca modu kapatmalı')
+check(sim.nui('mapSearchExit').ok == true, 'S13: odak yokken mapSearchExit zararsız olmalı')
+
+sim.frames(700)
+sim.escFrame = true; sim.step(16); sim.frames(1500)
+check(sim.pause == false, 'S13: ESC haritayı kapatmalı')
+check(lastMsg('mapPanel').show == false, 'S13: harita kapanınca panel gizlenmeli')
+
+sim.frames(700)
+sim.commands.loe_bigmap(); sim.frames(1500)
+sim.commands.loe_mapsearch(); sim.frames(50)
+check(sim.nuiFocus == true, 'S13: ikinci açılışta da arama modu açılmalı')
+sim.pause = false; sim.frames(1500)                         -- harita beklenmedik biçimde kapandı
+check(sim.nuiFocus == false and lastMsg('mapPanel').show == false, 'S13: harita kapanınca odak serbest kalmalı, panel gizlenmeli')
+
+sim.frames(700)
+Config.MapSearch.enabled = false
+local shows = countMsg('mapPanel', true)
+sim.commands.loe_bigmap(); sim.frames(1500)
+check(sim.pause == true and countMsg('mapPanel', true) == shows, 'S13: enabled=false iken panel açılmamalı')
+sim.escFrame = true; sim.step(16); sim.frames(1500)
+Config.MapSearch.enabled = true
+sim.frames(700)
 return R
 '''
 

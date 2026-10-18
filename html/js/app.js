@@ -38,6 +38,8 @@ const STR = {
         menu_position: ['KONUM', 'MODU'], menu_stats: ['İSTATİSTİKLER', ''], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['AYRIL', ''],
         all_gta: 'Tüm GTA ayarları', game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
+        ms_placeholder: 'Yer ara…', ms_places: 'yer', ms_idle: 'Aramak için tıkla veya bas', ms_active: 'Enter: GPS kur · Esc: haritaya dön',
+        ms_set: 'GPS kuruldu', ms_none: 'Eşleşen yer yok',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
         hint_move: 'Gezin', hint_change: 'Değiştir', hint_select: 'Seç', hint_resume: 'Devam', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
         on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
@@ -57,6 +59,8 @@ const STR = {
         menu_position: ['POSITION', 'MODE'], menu_stats: ['STATISTICS', ''], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['DISCONNECT', ''],
         all_gta: 'All GTA settings', game_title: 'Game Settings', ui_title: 'UI Settings',
+        ms_placeholder: 'Search places…', ms_places: 'places', ms_idle: 'Click here or press', ms_active: 'Enter: set GPS · Esc: back to map',
+        ms_set: 'GPS set', ms_none: 'No places match',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
         hint_move: 'Navigate', hint_change: 'Change', hint_select: 'Select', hint_resume: 'Resume', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
         on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
@@ -664,8 +668,115 @@ const toast = (msg) => {
     toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 };
 
+/* ============================================================ BÜYÜK HARİTA ARAMA PANELİ */
+// Lua (client/main.lua) haritadaki işaretleri tarar ve listeyi gönderir; filtre burada, yazdıkça çalışır. Koordinat arayüze GELMEZ:
+// seçimde yalnızca liste kimliği (id) Lua'ya gider, GPS'i Lua kurar.
+const M = { shown: false, focused: false, items: [], query: '', sel: 0, shownList: [] };
+const mapRoot = $('#mapSearch'), msq = $('#msq');
+
+const fmtDist = (d) => (d < 1000 ? `${d} m` : `${(d / 1000).toFixed(1)} km`);
+
+const msFilter = () => {
+    const toks = norm(M.query).split(/\s+/).filter(Boolean);
+    if (!toks.length) return M.items;
+    const list = M.items.filter(e => toks.every(tk => e.nn.includes(tk)));
+    list.sort((a, b) => (b.nn.startsWith(toks[0]) - a.nn.startsWith(toks[0])) || (a.d - b.d));   // başı eşleşen önce, sonra yakın olan
+    return list;
+};
+
+const msPaintSel = () => {
+    const rows = $('#msList').querySelectorAll('.ms-row');
+    rows.forEach((el, i) => el.classList.toggle('sel', i === M.sel));
+    const cur = rows[M.sel];
+    if (cur) cur.scrollIntoView({ block: 'nearest' });
+};
+
+let flashTimer = null;
+const msHint = () => {
+    const el = $('#msHint');
+    el.classList.remove('ok');
+    const key = M.key ? prettyKey(M.key) : null;
+    el.textContent = M.focused ? t('ms_active') : `${t('ms_idle')}${key ? ' ' + key : ''}`;
+};
+const msFlash = (text) => {
+    const el = $('#msHint');
+    clearTimeout(flashTimer);
+    el.textContent = text; el.classList.add('ok');
+    flashTimer = setTimeout(msHint, 2200);
+};
+
+const msPick = (e) => {
+    if (!e) return;
+    post('mapPick', { id: e.id }).then(res => { if (res && res.ok) msFlash(`${t('ms_set')}: ${String(res.name || e.n)}`); });
+};
+
+const msRender = () => {
+    $('#msq').placeholder = t('ms_placeholder');
+    $('#msKey').textContent = M.key ? (prettyKey(M.key) || '') : '';
+    $('#msKey').classList.toggle('hidden', !M.key);
+    const list = msFilter();
+    M.shownList = list.slice(0, 200);
+    $('#msCount').textContent = `${list.length} ${t('ms_places')}`;
+    if (M.sel >= M.shownList.length) M.sel = Math.max(0, M.shownList.length - 1);
+    $('#msList').replaceChildren(...(M.shownList.length ? M.shownList.map((e, i) => h('button', {
+        class: 'ms-row' + (i === M.sel ? ' sel' : ''), type: 'button',
+        onmouseenter: () => { M.sel = i; msPaintSel(); },      // yeniden çizme yok: tıklama kaybolmasın
+        onclick: () => msPick(e),
+    }, h('b', {}, e.n), h('span', {}, fmtDist(e.d)))) : [h('div', { class: 'ms-empty' }, t('ms_none'))]));
+    msHint();
+};
+
+const msGeo = (g) => {
+    const ok = (v, d) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : d);
+    const st = document.documentElement.style;
+    g = g || {};
+    st.setProperty('--ms-l', ok(g.left, .76)); st.setProperty('--ms-r', ok(g.right, .98));
+    st.setProperty('--ms-t', ok(g.top, .06)); st.setProperty('--ms-b', ok(g.bottom, .94));
+};
+
+const onMapPanel = (d) => {
+    if (!d.show) {
+        M.shown = false; M.focused = false; M.items = [];
+        mapRoot.classList.add('hidden'); mapRoot.classList.remove('active');
+        msq.value = ''; M.query = ''; M.sel = 0; msq.blur();
+        return;
+    }
+    M.items = (Array.isArray(d.items) ? d.items : []).slice(0, 700)
+        .filter(e => e && typeof e.id === 'number' && typeof e.n === 'string')
+        .map(e => ({ id: e.id, n: e.n.slice(0, 60), d: Number.isFinite(e.d) ? Math.max(0, Math.round(e.d)) : 0, nn: norm(e.n) }));
+    M.key = typeof d.key === 'string' ? d.key : null;
+    M.shown = true; M.focused = false; M.query = ''; M.sel = 0; msq.value = '';
+    msGeo(d.geo);
+    mapRoot.classList.remove('hidden', 'active');
+    msRender();
+};
+
+const onMapFocus = (d) => {
+    M.focused = !!d.on && M.shown;
+    mapRoot.classList.toggle('active', M.focused);
+    if (M.focused) { msq.focus(); msq.select(); } else msq.blur();
+    msHint();
+};
+
+msq.addEventListener('input', () => { M.query = msq.value; M.sel = 0; msRender(); });
+// Panelin dışına tıklamak arama modunu bitirir (fare yeniden haritayı sürükleyebilir)
+document.addEventListener('mousedown', (ev) => { if (M.focused && !ev.target.closest('.ms-box')) post('mapSearchExit'); });
+
+// Arama modunda klavye: yazı kutuya gider; yön tuşları listede gezer, Enter GPS kurar, ESC modu bitirir (haritayı kapatmaz)
+const onMapKey = (ev) => {
+    const k = ev.key;
+    if (k === 'Escape') { ev.preventDefault(); post('mapSearchExit'); return true; }
+    if (k === 'ArrowDown' || k === 'ArrowUp') {
+        if (M.shownList.length) { M.sel = (M.sel + (k === 'ArrowDown' ? 1 : -1) + M.shownList.length) % M.shownList.length; msPaintSel(); }
+        ev.preventDefault(); return true;
+    }
+    if (k === 'Enter') { ev.preventDefault(); msPick(M.shownList[M.sel]); return true; }
+    return false;
+};
+
 /* ============================================================ KLAVYE */
 const onKey = (ev) => {
+    if (M.focused) { onMapKey(ev); return; }      // arama modunda menü tuşları devre dışı
     if (!S.open) return;
     const k = ev.key;
 
@@ -798,6 +909,8 @@ window.addEventListener('message', (ev) => {
     if (d.action === 'init') onInit(d);
     else if (d.action === 'open') onOpen(d);
     else if (d.action === 'close') onClose();
+    else if (d.action === 'mapPanel') onMapPanel(d);
+    else if (d.action === 'mapFocus') onMapFocus(d);
     else if (d.action === 'caps') {
         S.caps = d.caps || {};
         if (S.screen === 'settings') refreshSettings(false);

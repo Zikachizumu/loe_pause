@@ -458,8 +458,8 @@ Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler',
                    'Changes the language of this menu; the game\'s own language is in the GTA settings.'),
           options = { opt('tr', 'Türkçe', 'Türkçe'), opt('en', 'English', 'English') } },
         { id = 'pref.reset', type = 'action', label = L('Görünümü Sıfırla', 'Reset Appearance'), button = L('Sıfırla', 'Reset'),
-          desc = L('Vurgu rengi, koyu mod, portre modu, dil ve harita dönüşü varsayılana döner.',
-                   'Accent colour, dark mode, portrait mode, language and map return go back to defaults.'),
+          desc = L('Vurgu rengi, koyu mod, portre modu, dil ve menüye dönüş varsayılana döner.',
+                   'Accent colour, dark mode, portrait mode, language and return-to-menu go back to defaults.'),
           confirm = {
               title = L('Görünümü sıfırla?', 'Reset appearance?'),
               text = L('Görünüm tercihlerin varsayılana döner. Oyun ayarların etkilenmez.',
@@ -468,9 +468,9 @@ Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler',
           } },
     }),
     group('behavior', 'Menü Davranışı', 'Menu Behaviour', {
-        toggle('pref.mapReturn', 'Haritadan dönüş animasyonu', 'Map return animation', false, {
-            desc = L('Açıkken harita ve yerleşik GTA menüleri ESC ile kapanınca bu menü animasyonla geri gelir; kapalıyken doğrudan oyuna dönersin.',
-                     'When on, closing the map or a built-in GTA menu with ESC brings this menu back with an animation; when off you return straight to the game.'),
+        toggle('pref.mapReturn', 'GTA ekranlarından menüye dön', 'Return to menu after GTA screens', false, {
+            desc = L('Açıkken yerleşik GTA ekranları (Tüm GTA ayarları) ESC ile kapanınca bu menü geri gelir; kapalıyken doğrudan oyuna dönersin. M ile açılan büyük harita her zaman oyuna döner.',
+                     'When on, closing a built-in GTA screen (All GTA settings) with ESC brings this menu back; when off you return straight to the game. The big map (M) always returns to the game.'),
         }),
     }),
 })
