@@ -130,3 +130,14 @@ python -m http.server 8123                # sonra http://localhost:8123/_dev/moc
 ```
 
 Geliştirme arka planı: `_dev/mock_bg.jpg` (git'e girmez). Gerçek oyunda arka plan oyun görüntüsüdür.
+
+## GEÇİCİ: GTA ayarları araştırması (`/loe_gfxtest`, `/loe_gfxrec`)
+
+Amaç: GTA'nın kendi ayarlarını (Grafik, Ses, Fare...) LOE menüsünde gerçek kontrol olarak gösterebilmek için GTA ayar menüsünün script'ten yönetilip yönetilemeyeceğini ölçmek. Yalnızca `Config.GfxProbe.ace` (varsayılan `admin`) yetkisi olanlar çalıştırabilir.
+
+- `/loe_gfxtest`: ~15 sn otomatik test. GTA ayar menüsünü açar; script girdisiyle aşağı/yukarı gezinmeyi, menüyü gizlemeyi (`SuppressFrontendRenderingThisFrame`) ve scaleform dönüş değerlerini dener. Hiçbir ayarın değerini değiştirmez.
+- `/loe_gfxrec`: elle gezinme kaydı (en çok 150 sn, **Delete** ile biter). Menü olayları, seçim kimlikleri ve değişen profil ayarları (`GetProfileSetting` 0–1200) zaman damgasıyla kaydedilir.
+- Sonuç sunucuda resource klasörüne `gfxprobe_<tarih>_<oyuncu>.json` olarak yazılır (git yok sayar).
+- Test sırasında ESC yakalama durur (`LoeProbe.active`); test bitince ya da en geç 200 sn sonra geri gelir.
+
+Araştırma bitince `client/gfxprobe.lua`, fxmanifest satırı, `server/main.lua`'daki gfxprobe bölümü ve `Config.GfxProbe` kaldırılır.

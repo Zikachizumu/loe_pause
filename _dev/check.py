@@ -262,9 +262,13 @@ print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
 
 SIM_PRELUDE = r'''
 sim = { now = 5000, pause = false, nuiFocus = false, msgs = {}, calls = {}, handlers = {}, exported = {}, threads = {}, events = {}, escFrame = false,
-        netHandlers = {}, started = {}, serverEvents = {}, commands = {} }
+        netHandlers = {}, started = {}, serverEvents = {}, commands = {}, profile = {}, delFrame = false }
 local S = sim
 setmetatable(_G, { __index = function(_, k) return function() end end })   -- bilinmeyen native → no-op
+Citizen = { InvokeNative = function() end, ResultAsInteger = function() end, PointerValueInt = function() end }
+function SetTimeout(ms, fn) sim.at(ms, fn) end
+function GetProfileSetting(id) return S.profile[id] or 0 end
+function TriggerLatentServerEvent(name, bps, data) S.latent = { name = name, data = data } end
 
 LocalPlayer = { state = { isLoggedIn = true } }
 json = { encode = function() return '{}' end, decode = function() return {} end }
@@ -289,7 +293,7 @@ function IsPauseMenuActive() return S.pause end
 function SetFrontendActive(v) if not v then S.pause = false end end
 function SetPauseMenuActive(v) if not v then S.pause = false end end
 function IsDisabledControlJustPressed(_, c) return S.escFrame and (c == 200) end
-function IsControlJustPressed(g, c) return S.escFrame and g == 0 and c == 200 end
+function IsControlJustPressed(g, c) return (S.escFrame and g == 0 and c == 200) or (S.delFrame and c == 214) end
 function ActivateFrontendMenu()
     S.calls.Activate = (S.calls.Activate or 0) + 1
     S.events[#S.events + 1] = { at = S.now + 120, fn = function() S.pause = true end }   -- oyun menüyü biraz sonra açar
@@ -328,6 +332,7 @@ function sim.step(ms)
         end
     end
     S.escFrame = false
+    S.delFrame = false
 end
 function sim.frames(ms) for _ = 1, math.ceil(ms / 16) do sim.step(16) end end
 function sim.lastOpen() local l; for _, m in ipairs(S.msgs) do if m.action == 'open' then l = m end end return l end
@@ -703,6 +708,72 @@ check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
+
+-- S15: GEÇİCİ gfxprobe — yetki sunucudan gelir; test sırasında ana döngü yerleşik menüye dokunmaz; bitince her şey eski haline döner
+local realPrint, realEncode = print, json.encode
+print = function() end
+json.encode = function(t) sim.encoded = t; return 'X' end
+sim.frames(800)
+check(type(LoeProbe) == 'table' and LoeProbe.active == false, 'S15: LoeProbe tanımlı ve pasif olmalı')
+local actP = sim.calls.Activate or 0
+sim.commands['loe_gfxtest']()
+check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: komut önce sunucudan yetki istemeli')
+check(sim.pause == false, 'S15: yetki gelmeden menü açılmamalı')
+sim.fire('loe_pause:client:gfxprobeGo', 'auto', false)
+sim.frames(2000)
+check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
+
+sim.latent, sim.encoded = nil, nil
+sim.commands['loe_gfxtest']()
+sim.fire('loe_pause:client:gfxprobeGo', 'auto', true)
+sim.frames(1600)
+check(LoeProbe.active == true and sim.pause == true and isOpen() == false, 'S15: test GTA ayar menüsünü açmalı')
+sim.escFrame = true; sim.step(16); sim.frames(500)
+check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
+sim.frames(30000)
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'auto', 'S15: sonuç sunucuya gönderilmeli')
+local phases = {}
+for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'phase' then phases[#phases + 1] = e.name end end
+check(table.concat(phases, ',') == 'open,deeper0,nav-g2,nav-g0,hidden,scaleform,end', 'S15: faz sırası: ' .. table.concat(phases, ','))
+check(sim.calls.GoDeeper == 0, 'S15: ayar sayfasına GoDeeper(0) ile girilmeli')
+
+-- kayıt: profil değişikliği yakalanmalı, ESC kaydı bitirmemeli, Delete bitirmeli
+sim.latent, sim.encoded = nil, nil
+sim.frames(800)
+sim.commands['loe_gfxrec']()
+sim.fire('loe_pause:client:gfxprobeGo', 'record', true)
+sim.frames(2000)
+check(LoeProbe.active == true and sim.pause == true, 'S15: kayıt GTA ayar menüsünü açmalı')
+sim.profile[203] = 1; sim.frames(600); sim.profile[203] = nil; sim.frames(600)
+sim.escFrame = true; sim.step(16); sim.frames(300)
+check(sim.pause == true and LoeProbe.active == true, 'S15: kayıtta ESC kaydı bitirmemeli')
+sim.delFrame = true; sim.step(16); sim.frames(3000)
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: Delete kaydı bitirmeli, menü kapanmalı')
+local prof, reason = 0, nil
+for _, e in ipairs((sim.encoded or {}).log or {}) do
+    if e.k == 'profile' then prof = prof + 1 end
+    if e.k == 'recordEnd' then reason = e.reason end
+end
+check(sim.encoded and sim.encoded.kind == 'record' and reason == 'delete' and prof == 2, 'S15: kayıt sonucu (tür/neden/profil değişikliği): ' .. tostring(reason) .. ' ' .. prof)
+
+-- hata yolu: test ortasında native hata verirse test kapanmalı, hata raporlanmalı, ESC yakalama geri gelmeli
+local realAct = ActivateFrontendMenu
+ActivateFrontendMenu = function() error('boom') end
+sim.latent, sim.encoded = nil, nil
+sim.frames(800)
+sim.commands['loe_gfxtest']()
+sim.fire('loe_pause:client:gfxprobeGo', 'auto', true)
+sim.frames(4000)
+ActivateFrontendMenu = realAct
+check(LoeProbe.active == false and sim.encoded and sim.encoded.error ~= nil, 'S15: hata olursa test kapanmalı ve hata raporlanmalı')
+
+-- test bittikten sonra ESC yine LOE menüsünü açmalı
+sim.frames(700)
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S15: test sonrası ESC yakalama geri gelmeli')
+sim.exported.Close(); sim.frames(700)
+print, json.encode = realPrint, realEncode
 return R
 '''
 
@@ -710,7 +781,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua'):
+for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua', 'client/gfxprobe.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
@@ -774,6 +845,48 @@ check(list(lua_to_py(sv.eval('sent[#sent].list'))) == ['admin'], 'sunucu: admin 
 check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
 sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
+
+
+# GEÇİCİ gfxprobe: yalnızca admin ACE, oran sınırı, boyut sınırı, dosya adı
+sv.execute(r'''
+saved = {}
+function SaveResourceFile(res, name, data, len) saved[#saved + 1] = { res = res, name = name, n = #data } return true end
+function GetCurrentResourceName() return 'loe_pause' end
+function TriggerClientEvent(n, t, ...) local a = { ... }; sent[#sent + 1] = { n = n, t = t, list = a[1], allowed = a[2] } end
+''')
+ASK = sv.eval('''function(src, adv, admin, mode)
+    source = src; now = now + (adv or 0)
+    aceTable[tostring(src) .. ':admin'] = admin == true
+    handlers['loe_pause:server:gfxprobeAsk'](mode)
+    return #sent
+end''')
+PUT = sv.eval('''function(src, adv, admin, payload)
+    source = src; now = now + (adv or 0)
+    aceTable[tostring(src) .. ':admin'] = admin == true
+    handlers['loe_pause:server:gfxprobe'](payload)
+    return #saved
+end''')
+n1 = int(sv.eval('#sent'))
+check(ASK(11, 5000, False, 'auto') == n1 + 1, 'sunucu: gfxprobe yetki isteği yanıtlanmalı')
+lastp = lua_to_py(sv.eval('sent[#sent]'))
+check(lastp['n'] == 'loe_pause:client:gfxprobeGo' and lastp['list'] == 'auto' and lastp.get('allowed') is False, 'sunucu: yetkisiz oyuncuya izin verilmemeli')
+check(ASK(11, 100, True, 'record') == n1 + 1, 'sunucu: gfxprobe yetki isteği 3 sn sınırlanmalı')
+check(ASK(11, 3500, True, 'record') == n1 + 2 and lua_to_py(sv.eval('sent[#sent]')).get('allowed') is True
+      and lua_to_py(sv.eval('sent[#sent].list')) == 'record', 'sunucu: admin oyuncuya izin verilmeli')
+check(ASK(11, 3500, True, 'evil') == n1 + 3 and lua_to_py(sv.eval('sent[#sent].list')) == 'auto', 'sunucu: bilinmeyen mod auto olmalı')
+check(PUT(12, 0, False, '{"a":1}') == 0, 'sunucu: yetkisiz oyuncunun sonucu kaydedilmemeli')
+check(PUT(12, 0, True, '{"a":1}') == 1, 'sunucu: admin sonucu kaydedilmeli')
+sv1 = lua_to_py(sv.eval('saved[1]'))
+import re  # noqa: E402
+check(sv1['res'] == 'loe_pause' and re.fullmatch(r'gfxprobe_\d{8}_\d{6}_12\.json', sv1['name']) is not None, f'sunucu: dosya adı biçimi: {sv1["name"]}')
+check(PUT(12, 500, True, '{"b":1}') == 1, 'sunucu: 10 sn içinde ikinci sonuç yok sayılmalı')
+check(PUT(12, 11000, True, 'z' * 1500001) == 1, 'sunucu: çok büyük sonuç reddedilmeli')
+check(PUT(12, 0, True, 123) == 1 and PUT(12, 0, True, '') == 1, 'sunucu: metin olmayan / boş sonuç reddedilmeli')
+check(PUT(12, 0, True, '{"c":1}') == 2, 'sunucu: geçersiz istekler oran sınırını tüketmemeli')
+sv.execute('Config.GfxProbe.enabled = false')
+check(PUT(12, 20000, True, '{"d":1}') == 2 and ASK(13, 0, True, 'auto') and lua_to_py(sv.eval('sent[#sent]')).get('allowed') is False,
+      'sunucu: GfxProbe kapalıyken hiçbir şey kabul edilmemeli')
+sv.execute('Config.GfxProbe.enabled = true')
 
 print()
 if failures:
