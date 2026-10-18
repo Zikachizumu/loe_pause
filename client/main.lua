@@ -1,5 +1,6 @@
 local isOpen, uiReady, pendingOpen = false, false, nil
 local openedAt, closedAt, lastNuiFocusAt = 0, 0, 0
+local subActive = false   -- arayüz alt ekranda (ayarlar / sayfa / pencere): ESC menüyü kapatmaz, arayüz bir adım geri döner
 local radarWasHidden, radarOffAtOpen, blurred = false, false, false
 -- Bizim başlattığımız yerleşik GTA menüsü akışı: target = hangi menü, seen = gerçekten açıldı mı, returnAt = LOE menüsüne dönüş zamanı
 local native = { target = nil, since = 0, seen = false, closingAt = nil, returnAt = nil }
@@ -256,6 +257,7 @@ end
 local function close()
     if not isOpen then return end
     isOpen = false
+    subActive = false
     closedAt = GetGameTimer()
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
@@ -270,6 +272,7 @@ local function open(anim)
     if isOpen then return end
     if not uiReady then pendingOpen = anim or 'open'; return end
     isOpen = true
+    subActive = false
     openedAt = GetGameTimer()
 
     radarWasHidden = IsRadarHidden()
@@ -399,8 +402,8 @@ CreateThread(function()
 
             if paused then
                 -- Açılışı tetikleyen ESC'nin yerleşik menüsü hâlâ sönüyor olabilir; sonrasında gelen = ESC ile kapat
-                if sinceOpen > 350 then close() else killPause() end
-            elseif sinceOpen > 300 and (IsDisabledControlJustPressed(0, 200) or IsDisabledControlJustPressed(0, 199)) then
+                if sinceOpen > 350 and not subActive then close() else killPause() end
+            elseif sinceOpen > 300 and not subActive and (IsDisabledControlJustPressed(0, 200) or IsDisabledControlJustPressed(0, 199)) then
                 close()
             elseif sinceOpen > 400 and not IsNuiFocused() then
                 close()     -- ESC odağı bıraktırdı ya da başka bir resource odağı aldı
@@ -524,6 +527,26 @@ RegisterNUICallback('menu', function(d, cb)
     else
         cb({ ok = false })
     end
+end)
+
+-- Arayüz alt ekrana girdi/çıktı (ayarlar, sayfa, onay penceresi). Yalnızca boolean kabul edilir.
+RegisterNUICallback('sub', function(d, cb)
+    cb({ ok = true })
+    if not isOpen or type(d) ~= 'table' or type(d.on) ~= 'boolean' then return end
+    subActive = d.on
+end)
+
+-- "Restore defaults": bir ayar sayfasındaki ayarları varsayılana döndürür. Yalnızca şemadaki (toggle/select/slider) id'ler kabul edilir.
+RegisterNUICallback('restore', function(d, cb)
+    if not isOpen or type(d) ~= 'table' or type(d.ids) ~= 'table' then return cb({ ok = false }) end
+    local ids = {}
+    for _, id in ipairs(d.ids) do
+        if type(id) == 'string' and Schema.rows[id] and #ids < 60 then ids[#ids + 1] = id end
+    end
+    if #ids == 0 then return cb({ ok = false }) end
+    Prefs.reset(ids)
+    for _, id in ipairs(ids) do Apply.run(id) end
+    cb({ ok = true, values = Prefs.snapshot() })
 end)
 
 RegisterNUICallback('quit', function(d, cb)

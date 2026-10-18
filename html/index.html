@@ -26,32 +26,26 @@
         <button class="pm-gta" id="pmGta" type="button"></button>
     </section>
 
-    <!-- AYARLAR -->
+    <!-- AYARLAR: Game Settings / UI Settings. Ana menü solda kalır; yanında OPTIONS sütunu ve ayar paneli açılır -->
     <section class="screen hidden" id="screenSettings">
-        <div class="panel settings">
-            <header class="s-head">
-                <button class="icon-btn" id="sBack" type="button"><i data-i="back"></i></button>
-                <h2 id="sTitle">AYARLAR</h2>
-                <span class="grow"></span>
-                <button class="icon-btn" id="sClose" type="button"><i data-i="close"></i></button>
+        <div class="gs-line" id="gsLine"></div>
+        <nav class="gs-opts" id="colCats">
+            <div class="gs-opts-title" id="optTitle">OPTIONS</div>
+            <div id="optList"></div>
+        </nav>
+        <section class="gs-panel">
+            <header class="gs-head">
+                <h2 id="sTitle"></h2>
+                <label class="gs-search">
+                    <i data-i="search"></i>
+                    <input id="q" type="text" autocomplete="off" spellcheck="false" maxlength="40">
+                    <kbd>/</kbd>
+                </label>
             </header>
-            <div class="s-body" id="sBody">
-                <div class="col cats" id="colCats"></div>
-                <div class="col grps" id="colGrps"></div>
-                <div class="col rows">
-                    <div class="rows-head">
-                        <div class="search">
-                            <i data-i="search"></i>
-                            <input id="q" type="text" autocomplete="off" spellcheck="false" maxlength="40">
-                            <kbd>/</kbd>
-                        </div>
-                        <div class="crumb" id="crumb"></div>
-                    </div>
-                    <div class="rows-list" id="rowsList"></div>
-                </div>
-            </div>
-            <footer class="hints" id="hintsSettings"></footer>
-        </div>
+            <div class="gs-rows" id="rowsList"></div>
+            <div class="gs-note" id="gsNote"></div>
+            <footer class="gs-foot"><button class="gs-btn" id="gsRestore" type="button"></button></footer>
+        </section>
     </section>
 
     <!-- SAYFA (istatistik / yakında) -->

@@ -38,6 +38,9 @@ const STR = {
         menu_position: ['KONUM', 'MODU'], menu_stats: ['İSTATİSTİKLER', ''], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['AYRIL', ''],
         all_gta: 'Tüm GTA ayarları', game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
+        opts_title: 'SEÇENEKLER', search_title: 'Arama', restore: ['SAYFAYI', 'SIFIRLA'], restore_title: 'Varsayılana dön?',
+        restore_text: 'Bu sayfadaki ayarlar varsayılan değerlerine döner. Diğer sayfalar etkilenmez.', restore_yes: 'Evet, sıfırla',
+        msg_restored: 'Varsayılanlar geri yüklendi', native_note: 'Bu ayar yalnızca GTA\'nın kendi ayar ekranından değiştirilebilir; satıra tıklayınca o ekran açılır.',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
         hint_move: 'Gezin', hint_change: 'Değiştir', hint_select: 'Seç', hint_resume: 'Devam', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
         on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
@@ -57,6 +60,9 @@ const STR = {
         menu_position: ['POSITION', 'MODE'], menu_stats: ['STATISTICS', ''], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['DISCONNECT', ''],
         all_gta: 'All GTA settings', game_title: 'Game Settings', ui_title: 'UI Settings',
+        opts_title: 'OPTIONS', search_title: 'Search', restore: ['RESTORE', 'DEFAULTS'], restore_title: 'Restore defaults?',
+        restore_text: 'The settings on this page return to their defaults. Other pages are not affected.', restore_yes: 'Yes, restore',
+        msg_restored: 'Defaults restored', native_note: 'This setting can only be changed in GTA\'s own settings screen; click the row to open it.',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
         hint_move: 'Navigate', hint_change: 'Change', hint_select: 'Select', hint_resume: 'Resume', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
         on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
@@ -80,7 +86,7 @@ const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
 /* ============================================================ DURUM */
 const S = {
     open: false, lang: 'en',
-    allSchema: [], schema: [], scope: 'game', links: [], gta: true, bg: { mode: 'game' },
+    allSchema: [], schema: [], scope: 'game', links: [], gta: true, bg: { mode: 'game' }, subSent: false,
     values: {}, keys: {}, native: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
@@ -103,7 +109,7 @@ const indexSchema = () => {
 /* ============================================================ TERCİHLER (görünüm) */
 const hexToRgb = (hex) => {
     const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
-    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [255, 255, 255];
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [227, 32, 74];
 };
 
 const applyPrefs = () => {
@@ -112,7 +118,7 @@ const applyPrefs = () => {
 
     const def = rowIndex['pref.accent'];
     const cur = def && (def.options.find(o => o.value === S.values['pref.accent']) || def.options[0]);
-    const color = (cur && cur.color) || '#ffffff';
+    const color = (cur && cur.color) || '#e3204a';
     const rgb = hexToRgb(color);
     const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
     document.documentElement.style.setProperty('--accent', color);
@@ -131,21 +137,35 @@ const updatePortrait = () => {
 window.addEventListener('resize', updatePortrait);
 
 /* ============================================================ EKRANLAR */
+// main: ana menü; settings: ana menü SOLDA kalır, yanında OPTIONS + ayar paneli açılır; page: tam sayfa (istatistik / yakında)
 const screens = { main: $('#screenMain'), settings: $('#screenSettings'), page: $('#screenPage') };
 const showScreen = (name) => {
     S.screen = name;
-    for (const [k, el] of Object.entries(screens)) el.classList.toggle('hidden', k !== name);
-    $('#hintsMain').classList.toggle('hidden', name !== 'main');
+    screens.main.classList.toggle('hidden', name === 'page');
+    screens.settings.classList.toggle('hidden', name !== 'settings');
+    screens.page.classList.toggle('hidden', name !== 'page');
+    $('#hintsMain').classList.toggle('hidden', name === 'page');
     renderHints();
+    syncSub();
 };
+
+// Lua'ya "alt ekrandayım" bilgisi: bu sırada ESC menüyü kapatmaz, bir adım geri döner (yalnızca arayüz işler)
+const syncSub = () => {
+    const sub = S.screen !== 'main' || !!S.modal;
+    if (sub !== S.subSent) { S.subSent = sub; post('sub', { on: sub }); }
+};
+
+// replaceChildren(null) metin olarak "null" ekler: boş öğeleri süz
+const setKids = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter(k => k !== null && k !== undefined && k !== false));
 
 const hintSpan = (keys, label) => h('span', {}, keys.map(k => h('kbd', {}, k)), label);
 const renderHints = () => {
-    const main = $('#hintsMain'), st = $('#hintsSettings'), pg = $('#hintsPage');
-    main.replaceChildren(hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['ENTER'], t('hint_select')), hintSpan(['ESC'], t('hint_resume')));
-    st.replaceChildren(
-        hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['←', '→'], t('hint_change')), hintSpan(['Enter'], t('hint_select')),
-        hintSpan(['Backspace'], t('hint_back')), hintSpan(['/'], t('hint_search')), hintSpan(['ESC'], t('hint_close')));
+    const main = $('#hintsMain'), pg = $('#hintsPage');
+    if (S.screen === 'main') {
+        main.replaceChildren(hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['ENTER'], t('hint_select')), hintSpan(['ESC'], t('hint_resume')));
+    } else {
+        main.replaceChildren(hintSpan(['ESC'], t('hint_back')), hintSpan(['↑', '↓'], t('hint_move')), hintSpan(['ENTER'], t('hint_select')), hintSpan(['←', '→'], t('hint_change')));
+    }
     pg.replaceChildren(hintSpan(['Backspace'], t('hint_back')), hintSpan(['ESC'], t('hint_close')));
 };
 
@@ -194,7 +214,7 @@ const renderCard = () => {
     const st = S.stats || {};
     if (!st.name) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
-    el.replaceChildren(
+    setKids(el,
         h('div', { class: 'nm' }, st.name, st.id != null ? h('em', {}, `[${st.id}]`) : null),
         st.job ? h('div', { class: 'jb' }, h('b', {}, st.job), st.grade || '') : null,
         h('div', { class: 'mn' }, h('span', {}, ico('cash'), moneyStr(st.cash)), h('span', {}, ico('card'), moneyStr(st.bank))));
@@ -203,9 +223,9 @@ const renderCard = () => {
 const renderStatic = () => {
     const [ta, tb] = t('pm_title');
     $('#pmTitleA').textContent = ta; $('#pmTitleB').textContent = tb;
-    $('#sTitle').textContent = t(S.scope === 'ui' ? 'ui_title' : 'game_title');
-    $('#sBack').title = t('back'); $('#pBack').title = t('back');
-    $('#sClose').title = t('close'); $('#pClose').title = t('close');
+    $('#pBack').title = t('back');
+    $('#pClose').title = t('close');
+    { const [ra, rb] = t('restore'); setKids($('#gsRestore'), h('b', {}, ra), rb ? h('i', {}, ' ' + rb) : null); }
     q.placeholder = t('search');
     const bg = $('#bg');
     bg.style.backgroundImage = (S.bg && S.bg.mode !== 'game' && S.bg.image) ? `url("${S.bg.image}")` : 'none';
@@ -223,8 +243,8 @@ const renderMenu = () => {
         const [a, b] = pair(item.id);
         return h('button', {
             class: 'pm-item' + (i === S.mainIdx ? ' sel' : ''), role: 'menuitem', type: 'button', 'data-idx': i, style: `--n:${n}`,
-            onmouseenter: () => setMainIdx(i),
-            onclick: () => { setMainIdx(i); activateMenu(item.id); },
+            onmouseenter: () => { if (S.screen === 'main') setMainIdx(i); },
+            onclick: () => { if (S.screen === 'main') setMainIdx(i); activateMenu(item.id); },
         }, h('span', { class: 'ind' }), h('span', { class: 'lbl' }, h('b', {}, a), b ? h('i', {}, b) : null),
         item.soon ? h('span', { class: 'pill' }, t('soon_pill')) : null);
     };
@@ -308,9 +328,6 @@ const renderPage = () => {
 
 /* ============================================================ AYARLAR: veri */
 const curCat = () => S.schema[S.cat];
-const curGrp = () => (curCat() ? curCat().groups[S.grp] : null);
-const hasGroupCol = () => !S.query && !!curCat() && curCat().groups.length > 1;
-const hasCatCol = () => S.schema.length > 1;                    // tek kategorili kapsamda (Arayüz Ayarları) kategori sütunu yok
 
 const KEYNAMES = {
     LSHIFT: 'Shift', RSHIFT: 'Shift', SHIFT: 'Shift', LCONTROL: 'Ctrl', RCONTROL: 'Ctrl', CONTROL: 'Ctrl', LMENU: 'Alt', RMENU: 'Alt', MENU: 'Alt',
@@ -347,13 +364,20 @@ const buildEntries = () => {
             const hay = norm([L(r.label), r.label && r.label.tr, r.label && r.label.en, L(r.desc), L(c.label), L(g.label)].join(' '));
             if (hay.includes(needle)) out.push({ key: `${ci}.${gi}.${ri}`, row: r, cat: c, grp: g, crumb: `${L(c.label)} › ${L(g.label)}` });
         })));
-    } else if (curGrp()) {
-        curGrp().rows.forEach((r, ri) => { if (entryVisible(r)) out.push({ key: `${S.cat}.${S.grp}.${ri}`, row: r, cat: curCat(), grp: curGrp() }); });
+    } else if (curCat()) {
+        // Bir kategorinin tüm grupları tek listede; birden çok grup varsa her grubun başına küçük başlık
+        const multi = curCat().groups.length > 1;
+        curCat().groups.forEach((g, gi) => {
+            const rows = g.rows.map((r, ri) => ({ r, ri })).filter(x => entryVisible(x.r));
+            if (!rows.length) return;
+            if (multi) out.push({ key: `h${S.cat}.${gi}`, head: L(g.label), row: { type: 'head' } });
+            rows.forEach(({ r, ri }) => out.push({ key: `${S.cat}.${gi}.${ri}`, row: r, cat: curCat(), grp: g }));
+        });
     }
     return out;
 };
 
-const selectable = (e) => e && e.row.type !== 'info';
+const selectable = (e) => e && e.row.type !== 'info' && e.row.type !== 'head';
 const firstSelectable = () => { const i = S.entries.findIndex(selectable); return i < 0 ? 0 : i; };
 
 /* ============================================================ AYARLAR: değer değiştirme */
@@ -444,71 +468,87 @@ const adjustRow = (e, dir, shift) => {
     else if (dir < 0) goBack();
 };
 
-/* ============================================================ AYARLAR: çizim */
+/* ============================================================ AYARLAR: çizim (PSettings.mp4 tasarımı) */
+const splitTwo = (text) => { const s = String(text || ''); const i = s.indexOf(' '); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i)]; };
+const twoTone = (text) => { const [a, b] = splitTwo(text); return [h('b', {}, a), b ? h('i', {}, b) : null]; };
+
+// Seçili satırın açıklaması panelin altındaki not satırında görünür (videodaki "After changing graphics settings…" satırı gibi)
+const setNote = (r) => {
+    let txt = '';
+    if (r) {
+        txt = L(r.desc);
+        if (!txt && r.type === 'native') txt = t('native_note');
+        if (!txt && r.type === 'key') txt = t('readonly');
+    }
+    $('#gsNote').textContent = txt;
+};
+const paintNote = () => {
+    const e = S.entries[S.row];
+    setNote(S.zone === 'rows' && e ? e.row : null);
+};
+
 const buildRow = (e, i) => {
     const r = e.row;
+    if (r.type === 'head') return h('div', { class: 'gs-subhead' }, e.head);
+    if (r.type === 'info') return h('div', { class: 'gs-info' }, L(r.text));
+
     const sel = S.zone === 'rows' && i === S.row;
-    const base = `row t-${r.type}` + (sel ? ' sel' : '');
+    const base = `gs-row t-${r.type}` + (sel ? ' sel' : '');
     const mark = () => { S.zone = 'rows'; S.row = i; };
-
-    if (r.type === 'info') return h('div', { class: base }, ico('info'), h('span', {}, L(r.text)));
-
-    const label = h('div', { class: 'r-label' },
-        e.crumb ? h('span', { class: 'r-crumb' }, e.crumb) : null,
-        h('b', {}, L(r.label)),
-        r.desc ? h('small', {}, L(r.desc)) : null);
+    const hover = () => setNote(r);
+    const label = h('div', { class: 'gl' }, e.crumb ? h('span', { class: 'gs-crumb' }, e.crumb) : null, ...twoTone(L(r.label)));
+    const arrow = (txt, fn) => h('button', { class: 'ar', type: 'button', onclick: (ev) => { ev.stopPropagation(); mark(); fn(); } }, txt);
 
     if (r.type === 'toggle') {
         const on = !!S.values[r.id];
-        return h('div', { class: base, onclick: () => { mark(); setValue(r, !on); } }, label,
-            h('div', { class: 'r-ctl' }, h('span', { class: 'sw-text' }, on ? t('on') : t('off')),
-                h('button', { class: 'switch', type: 'button', role: 'switch', 'aria-checked': String(on) })));
+        const seg = (val, text) => h('button', { class: val === on ? 'on' : '', type: 'button', onclick: (ev) => { ev.stopPropagation(); mark(); setValue(r, val); } }, text);
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); setValue(r, !on); } }, label,
+            h('div', { class: 'gc seg' }, seg(false, t('off')), seg(true, t('on'))));
     }
 
     if (r.type === 'select') {
         const cur = r.options.find(o => o.value === S.values[r.id]) || r.options[0];
-        const arrow = (name, dir) => h('button', { class: 'arr', type: 'button', onclick: (ev) => { ev.stopPropagation(); mark(); stepSelect(r, dir); } }, ico(name));
-        return h('div', { class: base, onclick: () => { mark(); stepSelect(r, 1); } }, label,
-            h('div', { class: 'r-ctl pick' }, arrow('arrowL', -1),
-                h('span', { class: 'val' }, cur.color ? h('i', { class: 'dot', style: `color:${cur.color};background:${cur.color}` }) : null, L(cur.label)),
-                arrow('arrowR', 1)));
+        const [va, vb] = splitTwo(L(cur.label));
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); stepSelect(r, 1); } }, label,
+            h('div', { class: 'gc pick' }, arrow('‹', () => stepSelect(r, -1)),
+                h('span', { class: 'val' }, cur.color ? h('span', { class: 'dot', style: `background:${cur.color}` }) : null, h('b', {}, va), vb ? h('i', {}, vb) : null),
+                arrow('›', () => stepSelect(r, 1))));
     }
 
-    if (r.type === 'slider') return buildSlider(e, base, label, mark);
+    if (r.type === 'slider') return buildSlider(e, base, label, mark, hover, arrow);
 
     if (r.type === 'key') {
         const token = r.control != null ? S.keys['c:' + r.control] : S.keys['m:' + r.command];
         const pretty = prettyKey(token);
-        return h('div', { class: base, title: t('readonly'), onclick: () => { mark(); renderRows(); } }, label,
-            h('div', { class: 'r-ctl' }, pretty ? h('span', { class: 'keycap' }, pretty) : h('span', { class: 'keycap none' }, t('unbound'))));
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); renderRows(); } }, label,
+            h('div', { class: 'gc end' }, pretty ? h('span', { class: 'keycap' }, pretty) : h('span', { class: 'keycap none' }, t('unbound'))));
     }
 
     if (r.type === 'action') {
         // Kısayol eylemi (r.command): atanmış tuşu da göster
         const pretty = r.command ? prettyKey(S.keys['m:' + r.command]) : null;
-        return h('div', { class: base, onclick: () => { mark(); runAction(r); } }, label,
-            h('div', { class: 'r-ctl' },
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); runAction(r); } }, label,
+            h('div', { class: 'gc end' },
                 r.command ? (pretty ? h('span', { class: 'keycap' }, pretty) : h('span', { class: 'keycap none' }, t('unbound'))) : null,
-                h('button', { class: 'btn', type: 'button' }, L(r.button))));
+                h('button', { class: 'gs-btn sm', type: 'button' }, L(r.button))));
     }
 
     if (r.type === 'native') {
         const cur = nativeValue(r);
-        return h('div', { class: base, onclick: () => { mark(); openNative(r.target); } }, label,
-            h('div', { class: 'r-ctl' }, cur ? h('span', { class: 'ro-val' }, cur) : null,
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); openNative(r.target); } }, label,
+            h('div', { class: 'gc end' }, cur ? h('span', { class: 'ro-val' }, cur) : null,
                 h('span', { class: 'tag' }, t('native_tag')), ico('chevronR')));
     }
     return h('div', { class: base }, label);
 };
 
-const buildSlider = (e, base, label, mark) => {
+const buildSlider = (e, base, label, mark, hover, arrow) => {
     const r = e.row;
     let v = S.values[r.id] ?? r.default;
     const pct = (x) => ((x - r.min) / (r.max - r.min)) * 100;
     const fill = h('div', { class: 'sl-fill', style: `width:${pct(v)}%` });
-    const thumb = h('div', { class: 'sl-thumb', style: `left:${pct(v)}%` });
     const out = h('span', { class: 'sl-val' }, fmtSlider(r, v));
-    const track = h('div', { class: 'sl-track' }, fill, thumb);
+    const track = h('div', { class: 'sl-track' }, fill);
 
     let lastSend = 0, timer = null;
     const send = (final) => {
@@ -523,7 +563,7 @@ const buildSlider = (e, base, label, mark) => {
         const raw = r.min + f * (r.max - r.min);
         v = clamp(Math.round(((Math.round((raw - r.min) / r.step) * r.step) + r.min) * 1000) / 1000, r.min, r.max);
         S.values[r.id] = v;
-        fill.style.width = pct(v) + '%'; thumb.style.left = pct(v) + '%'; out.textContent = fmtSlider(r, v);
+        fill.style.width = pct(v) + '%'; out.textContent = fmtSlider(r, v);
     };
     track.addEventListener('pointerdown', (ev) => {
         ev.stopPropagation();
@@ -535,31 +575,34 @@ const buildSlider = (e, base, label, mark) => {
         track.addEventListener('pointermove', move);
         track.addEventListener('pointerup', up);
     });
-    return h('div', { class: base }, label, h('div', { class: 'r-ctl sl' }, track, out));
+    return h('div', { class: base, onmouseenter: hover }, label,
+        h('div', { class: 'gc sl' }, arrow('‹', () => stepSlider(r, -1)), track, out, arrow('›', () => stepSlider(r, 1))));
 };
 
-const renderCats = () => {
-    const col = $('#colCats');
-    $('#sBody').classList.toggle('no-cats', !hasCatCol());
-    col.replaceChildren(...S.schema.map((c, i) => h('button', {
-        class: 'nav-item' + (i === S.cat ? ' cur' : ''), type: 'button',
-        onclick: () => { S.cat = i; S.grp = 0; S.zone = 'cats'; S.query = ''; q.value = ''; refreshSettings(true); },
-    }, ico(c.icon), h('span', {}, L(c.label)))));
-    const cur = col.querySelector('.cur');
-    if (cur) cur.scrollIntoView({ block: 'nearest' });
+// OPTIONS sütunu: kategoriler (Game Settings) ya da arayüz ayar sayfaları (UI Settings)
+const renderOpts = () => {
+    $('#optTitle').textContent = t('opts_title');
+    $('#optList').replaceChildren(...S.schema.map((c, i) => h('button', {
+        class: 'gs-opt' + (!S.query && i === S.cat ? ' cur' : ''), type: 'button',
+        onclick: () => { S.cat = i; S.zone = 'cats'; S.query = ''; q.value = ''; refreshSettings(true); },
+    }, h('i', { class: 'd' }), h('span', {}, L(c.label)))));
 };
 
-const renderGroups = () => {
-    const col = $('#colGrps');
-    const on = hasGroupCol();
-    $('#sBody').classList.toggle('no-grp', !on);
-    if (!on) { col.replaceChildren(); return; }
-    col.replaceChildren(...curCat().groups.map((g, i) => h('button', {
-        class: 'nav-item' + (i === S.grp ? ' cur' : ''), type: 'button',
-        onclick: () => { S.grp = i; S.zone = 'grps'; refreshSettings(true); },
-    }, h('span', {}, L(g.label)))));
-    const cur = col.querySelector('.cur');
-    if (cur) cur.scrollIntoView({ block: 'nearest' });
+// Başlık: GAMESETTINGS // GRAPHICS (ilk sözcük kalın, kalanı ince)
+const renderTitle = () => {
+    const [a, b] = pair(S.scope === 'ui' ? 'ui' : 'game');
+    const page = S.query ? t('search_title') : (curCat() ? L(curCat().label) : '');
+    const [p1, p2] = splitTwo(page);
+    setKids($('#sTitle'), h('b', {}, a), b ? h('i', {}, b) : null, h('span', { class: 'sl' }, '//'), h('b', {}, p1), p2 ? h('i', {}, p2) : null);
+};
+
+const pageIds = () => {
+    const ids = [];
+    if (S.query || !curCat()) return ids;
+    for (const g of curCat().groups) for (const r of g.rows) {
+        if (r.id && (r.type === 'toggle' || r.type === 'select' || r.type === 'slider') && entryVisible(r)) ids.push(r.id);
+    }
+    return ids;
 };
 
 const renderRows = (resetScroll) => {
@@ -567,52 +610,82 @@ const renderRows = (resetScroll) => {
     const prev = list.scrollTop;
     S.entries = buildEntries();
     if (S.row >= S.entries.length) S.row = Math.max(0, S.entries.length - 1);
-
-    const crumb = $('#crumb');
-    if (S.query) crumb.replaceChildren(`${S.entries.length} ${t('hint_search').toLowerCase()}`);
-    else if (curCat()) crumb.replaceChildren(h('b', {}, L(curCat().label)), curGrp() && curCat().groups.length > 1 ? ` › ${L(curGrp().label)}` : '');
-
-    if (!S.entries.length) list.replaceChildren(h('div', { class: 'empty' }, t('no_results')));
-    else list.replaceChildren(...S.entries.map((e, i) => buildRow(e, i)));
+    renderTitle();
+    list.replaceChildren(...(S.entries.length ? S.entries.map((e, i) => buildRow(e, i)) : [h('div', { class: 'gs-empty' }, t('no_results'))]));
     list.scrollTop = resetScroll ? 0 : prev;
+    $('#gsRestore').classList.toggle('hidden', pageIds().length === 0);
+    paintNote();
 };
 
 const paintZones = () => {
     $('#colCats').classList.toggle('active', S.zone === 'cats');
-    $('#colGrps').classList.toggle('active', S.zone === 'grps');
+    paintNote();
 };
 
 const refreshSettings = (resetScroll) => {
     if (resetScroll) { S.entries = buildEntries(); S.row = firstSelectable(); }
-    renderCats(); renderGroups(); renderRows(resetScroll); paintZones();
+    renderOpts(); renderRows(resetScroll); paintZones();
 };
 
 const scrollSelected = () => {
-    const el = $('#rowsList .row.sel');
+    const el = $('#rowsList .gs-row.sel');
     if (el) el.scrollIntoView({ block: 'nearest' });
 };
 
-// scope: 'game' → tüm ayar kategorileri (Tercihler hariç), 'ui' → yalnızca Tercihler (arayüz görünümü)
-const scopeSchema = (scope) => S.allSchema.filter(c => (scope === 'ui' ? c.id === 'prefs' : c.id !== 'prefs'));
+// scope: 'game' → tüm ayar kategorileri (Tercihler hariç), 'ui' → Tercihler'in grupları ayrı sayfalar olarak
+const scopeSchema = (scope) => {
+    if (scope === 'ui') {
+        const prefs = S.allSchema.find(c => c.id === 'prefs');
+        return prefs ? prefs.groups.map(g => ({ id: 'prefs.' + g.id, label: g.label, groups: [g] })) : [];
+    }
+    return S.allSchema.filter(c => c.id !== 'prefs');
+};
+
+// Seçili ana menü maddesinden OPTIONS sütununa uzanan ince çizgi (videodaki gibi)
+const placeLine = () => {
+    const line = $('#gsLine');
+    const lbl = document.querySelector('.pm-item.sel .lbl');
+    if (!lbl || S.screen !== 'settings') { line.classList.add('hidden'); return; }
+    const r = lbl.getBoundingClientRect();
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const left = r.right + 0.7 * rem;
+    const right = $('#colCats').getBoundingClientRect().left - 1.4 * rem;
+    line.classList.toggle('hidden', right - left < 8);
+    line.style.left = `${left}px`; line.style.width = `${Math.max(0, right - left)}px`; line.style.top = `${r.top + r.height / 2}px`;
+};
+window.addEventListener('resize', () => { if (S.screen === 'settings') placeLine(); });
 
 const openSettings = (scope = 'game') => {
     S.scope = scope; S.schema = scopeSchema(scope);
-    S.cat = 0; S.grp = 0; S.row = 0; S.query = ''; q.value = '';
-    S.zone = hasCatCol() ? 'cats' : (hasGroupCol() ? 'grps' : 'rows');
-    $('#sTitle').textContent = t(scope === 'ui' ? 'ui_title' : 'game_title');
+    S.cat = 0; S.row = 0; S.query = ''; q.value = '';
+    S.zone = 'cats';
+    const idx = S.menu.findIndex(m => m.id === scope);
+    if (idx >= 0) setMainIdx(idx);
     showScreen('settings');
     refreshSettings(true);
-    if (S.zone === 'rows') paintZones();
+    placeLine();
 };
+
+// Bu sayfadaki ayarları varsayılana döndürür (yalnızca şemadaki id'ler; Lua yeniden doğrular)
+const restoreDefaults = () => openModal({
+    title: t('restore_title'), text: t('restore_text'),
+    buttons: [
+        { label: t('cancel'), kind: 'ghost', cancel: true },
+        { label: t('restore_yes'), onClick: async () => {
+            const res = await post('restore', { ids: pageIds() });
+            if (res && res.values) { Object.assign(S.values, res.values); applyPrefs(); renderAll(); toast(t('msg_restored')); }
+        } },
+    ],
+});
 
 /* ============================================================ GERİ / NAVİGASYON */
 const goBack = () => {
     if (S.modal) { closeModal(); return; }
     if (S.screen === 'page') { showScreen('main'); return; }
     if (S.screen !== 'settings') return;
+    q.blur();
     if (S.query) { S.query = ''; q.value = ''; S.zone = 'rows'; refreshSettings(true); return; }
-    if (S.zone === 'rows' && (hasGroupCol() || hasCatCol())) { S.zone = hasGroupCol() ? 'grps' : 'cats'; renderRows(); paintZones(); return; }
-    if (S.zone === 'grps' && hasCatCol()) { S.zone = 'cats'; renderRows(); paintZones(); return; }
+    if (S.zone === 'rows' || S.zone === 'search') { S.zone = 'cats'; renderRows(); paintZones(); return; }
     showScreen('main');
 };
 
@@ -651,8 +724,9 @@ const openModal = ({ title, text, buttons }) => {
     $('#modalText').textContent = text;
     modalEl.classList.remove('hidden');
     renderModal();
+    syncSub();
 };
-const closeModal = () => { S.modal = null; modalEl.classList.add('hidden'); };
+const closeModal = () => { S.modal = null; modalEl.classList.add('hidden'); syncSub(); };
 const runModalButton = (b) => { closeModal(); if (b.onClick) b.onClick(); };
 
 let toastTimer = null;
@@ -669,7 +743,11 @@ const onKey = (ev) => {
     if (!S.open) return;
     const k = ev.key;
 
-    if (k === 'Escape') { ev.preventDefault(); post('close'); return; }
+    if (k === 'Escape') {
+        ev.preventDefault();
+        if (S.modal) closeModal(); else if (S.screen !== 'main') goBack(); else post('close');   // ESC = bir adım geri; ana listede menüyü kapatır
+        return;
+    }
 
     if (S.modal) {
         const m = S.modal;
@@ -708,15 +786,9 @@ const onKey = (ev) => {
     if (S.zone === 'cats') {
         if (k === 'ArrowUp' || k === 'ArrowDown') {
             S.cat = (S.cat + (k === 'ArrowDown' ? 1 : -1) + S.schema.length) % S.schema.length;
-            S.grp = 0; refreshSettings(true);
-        } else if (k === 'ArrowRight' || k === 'Enter') {
-            if (hasGroupCol()) { S.zone = 'grps'; paintZones(); } else enterRows();
-        } else return;
-    } else if (S.zone === 'grps') {
-        const n = curCat().groups.length;
-        if (k === 'ArrowUp' || k === 'ArrowDown') { S.grp = (S.grp + (k === 'ArrowDown' ? 1 : -1) + n) % n; refreshSettings(true); S.zone = 'grps'; paintZones(); }
-        else if (k === 'ArrowRight' || k === 'Enter') enterRows();
-        else if (k === 'ArrowLeft' && hasCatCol()) { S.zone = 'cats'; paintZones(); }
+            refreshSettings(true);
+        } else if (k === 'ArrowRight' || k === 'Enter') enterRows();
+        else if (k === 'ArrowLeft') goBack();
         else return;
     } else {
         const e = S.entries[S.row];
@@ -746,9 +818,8 @@ const renderAll = () => {
     if (S.screen === 'page') renderPage();
 };
 
-$('#sBack').addEventListener('click', goBack);
+$('#gsRestore').addEventListener('click', restoreDefaults);
 $('#pBack').addEventListener('click', goBack);
-$('#sClose').addEventListener('click', () => post('close'));
 $('#pClose').addEventListener('click', () => post('close'));
 modalEl.addEventListener('click', (ev) => { if (ev.target === modalEl) closeModal(); });
 document.querySelectorAll('[data-i]').forEach(el => { el.innerHTML = window.icon(el.dataset.i); });
@@ -773,6 +844,7 @@ const onOpen = (d) => {
     S.health = d.health || { known: false, conditions: [] };
     S.mainIdx = 0; S.cat = 0; S.grp = 0; S.row = 0; S.zone = 'cats'; S.query = ''; q.value = '';
     S.scope = 'game'; S.schema = scopeSchema('game');
+    S.subSent = false;
     closeModal();
     applyPrefs();
     showScreen('main');

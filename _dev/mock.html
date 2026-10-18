@@ -28,13 +28,13 @@
         'aim.mode': 'game', 'cam.foot': 'game', 'cam.vehicle': 'game', 'cam.cinematic': true,
         'disp.radar': true, 'disp.reticle': true, 'disp.gps': true, 'audio.vehradio': true, 'gfx.lod': 1.0,
         'voice.radio': 60, 'voice.call': 60, 'voice.clicks': true, 'voice.click_on': 10, 'voice.click_off': 3,
-        'pref.accent': params.get('accent') || 'white', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
+        'pref.accent': params.get('accent') || 'crimson', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
         'pref.lang': params.get('lang') || 'en', 'pref.mapReturn': true, 'menu.native': false,
     };
-    const defaults = { 'pref.accent': 'white', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'en', 'pref.mapReturn': true };
+    const defaults = { 'pref.accent': 'crimson', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'en', 'pref.mapReturn': true };
     const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
                    'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:loe_hud_photomode': 't_F11', 'm:aractuslari': 't_F7', 'm:loecik': 't_F6', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
-    const menu = ['resume', 'map', 'game', 'ui', 'position', 'quit'].map(id => ({ id, available: true, soon: id === 'position' }));
+    const menu = ['resume', 'game', 'ui', 'position', 'quit'].map(id => ({ id, available: true, soon: id === 'position' }));
     const stats = { id: 2, name: 'Mark Smith', cid: 'LOE48213', job: 'LSPD', grade: 'Lieutenant', cash: 0, bank: 27640295 };
     // ?links=0 → bağlantı yok (adresler boş) ; varsayılan: üç örnek bağlantı
     const links = params.get('links') === '0' ? [] : [{ id: 'youtube', label: 'YouTube', url: 'https://example.com/yt' }, { id: 'store', label: 'Store', url: 'https://example.com/store' }, { id: 'discord', label: 'Discord', url: 'https://example.com/dc' }];
@@ -69,6 +69,8 @@
         native: (b) => { console.log('[mock] native menu →', b.target); return { ok: true }; },
         menu: (b) => ({ ok: true, page: b.id === 'stats' ? 'stats' : (b.id === 'settings' ? 'settings' : (['battlepass', 'shop'].includes(b.id) ? 'soon' : undefined)) }),
         quit: (b) => { console.log('[mock] quit', b.mode); return { ok: true }; },
+        sub: (b) => { console.log('[mock] sub', b.on); return { ok: true }; },
+        restore: (b) => { console.log('[mock] restore', b.ids.join(',')); b.ids.forEach(id => { if (id in defaults) values[id] = defaults[id]; }); return { ok: true, values: { ...values } }; },
     };
 
     const realFetch = window.fetch.bind(window);

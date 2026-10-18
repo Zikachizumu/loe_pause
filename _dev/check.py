@@ -236,7 +236,7 @@ check(lua_to_py(pl.eval('Prefs.values')) == {}, 'çözülemeyen KVP boş sonuç 
 kvp['loe_pause:prefs:v1'] = json.dumps({'pref.lang': 'tr', 'pref.accent': 'blue', 'pref.dark': False, 'pref.mapReturn': True, 'aim.mode': 'free'})
 kvp.pop('loe_pause:migrated:ui-reset-v1', None)
 pl.execute('Prefs.values = {}; Prefs.load()')
-check(pl.eval("Prefs.get('pref.lang')") == 'en' and pl.eval("Prefs.get('pref.accent')") == 'white'
+check(pl.eval("Prefs.get('pref.lang')") == 'en' and pl.eval("Prefs.get('pref.accent')") == 'crimson'
       and pl.eval("Prefs.get('pref.dark')") is True and pl.eval("Prefs.get('pref.mapReturn')") is False, 'sıfırlama: arayüz tercihleri varsayılana dönmeli')
 check(pl.eval("Prefs.get('aim.mode')") == 'free', 'sıfırlama: oyun ayarları (aim.mode) korunmalı')
 check(kvp.get('loe_pause:migrated:ui-reset-v1') == '1', 'sıfırlama: işaret yazılmalı')
@@ -247,7 +247,7 @@ pl.execute("Prefs.values = {}; Prefs.flush()")
 
 pl.execute("Prefs.values = {}; Prefs.set('pref.accent', 'red'); Prefs.set('pref.dark', false)")
 pl.execute("Prefs.reset({'pref.accent', 'pref.dark'})")
-check(pl.eval("Prefs.get('pref.accent')") == 'white' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
+check(pl.eval("Prefs.get('pref.accent')") == 'crimson' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
 check(pl.eval("Prefs.get('pref.lang')") == 'en', "varsayılan dil 'en' olmalı")
 check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık olmalı')
 
@@ -255,7 +255,7 @@ check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık o
 pl.execute("Config.Defaults['pref.accent'] = 'blue'")
 check(pl.eval("Prefs.default('pref.accent')") == 'blue', 'Config.Defaults uygulanmalı')
 pl.execute("Config.Defaults['pref.accent'] = 'invalid'")
-check(pl.eval("Prefs.default('pref.accent')") == 'white', 'geçersiz Config.Defaults yok sayılmalı')
+check(pl.eval("Prefs.default('pref.accent')") == 'crimson', 'geçersiz Config.Defaults yok sayılmalı')
 
 # ------------------------------------------------------------------ 4) ana döngü simülasyonu
 print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
@@ -593,6 +593,43 @@ check(next(sim.lastOpen().caps) == nil, 'S10: oyuncu çıkınca yetki silinmeli'
 sim.exported.Close(); sim.frames(700)
 
 setMapItem(false)   -- varsayılan: MAP menüde yok, harita yalnızca M ile
+
+-- S14: Game/UI Settings alt ekranı — ESC menüyü KAPATMAZ (arayüz bir adım geri döner); "Restore defaults" yalnızca şemadaki id'leri sıfırlar
+sim.frames(700)
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S14: menü açılmalı')
+sim.frames(400)
+check(sim.nui('sub', { on = 'evet' }) ~= nil, 'S14: sub callback çökmemeli')
+sim.nui('sub', { on = true })
+sim.escFrame = true; sim.step(16); sim.frames(300)
+check(isOpen() == true, 'S14: alt ekrandayken ESC menüyü kapatmamalı')
+sim.pause = true; sim.frames(64)                              -- ESC'nin sızdırdığı yerleşik duraklatma menüsü de kapatmamalı, yalnızca söndürülmeli
+check(isOpen() == true and sim.pause == false, 'S14: alt ekranda sızan duraklatma menüsü söndürülmeli, LOE menüsü açık kalmalı')
+sim.nui('sub', { on = false })
+sim.frames(100); sim.escFrame = true; sim.step(16); sim.frames(300)
+check(isOpen() == false, 'S14: ana listedeyken ESC menüyü kapatmalı')
+sim.pause = true; sim.frames(64)
+sim.nui('sub', { on = true }); sim.exported.Close(); sim.frames(100)
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S14: yeniden açılışta alt ekran bilgisi sıfırlanmış olmalı')
+sim.frames(400)
+sim.escFrame = true; sim.step(16); sim.frames(300)
+check(isOpen() == false, 'S14: yeni açılışta ESC yine menüyü kapatmalı')
+
+-- Restore defaults
+sim.frames(700)
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S14: menü açılmalı (restore)')
+Prefs.set('voice.radio', 85); Prefs.set('aim.mode', 'free')
+local rr = sim.nui('restore', { ids = { 'voice.radio', 'zzz.yok', 5, 'menu.opennative', 'aim.mode' } })
+check(rr and rr.ok == true and rr.values['voice.radio'] == 60 and rr.values['aim.mode'] == 'game', 'S14: restore yalnızca geçerli id\'leri varsayılana döndürmeli')
+check(Prefs.get('voice.radio') == 60 and Prefs.get('aim.mode') == 'game', 'S14: restore kalıcı değeri de sıfırlamalı')
+Prefs.set('disp.radar', false)
+local ro = sim.nui('restore', { ids = { 'disp.reticle' } })
+check(ro.ok == true and Prefs.get('disp.radar') == false, 'S14: restore listede olmayan ayarlara dokunmamalı')
+Prefs.reset({ 'disp.radar' })
+check(sim.nui('restore', { ids = { 'zzz.yok', 7 } }).ok == false and sim.nui('restore', { ids = 'x' }).ok == false and sim.nui('restore', {}).ok == false, 'S14: geçersiz restore istekleri reddedilmeli')
+sim.exported.Close(); sim.frames(700)
 -- S11: M tuşu (loe_bigmap) → menüsüz doğrudan büyük harita; aynı tuş / ESC kapatır; LOE menüsü geri gelmez
 check(type(sim.commands.loe_bigmap) == 'function', 'S11: loe_bigmap komutu kayıtlı olmalı')
 Prefs.set('pref.mapReturn', true)                            -- dönüş tercihi AÇIK olsa bile tuştan açılan harita menüye dönmemeli
