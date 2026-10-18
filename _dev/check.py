@@ -289,11 +289,6 @@ function IsPauseMenuActive() return S.pause end
 function SetFrontendActive(v) if not v then S.pause = false end end
 function SetPauseMenuActive(v) if not v then S.pause = false end end
 function IsDisabledControlJustPressed(_, c) return S.escFrame and (c == 200) end
-function IsDisabledControlJustReleased(_, c) return S.clickFrame and c == 237 end
-function GetDisabledControlNormal(_, c) if c == 239 then return S.cx or 0.0 elseif c == 240 then return S.cy or 0.0 end return 0.0 end
-function GetControlNormal() return 0.0 end
-function PlayerPedId() return 1 end
-function GetEntityCoords() return { x = 0.0, y = 0.0, z = 0.0 } end
 function IsControlJustPressed(g, c) return S.escFrame and g == 0 and c == 200 end
 function ActivateFrontendMenu()
     S.calls.Activate = (S.calls.Activate or 0) + 1
@@ -333,7 +328,6 @@ function sim.step(ms)
         end
     end
     S.escFrame = false
-    S.clickFrame = false
 end
 function sim.frames(ms) for _ = 1, math.ceil(ms / 16) do sim.step(16) end end
 function sim.lastOpen() local l; for _, m in ipairs(S.msgs) do if m.action == 'open' then l = m end end return l end
@@ -672,83 +666,6 @@ check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
-
--- S13: büyük harita arama paneli (blip taraması, arama modu odağı, ESC çakışması, GPS seçimi)
-local function lastMsg(action) local l; for _, m in ipairs(sim.msgs) do if m.action == action then l = m end end return l end
-local function countMsg(action, show) local n = 0; for _, m in ipairs(sim.msgs) do if m.action == action and (show == nil or m.show == show) then n = n + 1 end end return n end
-local world = { [361] = { { 1, 100.0, 200.0 }, { 2, 300.0, 400.0 } }, [61] = { { 3, 0.0, 0.0 }, { 4, -1500.0, 800.0 } }, [60] = { { 5, 441.2, -981.9 } } }
-local cursor, byBlip, wp = {}, {}, nil
-for sprite, l in pairs(world) do for _, e in ipairs(l) do byBlip[e[1]] = { sprite = sprite, x = e[2], y = e[3] } end end
-GetFirstBlipInfoId = function(sprite) local l = world[sprite]; cursor[sprite] = 1; return l and l[1][1] or 0 end
-GetNextBlipInfoId = function(sprite) local l = world[sprite]; if not l then return 0 end cursor[sprite] = (cursor[sprite] or 1) + 1; local e = l[cursor[sprite]]; return e and e[1] or 0 end
-DoesBlipExist = function(b) return byBlip[b] ~= nil end
-GetBlipInfoIdDisplay = function() return 2 end
-GetBlipAlpha = function() return 255 end
-DoesEntityExist = function() return false end
-GetBlipInfoIdEntityIndex = function() return 0 end
-GetBlipInfoIdCoord = function(b) local e = byBlip[b]; return { x = e.x, y = e.y, z = 0.0 } end
-GetLabelText = function(l) if l == 'BLIP_61' then return 'Hospital' elseif l == 'BLIP_60' then return 'Police Station' end return 'NULL' end
-SetNewWaypoint = function(x, y) wp = { x = x, y = y } end
-
-sim.frames(700)
-sim.commands.loe_bigmap(); sim.frames(1500)
-check(sim.pause == true, 'S13: harita açılmalı')
-local mp = lastMsg('mapPanel')
-check(mp and mp.show == true and #mp.items == 4, 'S13: panel 4 yerle açılmalı (sıfır nokta atlanır): ' .. tostring(mp and #mp.items))
-check(mp.items[1].n == 'Gas Station' and mp.items[1].d == 223 and mp.items[2].d == 500 and mp.items[3].n == 'Hospital' and mp.items[4].n == 'Police Station',
-    'S13: adlar / mesafeler / ada göre sıralama doğru olmalı')
-check(mp.items[1].x == nil and mp.items[1].y == nil and mp.items[1].z == nil, 'S13: koordinat arayüze gitmemeli')
-check(mp.geo and mp.geo.left == 0.76 and mp.key ~= nil, 'S13: panel bölgesi ve tuş bilgisi iletilmeli')
-check(sim.nuiFocus == false, 'S13: panel ilk başta odak almamalı (harita sürüklenebilir kalsın)')
-check(sim.nui('mapPick', { id = 1 }).ok == false, 'S13: arama modu dışında seçim reddedilmeli')
-
-sim.cx, sim.cy = 0.3, 0.5; sim.clickFrame = true; sim.step(16); sim.frames(100)
-check(sim.nuiFocus == false, 'S13: panel dışına tıklama odak almamalı')
-sim.cx, sim.cy = 0.9, 0.5; sim.clickFrame = true; sim.step(16); sim.frames(100)
-check(sim.nuiFocus == true and lastMsg('mapFocus').on == true, 'S13: panele tıklayınca arama modu açılmalı')
-
-sim.escFrame = true; sim.step(16); sim.frames(800)
-check(sim.pause == true, 'S13: arama modundaki ESC haritayı kapatmamalı')
-check(sim.nui('mapPick', { id = 99 }).ok == false and sim.nui('mapPick', { id = 'x' }).ok == false and sim.nui('mapPick', {}).ok == false and sim.nui('mapPick', 'z').ok == false,
-    'S13: geçersiz kimlikler reddedilmeli')
-check(wp == nil, 'S13: reddedilen seçim GPS kurmamalı')
-local pick = sim.nui('mapPick', { id = 3, x = 1.0, y = 2.0 })
-check(pick.ok == true and pick.name == 'Hospital', 'S13: geçerli seçim kabul edilmeli')
-check(wp and wp.x == -1500.0 and wp.y == 800.0, 'S13: GPS yalnızca Lua tarafındaki koordinata kurulmalı (arayüzden gelen x/y yok sayılır)')
-check(sim.nuiFocus == false and lastMsg('mapFocus').on == false, 'S13: seçimden sonra arama modu bitmeli')
-check(sim.pause == true, 'S13: seçimden sonra harita açık kalmalı')
-
-sim.escFrame = true; sim.step(16); sim.frames(100)
-check(sim.pause == true, 'S13: arama modundan çıkışın hemen ardındaki (sızan) ESC haritayı kapatmamalı')
-sim.frames(700)
-sim.commands.loe_mapsearch(); sim.frames(50)
-check(sim.nuiFocus == true, 'S13: loe_mapsearch arama modunu açmalı')
-sim.commands.loe_bigmap(); sim.frames(600)
-check(sim.pause == true and sim.nuiFocus == true, 'S13: arama modundayken M haritayı kapatmamalı')
-sim.commands.loe_mapsearch(); sim.frames(50)
-check(sim.nuiFocus == false, 'S13: loe_mapsearch tekrar basınca modu kapatmalı')
-check(sim.nui('mapSearchExit').ok == true, 'S13: odak yokken mapSearchExit zararsız olmalı')
-
-sim.frames(700)
-sim.escFrame = true; sim.step(16); sim.frames(1500)
-check(sim.pause == false, 'S13: ESC haritayı kapatmalı')
-check(lastMsg('mapPanel').show == false, 'S13: harita kapanınca panel gizlenmeli')
-
-sim.frames(700)
-sim.commands.loe_bigmap(); sim.frames(1500)
-sim.commands.loe_mapsearch(); sim.frames(50)
-check(sim.nuiFocus == true, 'S13: ikinci açılışta da arama modu açılmalı')
-sim.pause = false; sim.frames(1500)                         -- harita beklenmedik biçimde kapandı
-check(sim.nuiFocus == false and lastMsg('mapPanel').show == false, 'S13: harita kapanınca odak serbest kalmalı, panel gizlenmeli')
-
-sim.frames(700)
-Config.MapSearch.enabled = false
-local shows = countMsg('mapPanel', true)
-sim.commands.loe_bigmap(); sim.frames(1500)
-check(sim.pause == true and countMsg('mapPanel', true) == shows, 'S13: enabled=false iken panel açılmamalı')
-sim.escFrame = true; sim.step(16); sim.frames(1500)
-Config.MapSearch.enabled = true
-sim.frames(700)
 return R
 '''
 

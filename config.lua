@@ -63,22 +63,6 @@ Config.MapResource = { resource = 'loe_3dmap', open = 'Open', isOpen = 'IsOpen' 
 Config.MapCommand = 'loe_bigmap'
 Config.MapKey     = 'M'
 
--- Büyük harita arama paneli: M ile açılan haritanın sağında kendi panelimiz (üstte arama kutusu, altta haritadaki işaretlerin listesi).
--- GTA'nın kendi sağ listesi (Legend) script'ten değiştirilemez; bu panel onu örter. Haritadaki işaretlere (blip) DOKUNULMAZ: yalnızca okunur,
--- konumları ve görünümleri olduğu gibi kalır. Listeden bir yere tıklamak oraya GPS (waypoint) kurar.
--- Yazmak/tıklamak için NUI odağı gerekir; odak varken oyun fare girişini almaz (harita sürüklenemez). Bu yüzden panel yalnızca
--- "arama modunda" odak alır: key tuşu ya da panele tıklama ile girilir; ESC veya panel dışına tıklama ile çıkılır (harita yine sürüklenir).
-Config.MapSearch = {
-    enabled       = true,
-    key           = 'F',                 -- arama moduna geç / çık (FiveM tuş ayarlarından değiştirilebilir); boş = tuş kaydedilmez
-    maxSprite     = 900,                 -- taranan en büyük blip sprite numarası
-    maxItems      = 600,                 -- listedeki en çok yer sayısı
-    ignoreSprites = { [1] = true, [8] = true, [9] = true },   -- boş nokta, waypoint, yarıçap alanı
-    spriteNames   = { [361] = 'Gas Station' },                -- GXT etiketi ('BLIP_<sprite>') yoksa/istenmiyorsa ad
-    fallbackName  = 'Point of interest',
-    panel         = { left = 0.76, right = 0.98, top = 0.06, bottom = 0.94 },   -- panelin kapladığı alan (ekranın oranı 0..1); tıklama bölgesi de budur
-}
-
 -- İstatistik sayfasındaki "Sağlık" kartı: hastalık sistemi loe_jobcreator'dadır. Menü o resource'a dokunmaz; yalnızca sunucunun
 -- bu oyuncuya zaten gönderdiği durum olayını dinler (resource/olay adları değişirse buradan güncelle).
 Config.Health = {
