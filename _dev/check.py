@@ -767,6 +767,50 @@ for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sflog' then chun
 check(sim.encoded and sim.encoded.patched == true and sim.encoded.navGroup == 2, 'S15: yama algılanmalı, çalışan girdi grubu 2 bulunmalı')
 check(table.concat(chunks) == fake.all and fake.buf == '', 'S15: scaleform kaydı sırayla ve eksiksiz okunmalı')
 check(LoeProbe.active == false and sim.pause == false, 'S15: yamalı testten sonra her şey kapanmalı')
+-- /loe_gfxpath: AS2 yolu okuma — sahte oyun: yalnızca "currentPage.columnList.1" tabanında 2 satır var
+local resp = {
+    ['currentPage.dbgID.toString'] = 'PAUSE_MENU_PAGES_SETTINGS',
+    ['currentPage.columnList.1.model.viewList.0.dataList.0.join'] = '0|1|10|2|0|1|Texture Quality|High',
+    ['currentPage.columnList.1.model.viewList.0.dataList.1.join'] = '1|1|11|2|2|1|Shadow Quality|Normal',
+}
+local seq = {}
+BeginScaleformMovieMethodOnFrontend = function(path) fake.last = { name = path, params = {} }; return true end
+ScaleformMovieMethodAddParamTextureNameString = function(v) fake.last.sep = v end
+local hn = 1000
+local hv = {}
+EndScaleformMovieMethodReturnValue = function()
+    hn = hn + 1
+    hv[hn] = resp[fake.last.name]
+    seq[hn] = fake.last
+    return hn
+end
+IsScaleformMovieMethodReturnValueReady = function(h) return hv[h] ~= nil end
+GetScaleformMovieMethodReturnValueString = function(h) return hv[h] end
+SetControlValueNextFrame = function() end
+sim.latent, sim.encoded = nil, nil
+sim.frames(800)
+sim.commands['loe_gfxpath']()
+check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: gfxpath önce sunucudan yetki istemeli')
+sim.fire('loe_pause:client:gfxprobeGo', 'path', true)
+sim.frames(90000)
+local rowEvents, pathEvents, discovered = {}, 0, false
+for _, e in ipairs((sim.encoded or {}).log or {}) do
+    if e.k == 'rows' then rowEvents[#rowEvents + 1] = e end
+    if e.k == 'path' then
+        pathEvents = pathEvents + 1
+        if e.p == 'currentPage.dbgID.toString' and e.s == 'PAUSE_MENU_PAGES_SETTINGS' then discovered = true end
+    end
+end
+check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData == 15, 'S15: gfxpath 15 adımın tamamında veri bulmalı')
+check(#rowEvents == 15 and rowEvents[1].base == 'currentPage.columnList.1' and rowEvents[1].n == 2
+      and rowEvents[1].rows[1] == resp['currentPage.columnList.1.model.viewList.0.dataList.0.join'], 'S15: gfxpath satırları doğru tabandan okumalı')
+check(discovered and pathEvents >= 17, 'S15: gfxpath keşif yolları kaydedilmeli')
+local sepOk = false
+for _, c in pairs(seq) do if c.name:find('dataList.0.join', 1, true) and c.sep == '|' then sepOk = true end end
+check(sepOk, 'S15: satır okumaları "|" ayırıcıyla istenmeli')
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: gfxpath bitince menü kapanmalı')
+BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamTextureNameString, EndScaleformMovieMethodReturnValue = nil, nil, nil
+IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString, SetControlValueNextFrame = nil, nil, nil
 BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethodReturnValue = nil, nil, nil
 IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString, SetControlValueNextFrame = nil, nil, nil
 
@@ -906,6 +950,7 @@ check(ASK(11, 100, True, 'record') == n1 + 1, 'sunucu: gfxprobe yetki isteği 3 
 check(ASK(11, 3500, True, 'record') == n1 + 2 and lua_to_py(sv.eval('sent[#sent]')).get('allowed') is True
       and lua_to_py(sv.eval('sent[#sent].list')) == 'record', 'sunucu: admin oyuncuya izin verilmeli')
 check(ASK(11, 3500, True, 'evil') == n1 + 3 and lua_to_py(sv.eval('sent[#sent].list')) == 'auto', 'sunucu: bilinmeyen mod auto olmalı')
+check(ASK(11, 3500, True, 'path') == n1 + 4 and lua_to_py(sv.eval('sent[#sent].list')) == 'path', 'sunucu: path modu kabul edilmeli')
 check(PUT(12, 0, False, '{"a":1}') == 0, 'sunucu: yetkisiz oyuncunun sonucu kaydedilmemeli')
 check(PUT(12, 0, True, '{"a":1}') == 1, 'sunucu: admin sonucu kaydedilmeli')
 sv1 = lua_to_py(sv.eval('saved[1]'))
@@ -921,18 +966,11 @@ check(PUT(12, 20000, True, '{"d":1}') == 2 and ASK(13, 0, True, 'auto') and lua_
 sv.execute('Config.GfxProbe.enabled = true')
 
 
-# ------------------------------------------------------------------ 6) GEÇİCİ: yamalı scaleform dosyası
-print('[6] Yamalı pause menü içerik filmi (stream_enhanced)')
+# ------------------------------------------------------------------ 6) GEÇİCİ: scaleform araçları
+print('[6] Scaleform araçları (_dev/gfx)')
 import subprocess  # noqa: E402
-check(not (ROOT / 'stream').exists(), "stream/ klasörü olmamalı (FiveM Enhanced için stream_enhanced/ ister)")
-gfx = ROOT / 'stream_enhanced/pause_menu_sp_content.gfx'
-check(gfx.exists(), 'stream_enhanced/pause_menu_sp_content.gfx yok')
-if gfx.exists():
-    spec_g = importlib.util.spec_from_file_location('patch_gfx', ROOT / '_dev/gfx/patch_gfx.py')
-    pgx = importlib.util.module_from_spec(spec_g); spec_g.loader.exec_module(pgx)
-    raw = gfx.read_bytes()
-    check(raw[:3] == b'GFX' and struct.unpack_from('<I', raw, 4)[0] == len(raw), 'GFX başlığı: imza ve dosya uzunluğu tutmalı')
-    check(pgx.tag_bytes(12, pgx.build_hook()) in raw, 'dosyada güncel kanca bytecode\'u bulunmalı (patch_gfx.py ile yeniden üret)')
+check(not (ROOT / 'stream').exists() and not (ROOT / 'stream_enhanced').exists(),
+      'Yamalı scaleform dosyası dağıtımda olmamalı (FiveM Enhanced base-asset geçersiz kılmayı yok sayıyor)')
 vr = subprocess.run([sys.executable, str(ROOT / '_dev/gfx/verify_hook.py')], capture_output=True, text=True, encoding='utf-8')
 check(vr.returncode == 0, 'AS2 kanca doğrulayıcısı: ' + (vr.stdout + vr.stderr).strip()[-300:])
 

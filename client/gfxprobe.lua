@@ -503,6 +503,115 @@ local function runRecord()
     send('record', { reason = reason, patched = patched })
 end
 
+-- ---------------------------------------------------------------- /loe_gfxpath: yamasız okuma (AS2 yolu)
+-- Oyun scaleform metodlarını "TIMELINE.<ad>" yolundan çağırır. Yola oyunun kendi AS2 nesnelerini (veri modeli) yazıp
+-- sonu bir dize/dizi metoduyla (join, toString) bitirirsek metod DEĞERİ döner → oyunun tuttuğu ayar satırlarını okuruz.
+-- Satır verisi: [0 index, 1 menuID, 2 uniqueID, 3 type, 4 initialIndex, 5 isSelectable, 6.. etiket ve seçenek metinleri]
+local function sfRead(path, sep)
+    local okB, started = pcall(BeginScaleformMovieMethodOnFrontend, path)
+    if not okB then return nil, nil, 'ERR ' .. tostring(started) end
+    if not started then return nil, nil, 'begin-false' end
+    if sep then pcall(ScaleformMovieMethodAddParamTextureNameString, sep) end
+    local okE, h = pcall(EndScaleformMovieMethodReturnValue)
+    if not okE or type(h) ~= 'number' then return nil, nil, 'end' end
+    local t = GetGameTimer()
+    while GetGameTimer() - t < 250 do
+        local okR, r = pcall(IsScaleformMovieMethodReturnValueReady, h)
+        if okR and r then
+            local o1, str = pcall(GetScaleformMovieMethodReturnValueString, h)
+            local o2, int = pcall(GetScaleformMovieMethodReturnValueInt, h)
+            return o1 and str or nil, o2 and int or nil, 'ok'
+        end
+        tick(); Wait(0)
+    end
+    return nil, nil, 'timeout'
+end
+
+local PATH_DISCOVER = {
+    'currentPage.dbgID.toString',
+    'currentPage.columnList.join',
+    'currentPage.columnList.0.dbgID.toString',
+    'currentPage.columnList.1.dbgID.toString',
+    'currentPage.columnList.2.dbgID.toString',
+    'columnList.join',
+    'columnList.0.dbgID.toString',
+    'columnList.1.dbgID.toString',
+    'currentPage.columnList.0.model.viewList.join',
+    'currentPage.columnList.1.model.viewList.join',
+    'currentPage.columnList.0.model.viewList.0.dataList.join',
+    'currentPage.columnList.1.model.viewList.0.dataList.join',
+    'currentPage.columnList.2.model.viewList.0.dataList.join',
+    'columnList.0.model.viewList.0.dataList.join',
+    'columnList.1.model.viewList.0.dataList.join',
+    'menuState.toString',
+    'menuLevel.toString',
+}
+
+local PATH_BASES = {
+    'currentPage.columnList.0', 'currentPage.columnList.1', 'currentPage.columnList.2',
+    'columnList.0', 'columnList.1', 'columnList.2',
+}
+
+local function rowsPath(base, r) return base .. '.model.viewList.0.dataList.' .. r .. '.join' end
+
+local function findBase(prefer)
+    local list = { prefer }
+    for _, b in ipairs(PATH_BASES) do if b ~= prefer then list[#list + 1] = b end end
+    for _, b in ipairs(list) do
+        local s = sfRead(rowsPath(b, 0), '|')
+        if type(s) == 'string' and s ~= '' then return b end
+    end
+end
+
+local function readRows(base)
+    local rows = {}
+    for r = 0, 59 do
+        local s = sfRead(rowsPath(base, r), '|')
+        if s == nil then break end
+        rows[#rows + 1] = s
+    end
+    return rows
+end
+
+local function runPath()
+    begin()
+    info('start')
+    phase('open')
+    if not openSettings() then
+        say('Could not open the GTA settings menu.')
+        finish()
+        send('path', { failed = 'open' })
+        return
+    end
+    sleep(1500)
+    phase('deeper0')
+    pcall(call, 'PauseMenuceptionGoDeeper', 0x77F16B447824DA6C, 0)
+    sleep(1200)
+    info('afterDeeper')
+
+    phase('discover')
+    for _, p in ipairs(PATH_DISCOVER) do
+        local str, int, st = sfRead(p, '|')
+        add('path', { p = p, s = str, i = int, st = st })
+    end
+
+    phase('walk')
+    local base
+    local okRows = 0
+    for step = 0, 14 do
+        if step > 0 then press(2, C_DOWN); sleep(900) end
+        base = findBase(base or PATH_BASES[1])
+        local rows = base and readRows(base) or {}
+        if #rows > 0 then okRows = okRows + 1 end
+        add('rows', { step = step, base = base, n = #rows, rows = rows })
+    end
+    info('end')
+    phase('end')
+    finish()
+    say(('Path test finished. Steps with data: %d / 15'):format(okRows))
+    send('path', { stepsWithData = okRows })
+end
+
 -- ---------------------------------------------------------------- komutlar (sunucu yetkiyi onaylayınca başlar)
 local function request(mode)
     if busy then say('A test is already running.') return end
@@ -530,7 +639,7 @@ RegisterNetEvent('loe_pause:client:gfxprobeGo', function(mode, allowed)
             say('Cannot start while a menu is open.')
             return
         end
-        local ok, err = pcall(mode == 'record' and runRecord or runAuto)
+        local ok, err = pcall(mode == 'record' and runRecord or (mode == 'path' and runPath or runAuto))
         if not ok then
             add('err', { what = 'run', e = tostring(err) })
             finish()
@@ -546,3 +655,4 @@ end)
 
 RegisterCommand('loe_gfxtest', function() request('auto') end, false)
 RegisterCommand('loe_gfxrec', function() request('record') end, false)
+RegisterCommand('loe_gfxpath', function() request('path') end, false)
