@@ -699,28 +699,30 @@ sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
 sim.frames(2000)
 check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
 
--- sahte oyun: kategori listesi (aşağı = sonraki), sütun durumu kategoriye göre; SET_INPUT_EVENT ve sağ/sol profil değerini değiştirir
-local SETC, CATC = 'currentPage.columnList.1', 'currentPage.columnList.0'
+-- sahte oyun: kategori listesi (aşağı = sonraki), Enter satırlara girer, Geri çıkar; sütun durumu kategoriye göre.
+-- Kök SET_COLUMN_HIGHLIGHT satırı seçer ve menuUniqueID'yi satır kimliği yapar; SET_COLUMN_INPUT_EVENT ve sol/sağ tuşları
+-- Audio'da satır (300 + satır) profil değerini değiştirir.
 local STATES = { [0] = '1', '0', '0', '2', '0', '0', '5', '4' }
-local fk = { cat = 0, row = 0, hn = 0, hv = {}, lastPress = {} }
+local fk = { cat = 0, row = 0, focus = false, hn = 0, hv = {}, lastPress = {} }
 sim.profile[300], sim.profile[301] = 5, 7
-BeginScaleformMovieMethodOnFrontend = function(path) fk.cur = { p = path, a = {} }; return true end
+local realActivate = ActivateFrontendMenu
+ActivateFrontendMenu = function(...) fk.cat, fk.row, fk.focus = 0, 0, false; return realActivate(...) end
+local function step(id, dir) if fk.cat == 3 and fk.focus then sim.profile[id] = (sim.profile[id] or 0) + dir end end
+BeginScaleformMovieMethodOnFrontend = function(path) fk.cur = { p = path, a = {} }; return 1 end
 ScaleformMovieMethodAddParamInt = function(v) fk.cur.a[#fk.cur.a + 1] = v end
+ScaleformMovieMethodAddParamBool = function(v) fk.cur.a[#fk.cur.a + 1] = v end
 EndScaleformMovieMethod = function()
     local c = fk.cur
-    if c.p == SETC .. '.SET_HIGHLIGHT' then fk.row = c.a[1]
-    elseif c.p == SETC .. '.SET_INPUT_EVENT' and fk.cat == 3 then
-        local id = fk.row == 0 and 300 or 301
-        sim.profile[id] = sim.profile[id] + (c.a[1] == 11 and 1 or -1)
-    end
+    if c.p == 'SET_COLUMN_HIGHLIGHT' and c.a[1] == 1 then fk.row = c.a[2]
+    elseif c.p == 'SET_COLUMN_INPUT_EVENT' and c.a[1] == 1 then step(300 + fk.row, c.a[2] == 11 and 1 or -1) end
 end
 EndScaleformMovieMethodReturnValue = function()
     fk.hn = fk.hn + 1
     local p, r = fk.cur.p, nil
-    if p == CATC .. '.model.getCurrentSelection' then r = tostring(fk.cat)
-    elseif p == SETC .. '.model.getCurrentSelection' then r = tostring(fk.row)
-    elseif p == SETC .. '.state.toString' then r = STATES[fk.cat] or '0'
-    elseif p == SETC .. '.customMC.toString' then r = '_level0.x.customMC' end
+    if p == 'currentPage.columnList.1.state.toString' then r = STATES[fk.cat] or '0'
+    elseif p == 'currentPage.columnList.1.columnIsFocused.toString' then r = tostring(fk.focus)
+    elseif p == 'menuUniqueID.toString' and fk.focus and fk.row < 12 then r = tostring(100 + fk.row)
+    elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1' end
     fk.hv[fk.hn] = r
     return fk.hn
 end
@@ -731,10 +733,11 @@ SetControlValueNextFrame = function(g, c)
     if g ~= 2 then return end
     if sim.now - (fk.lastPress[c] or -1000) <= 40 then fk.lastPress[c] = sim.now return end   -- basılı tutma tek basış sayılır
     fk.lastPress[c] = sim.now
-    if c == 187 then fk.cat = fk.cat + 1
-    elseif c == 188 then fk.cat = math.max(0, fk.cat - 1)
-    elseif c == 190 and fk.cat == 3 then sim.profile[300] = sim.profile[300] + 1
-    elseif c == 189 and fk.cat == 3 then sim.profile[300] = sim.profile[300] - 1 end
+    if c == 187 then if fk.focus then fk.row = fk.row + 1 else fk.cat = fk.cat + 1 end
+    elseif c == 201 then fk.focus, fk.row = true, 0
+    elseif c == 202 then fk.focus = false
+    elseif c == 190 then step(300 + fk.row, 1)
+    elseif c == 189 then step(300 + fk.row, -1) end
 end
 
 sim.latent, sim.encoded = nil, nil
@@ -744,27 +747,31 @@ sim.frames(5000)
 check(LoeProbe.active == true and sim.pause == true and isOpen() == false, 'S15: test GTA ayar menüsünü açmalı')
 sim.escFrame = true; sim.step(16); sim.frames(500)
 check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
-sim.frames(60000)
+sim.frames(90000)
 check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'write' and sim.encoded.audio == true,
-    'S15: sonuç sunucuya gönderilmeli, Audio bulunmalı')
-local phases, diffs, sfdo = {}, {}, {}
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'write2'
+    and sim.encoded.audio == true and sim.encoded.changed == true, 'S15: sonuç sunucuya gönderilmeli, değişiklik görülmeli')
+local phases, diffs, ids = {}, {}, {}
 for _, e in ipairs((sim.encoded or {}).log or {}) do
     if e.k == 'phase' then phases[#phases + 1] = e.name end
     if e.k == 'profile' then diffs[e.tag] = e.diff end
-    if e.k == 'sfdo' then sfdo[#sfdo + 1] = e.p .. '(' .. table.concat(e.args or {}, ',') .. ')' end
+    if e.k == 'rowIds' then ids[e.tag] = e.ids end
 end
-check(table.concat(phases, ',') == 'open,nav-audio,as-row0,enter,input-row,as-row1,back,nav-gfx,gfx-read,close', 'S15: faz sırası: ' .. table.concat(phases, ','))
-local function d1(tag, id, a, b) local d = diffs[tag]; return d and #d == 1 and d[1][1] == id and d[1][2] == a and d[1][3] == b end
-check(d1('as0-right', 300, 5, 6) and #diffs['as0-left'] == 0, 'S15: AS yolu satır 0 değerini bir adım artırıp geri almalı')
-check(d1('in-right', 300, 5, 6) and #diffs['in-left'] == 0, 'S15: girdi yolu sağ/sol profil farkı kaydedilmeli')
-check(d1('as1-right', 301, 7, 8) and #diffs['as1-left'] == 0, 'S15: AS yolu satır 1 (müzik) denenmeli')
-check(#diffs['after-close'] == 0 and sim.profile[300] == 5 and sim.profile[301] == 7, 'S15: test sonunda değerler eski haline dönmeli')
-check(sfdo[1] == SETC .. '.SET_HIGHLIGHT(0)' and sfdo[2] == SETC .. '.SET_INPUT_EVENT(11)', 'S15: AS çağrı sırası: ' .. tostring(sfdo[1]) .. ' ' .. tostring(sfdo[2]))
-check(fk.cat == 6, 'S15: Graphics kategorisine yalnızca okumak için inilmeli (kategori ' .. fk.cat .. ')')
+check(table.concat(phases, ',') == 'open,enter,write-as,write-input,back,close,restore,gfx-ids,close2', 'S15: faz sırası: ' .. table.concat(phases, ','))
+local function has(tag, id, a, b)
+    for _, d in ipairs(diffs[tag] or {}) do if d[1] == id and d[2] == a and d[3] == b then return true end end
+    return false
+end
+check(#(diffs['as-live'] or {}) == 1 and has('as-live', 300, 5, 4), 'S15: kök metod yolu satır 0 (SFX) değerini bir adım azaltmalı')
+check(#(diffs['input-live'] or {}) == 2 and has('input-live', 301, 7, 6), 'S15: girdi yolu satır 1 (Music) değerini bir adım azaltmalı')
+check(#(diffs['closed'] or {}) == 2, 'S15: kapanıştan sonra iki fark ölçülmeli')
+check(#(diffs['final'] or { 0 }) == 0 and sim.profile[300] == 5 and sim.profile[301] == 7, 'S15: test sonunda değerler eski haline dönmeli')
+check(ids.audio and ids.audio[1] == '100' and ids.audio[2] == '101' and #ids.audio == 12, 'S15: Audio satır kimlikleri okunmalı')
+check(ids.graphics and #ids.graphics == 24 and ids.graphics[1] == '100' and ids.graphics[13] == 'timeout', 'S15: Graphics satır kimlikleri okunmalı (liste sonu zaman aşımı)')
+check(fk.focus == false, 'S15: Graphics satırlarından çıkılmalı')
 
 -- Audio bulunamazsa hiçbir değer yazılmamalı
-STATES[3] = '0'; fk.cat = 0; fk.row = 0
+STATES[3] = '0'
 sim.latent, sim.encoded = nil, nil
 sim.frames(3000)
 sim.commands['loe_gtaset']()
@@ -774,10 +781,11 @@ local wrote = false
 for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sfdo' then wrote = true end end
 check(sim.encoded and sim.encoded.audio == false and not wrote and sim.profile[300] == 5, 'S15: Audio bulunamazsa yazma denenmemeli')
 check(LoeProbe.active == false and sim.pause == false, 'S15: Audio yokken de test kapanmalı')
+ActivateFrontendMenu = realActivate
 print, json.encode = realPrint, realEncode
 BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethod = nil, nil, nil
 EndScaleformMovieMethodReturnValue, IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString = nil, nil, nil
-GetScaleformMovieMethodReturnValueInt, SetControlValueNextFrame = nil, nil
+GetScaleformMovieMethodReturnValueInt, SetControlValueNextFrame, ScaleformMovieMethodAddParamBool = nil, nil, nil
 return R
 '''
 
