@@ -19,7 +19,6 @@ client_scripts {
     'client/prefs.lua',
     'client/apply.lua',
     'client/gtaset.lua',
-    'client/gtalab.lua',      -- GEÇİCİ deney aracı (/loe_gtalab)
     'client/main.lua'
 }
 

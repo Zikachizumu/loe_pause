@@ -894,64 +894,8 @@ check((sim.calls.Activate or 0) == actH + 1 and sim.pause == true and CATS[fk.ca
 sim.pause = false; sim.frames(3000)
 fk.visibleOk = false
 check(sim.nui('native', { target = 'zzz' }) == nil or true, 'S15: geçersiz hedef sorun çıkarmamalı')
--- I) GEÇİCİ /loe_gtalab: yetki sunucudan; gizli açılır; aşamalar sırayla; değer değişmez; sonuç sunucuya gider
+-- I) Grafik ekranı kapanır; ana döngü menüyü yeniden kurar
 sim.exported.Close(); sim.frames(700)
-local realEncode, realPrint = json.encode, print
-print = function() end
-json.encode = function(x) sim.encoded = x; return 'X' end
-sim.latent, sim.encoded, sim.msgs = nil, nil, {}
-sim.commands['loe_gtalab']()
-check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: lab önce sunucudan yetki istemeli')
-sim.fire('loe_pause:client:gfxprobeGo', 'lab', false)
-sim.frames(3000)
-check(sim.pause == false and GtaSet.busy == false, 'S15: yetkisiz oyuncuda lab başlamamalı')
-local subBefore = sim.profile[203] or 0
-sim.commands['loe_gtalab']()
-sim.frames(100)
-sim.fire('loe_pause:client:gfxprobeGo', 'lab', true)
-sim.frames(400000)
-local labels = {}
-for _, m in ipairs(sim.msgs) do if m.action == 'lab' and m.text ~= '' then labels[#labels + 1] = m.text:sub(1, 3) end end
-check(sim.encoded and sim.encoded.kind == 'lab' and sim.encoded.error == nil, 'S15: lab sonucu gönderilmeli (' .. tostring(sim.encoded and sim.encoded.error) .. ')')
-check(table.concat(labels, ',') == 'LAB,P1:,P2:,P3:,P4:,P5:,P6:,P6b,P7:,M1:,M2:,M3:,M4:,G: ,P8:', 'S15: lab aşamaları sırayla: ' .. table.concat(labels, ','))
-check(sim.pause == false and GtaSet.busy == false and (sim.profile[203] or 0) == subBefore and fk.visibleRead == false, 'S15: lab sonunda menü kapanmalı, değer değişmemeli, menü görünmemeli')
--- J) GEÇİCİ /loe_gtaprof: StatSetProfileSettingValue denemesi; menü açılmaz; değerler eski haline döner
-local statWrites = {}
-StatSetProfileSettingValue = function(pid, v) statWrites[#statWrites + 1] = { pid, v }; sim.profile[pid] = v end
-sim.latent, sim.encoded, sim.msgs = nil, nil, {}
-local profBefore = {}
-for _, pid in ipairs({ 203, 212, 300, 227, 754 }) do profBefore[pid] = sim.profile[pid] or 0 end
-local actJ = sim.calls.Activate or 0
-sim.commands['loe_gtaprof']()
-sim.frames(100)
-sim.fire('loe_pause:client:gfxprobeGo', 'lab', true)
-sim.frames(200000)
-local same = true
-for pid, v in pairs(profBefore) do if (sim.profile[pid] or 0) ~= v then same = false end end
-check(sim.encoded and sim.encoded.kind == 'lab' and sim.encoded.error == nil and #statWrites >= 10, 'S15: gtaprof tamamlanmalı (' .. tostring(sim.encoded and sim.encoded.error) .. ', yazma=' .. #statWrites .. ')')
-check(same and (sim.calls.Activate or 0) == actJ and GtaSet.busy == false and sim.pause == false, 'S15: gtaprof değerleri eski haline getirmeli, GTA menüsünü açmamalı')
-StatSetProfileSettingValue = nil
-json.encode, print = realEncode, realPrint
-
--- K) GEÇİCİ /loe_gtaduck: aynı değer adımı dizisi farklı ses koşullarında; SFX menüden 0 yapılıp geri alınır
-sim.profile[300] = 3                                   -- SFX 3 (0'a inmesi ve geri çıkması gerekir)
-START[300] = 3
-sim.latent, sim.encoded, sim.msgs = nil, nil, {}
-json.encode = function(x) sim.encoded = x; return 'X' end
-print = function() end
-local duckSfx, duckSub = sim.profile[300], sim.profile[203] or 0
-sim.commands['loe_gtaduck']()
-sim.frames(100)
-sim.fire('loe_pause:client:gfxprobeGo', 'duck', true)
-sim.frames(400000)
-local duckLabels = {}
-for _, m in ipairs(sim.msgs) do if m.action == 'lab' and m.text ~= '' then duckLabels[#duckLabels + 1] = m.text:sub(1, 2) end end
-check(sim.encoded and sim.encoded.error == nil and sim.encoded.sfx == duckSfx and sim.encoded.sub == duckSub,
-    'S15: gtaduck sonunda SFX ve altyazı eski değerinde olmalı (sfx=' .. tostring(sim.encoded and sim.encoded.sfx) .. ', hata=' .. tostring(sim.encoded and sim.encoded.error) .. ')')
-check(table.concat(duckLabels, ',') == 'DU,se,B0,B1,B2,B3,B4,B5,Q ,Q:,Q ', 'S15: gtaduck aşamaları: ' .. table.concat(duckLabels, ','))
-check(sim.pause == false and GtaSet.busy == false and sim.profile[300] == duckSfx and (sim.profile[203] or 0) == duckSub and fk.visibleRead == false,
-    'S15: gtaduck sonunda menü kapanmalı, değerler korunmalı, menü görünmemeli')
-json.encode, print = realEncode, realPrint
 
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
@@ -965,7 +909,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/gtaset.lua', 'client/gtalab.lua', 'client/main.lua'):
+for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/gtaset.lua', 'client/main.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
