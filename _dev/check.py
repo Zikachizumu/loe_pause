@@ -913,7 +913,7 @@ sim.frames(400000)
 local labels = {}
 for _, m in ipairs(sim.msgs) do if m.action == 'lab' and m.text ~= '' then labels[#labels + 1] = m.text:sub(1, 3) end end
 check(sim.encoded and sim.encoded.kind == 'lab' and sim.encoded.error == nil, 'S15: lab sonucu gönderilmeli (' .. tostring(sim.encoded and sim.encoded.error) .. ')')
-check(table.concat(labels, ',') == 'LAB,P1:,P2:,P3:,P4:,P5:,P6:,P6b,P7:,M1:,M2:,M3:,M4:,P8:', 'S15: lab aşamaları sırayla: ' .. table.concat(labels, ','))
+check(table.concat(labels, ',') == 'LAB,P1:,P2:,P3:,P4:,P5:,P6:,P6b,P7:,M1:,M2:,M3:,M4:,G: ,P8:', 'S15: lab aşamaları sırayla: ' .. table.concat(labels, ','))
 check(sim.pause == false and GtaSet.busy == false and (sim.profile[203] or 0) == subBefore and fk.visibleRead == false, 'S15: lab sonunda menü kapanmalı, değer değişmemeli, menü görünmemeli')
 json.encode, print = realEncode, realPrint
 

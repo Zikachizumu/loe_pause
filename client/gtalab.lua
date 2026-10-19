@@ -113,6 +113,44 @@ local function run()
         trial('M3: audio scene MP_LEADERBOARD_SCENE', function() return StartAudioScene('MP_LEADERBOARD_SCENE') end, function() StopAudioScene('MP_LEADERBOARD_SCENE') end)
         trial('M4: audio scene DEATH_SCENE', function() return StartAudioScene('DEATH_SCENE') end, function() StopAudioScene('DEATH_SCENE') end)
 
+        -- G: Grafik sayfasında "bekleyen değişiklik" (GFX_Dirty) bağlam bayrağı okunabiliyor mu? Hiçbir şey UYGULANMAZ:
+        -- değişiklikler geri alınır ve menü kapanınca bekleyen değer zaten atılır.
+        banner('G: graphics dirty flag test')
+        T.depth(-1)
+        local DIRTY, ONGFX = GetHashKey('GFX_Dirty'), GetHashKey('ON_VID_GFX_MENU')
+        local function ctx(h) local ok, v = pcall(PauseMenuIsContextActive, h) return ok and v or false end
+        local okG = T.gotoCat('6') and T.depth(1)
+        add('gsetup', { ok = okG, uid = T.uid(), level = T.level() })
+        if okG then
+            T.sleep(500)
+            add('ctx', { tag = 'base', dirty = ctx(DIRTY), onGfx = ctx(ONGFX) })
+            -- ilk satır (kimlik 103): iki seçenekli açık/kapalı
+            T.pace(250); T.call('SET_INPUT_EVENT', 11); T.sleep(500)
+            add('ctx', { tag = 'row103 right', dirty = ctx(DIRTY), uid = T.uid() })
+            T.pace(250); T.call('SET_INPUT_EVENT', 10); T.sleep(500)
+            add('ctx', { tag = 'row103 left', dirty = ctx(DIRTY) })
+            -- kaydırıcı satırları: sona (en küçüğe) git, sonra sağa adım at, bayrak temizlenince adım sayısı = asıl değer
+            for _, row in ipairs({ '80', '100' }) do
+                if T.gotoRow(row) then
+                    T.pace(250)
+                    for _ = 1, 45 do T.call('SET_INPUT_EVENT', 10); T.sleep(70) end
+                    T.sleep(300)
+                    local d0 = ctx(DIRTY)
+                    local steps = 0
+                    while ctx(DIRTY) and steps < 120 do
+                        T.call('SET_INPUT_EVENT', 11); T.sleep(120)
+                        steps = steps + 1
+                    end
+                    add('slider', { row = row, dirtyAtZero = d0, stepsToClean = steps, cleanNow = not ctx(DIRTY) })
+                else
+                    add('slider', { row = row, missing = true })
+                end
+            end
+            add('ctx', { tag = 'end', dirty = ctx(DIRTY) })
+        end
+    end
+
+    if T.level() == '2' then
         banner('P8: leave and close')
         T.depth(-1)
     end
