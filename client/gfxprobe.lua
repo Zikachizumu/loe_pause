@@ -534,36 +534,9 @@ end
 -- Satır alanları (PauseMenuSettingsTextItem): itemTextLeft (ad), itemTextRight (değer metni), _uniqueID, initialIndex,
 -- type, menuID, isSelectable, multiListItems (seçenekler). Oyuna yazma: <satır>.setPref(değer).
 local SETCOL = 'currentPage.columnList.1'
-local PATH_DISCOVER = {
-    -- denetim (önceki turda çalışanlar)
-    { SETCOL .. '.state.toString' },
-    { SETCOL .. '.menuContainer.toString' },
-    -- alt klibe ADIYLA inilebiliyor mu? (menuMC adı biliniyor)
-    { SETCOL .. '.CONTENT.toString' },
-    { SETCOL .. '.CONTENT.menuMC.toString' },
-    { SETCOL .. '.menuContainer._name.toString' },
-    -- menuMC içinde hangi derinlikler dolu?
-    { SETCOL .. '.menuContainer.getNextHighestDepth' },
-    { SETCOL .. '.menuContainer.getInstanceAtDepth', nil, { 0 } },
-    { SETCOL .. '.menuContainer.getInstanceAtDepth', nil, { 1 } },
-    { SETCOL .. '.menuContainer.dataViewMC0._name.toString' },
-    { SETCOL .. '.menuContainer.dataViewMC1._name.toString' },
-    { SETCOL .. '.menuContainer.dataViewMC2._name.toString' },
-    -- dizi elemanı biçimleri
-    { SETCOL .. '.model.viewList.toString' },
-    { SETCOL .. '.model.viewList.0.viewIndex.toString' },
-    { SETCOL .. '.model.viewList.0.viewContainer.toString' },
-    { SETCOL .. '.model.viewList.0.viewContainer._name.toString' },
-    { SETCOL .. '.model.viewList.slice', nil, { 0, 1 } },
-    { SETCOL .. '.model.dataList.join', '|' },
-    { 'currentPage.columnList.0.model.viewList.join' },
-    { 'currentPage.column2.toString' },
-    { 'currentPage.column2.menuContainer.toString' },
-    -- sınıf örneği metodu (undefined dönerse zaman aşımı gibi görünür)
-    { SETCOL .. '.model.getCurrentSelection', nil, { 0 } },
-    { SETCOL .. '.model.getCurrentView', nil, { 0 } },
-    { SETCOL .. '.dbgID.substr', nil, { 0, 5 } },
-}
+-- v6 bulguları: alt klibe ADIYLA inmek çalışıyor (CONTENT.menuMC), hazır klip özellikleri/metodları (_name,
+-- getNextHighestDepth) çalışmıyor, nesne döndüren metod '' döner, undefined dönen çağrı zaman aşımına düşer.
+-- Satır klipleri menuMC.dataViewMC<N>.settingsListItem<i>MC; N oluşturulma derinliği (her parametre atamasında artabilir).
 
 -- Uzun metni 63 karakterlik parçalarla oku (String.substr(start, len))
 local function readText(path)
@@ -579,30 +552,45 @@ end
 
 local function viewPath(d) return SETCOL .. '.menuContainer.dataViewMC' .. d end
 
-local function findView(prefer)
-    local order = { prefer or 0 }
-    for d = 0, 4 do if d ~= prefer then order[#order + 1] = d end end
-    for _, d in ipairs(order) do
-        local s = sfRead(viewPath(d) .. '.settingsListItem0MC._uniqueID.toString')
-        if type(s) == 'string' and s ~= '' then return d end
+-- menuMC içindeki dataViewMC<N> kliplerini bul (en çok 3)
+local function findViews()
+    local found = {}
+    for d = 0, 20 do
+        local s = sfRead(viewPath(d) .. '.toString')
+        if type(s) == 'string' and s ~= '' then
+            found[#found + 1] = d
+            if #found >= 3 then break end
+        end
     end
+    return found
 end
+
+-- Satır alanı okuma biçimleri: hangisinin çalıştığını kaydet
+local FIELD_TESTS = {
+    { '.toString' }, { '._uniqueID.toString' }, { '.initialIndex.toString' }, { '.type.toString' },
+    { '.menuID.toString' }, { '.isSelectable.toString' }, { '._data.join', '|' }, { '._data.0.toString' },
+    { '.multiListItems.join', '|' }, { '.itemTextLeft.toString' }, { '.itemTextLeft.text.toString' },
+    { '.itemTextLeft.text.substr', nil, { 0, 63 } }, { '.itemTextRight.text.substr', nil, { 0, 63 } },
+    { '.itemTextRight.htmlText.toString' }, { '.labelMC.titleTF.text.toString' },
+}
 
 local function readItems(d)
     local rows = {}
     for i = 0, 24 do
         local it = viewPath(d) .. '.settingsListItem' .. i .. 'MC'
         local uid = sfRead(it .. '._uniqueID.toString')
-        if type(uid) ~= 'string' then break end
+        if type(uid) ~= 'string' then
+            if sfRead(it .. '.toString') == nil then break end      -- klip yok → liste bitti
+        end
         rows[#rows + 1] = {
             i = i, uid = uid,
-            mid = sfRead(it .. '.menuID.toString'),
-            type = sfRead(it .. '.type.toString'),
             init = sfRead(it .. '.initialIndex.toString'),
+            type = sfRead(it .. '.type.toString'),
             sel = sfRead(it .. '.isSelectable.toString'),
+            data = sfRead(it .. '._data.join', '|'),
+            opts = sfRead(it .. '.multiListItems.join', '|'),
             label = readText(it .. '.itemTextLeft.text'),
             value = readText(it .. '.itemTextRight.text'),
-            opts = sfRead(it .. '.multiListItems.join', '|'),
         }
     end
     return rows
@@ -622,26 +610,32 @@ local function runPath()
     info('opened')
 
     phase('discover')
-    for _, d in ipairs(PATH_DISCOVER) do
-        local str, int, st = sfRead(d[1], d[2], d[3])
-        add('path', { p = d[1], args = d[3], s = str, i = int, st = st })
+    local views = findViews()
+    add('views', { found = views })
+    for _, d in ipairs(views) do
+        for _, f in ipairs(FIELD_TESTS) do
+            local p = viewPath(d) .. '.settingsListItem0MC' .. f[1]
+            local str, int, st = sfRead(p, f[2], f[3])
+            add('path', { p = p, args = f[3], s = str, i = int, st = st })
+        end
     end
 
-    -- Kategori listesinde aşağı in (yalnızca vurgu; sağ sütun o kategorinin satırlarını gösterir). Değer değişmez.
+    -- Kategori listesinde aşağı in (yalnızca vurgu). Değer değişmez.
     phase('walk')
-    local okSteps, view = 0, nil
-    for step = 0, 2 do
+    local okSteps = 0
+    for step = 0, 12 do
         if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed' }) break end
         if step > 0 then press(2, C_DOWN); sleep(800) end
-        view = findView(view)
+        local vs = findViews()
+        local view = vs[#vs]                -- en son oluşturulan görünüm etkin olandır
         local rows = view and readItems(view) or {}
         if #rows > 0 then okSteps = okSteps + 1 end
-        add('rows', { step = step, view = view, n = #rows, rows = rows, state = sfRead(SETCOL .. '.state.toString') })
+        add('rows', { step = step, views = vs, view = view, n = #rows, rows = rows, state = sfRead(SETCOL .. '.state.toString') })
     end
     info('end')
     phase('end')
     finish()
-    say(('Path test finished. Steps with data: %d / 3'):format(okSteps))
+    say(('Path test finished. Steps with data: %d / 13'):format(okSteps))
     send('path', { stepsWithData = okSteps })
 end
 
