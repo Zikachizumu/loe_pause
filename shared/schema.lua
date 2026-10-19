@@ -4,10 +4,11 @@
 --   toggle / select / slider : GERÇEKTEN uygulanan ayarlar (client/apply.lua'da karşılığı var, KVP'de saklanır)
 --   key      : tuş atamasının güncel değerini OKUR (salt okunur; değiştirmek için FiveM tuş menüsüne yönlendirir)
 --   action   : tek seferlik eylem (kayıt başlat, sıfırla...). 'confirm' varsa arayüz önce onay ister
---   native   : GTA/FiveM'in yerleşik menüsünde yönetilen ayar. Burada DEĞİŞTİRİLEMEZ; satır ilgili ekrana götürür
 --   info     : açıklama notu
 --
 -- NUI'den gelen her değer client/prefs.lua içinde bu şemaya göre yeniden doğrulanır.
+-- GTA'nın kendi ayarları (grafik, ses seviyeleri, fare/gamepad hassasiyeti, ekran, tuş atama) burada YOK: FiveM bunları
+-- okumaya/yazmaya izin vermez. Arayüzde Game Settings → OPTIONS'ın sonundaki tek "GTA Settings" girişi GTA ekranını açar.
 
 Schema = { categories = {}, actions = {} }
 
@@ -16,8 +17,6 @@ local hijack = (Config and Config.Hijack) or {}
 
 local function L(tr, en) return { tr = tr, en = en or tr } end
 
--- read: GTA'nın GÜNCEL değerini okuyabildiğimiz satırlarda bir anahtar (client/main.lua buildNativeValues). Yoksa yalnızca bağlantıdır.
-local function native(tr, en, target, read) return { type = 'native', label = L(tr, en), target = target or 'settings', read = read } end
 local function info(tr, en) return { type = 'info', text = L(tr, en) } end
 local function key(tr, en, control) return { type = 'key', label = L(tr, en), control = control } end
 local function group(id, tr, en, rows) return { id = id, label = L(tr, en), rows = rows } end
@@ -38,10 +37,6 @@ local function opt(value, tr, en, extra)
     return o
 end
 
-local NOTE_NATIVE = info(
-    'Bu bölümdeki ayarlar yalnızca GTA/FiveM\'in kendi menüsünden değiştirilebilir. Satırlara tıklayınca ilgili menü açılır.',
-    'The settings in this section can only be changed from the built-in GTA/FiveM menu. Click a row to open it.')
-
 -- ------------------------------------------------------------------ paylaşılan satırlar (iki yerde görünür, tek tanım)
 local AIM_MODE = {
     id = 'aim.mode', type = 'select', default = 'game',
@@ -57,59 +52,22 @@ local AIM_MODE = {
     },
 }
 
-local TO_KEYBINDS = { type = 'native', label = L('Tuşları değiştir (FiveM tuş atamaları)', 'Change keys (FiveM key bindings)'), target = 'keybinds' }
-
 local function keyGroup(id, tr, en, rows, note)
-    local list = { TO_KEYBINDS }
+    local list = {}
     if note then list[#list + 1] = note end
     for _, r in ipairs(rows) do list[#list + 1] = r end
     return group(id, tr, en, list)
 end
 
--- ------------------------------------------------------------------ 1. Oyun Kolu
-Schema.categories[#Schema.categories + 1] = cat('controller', 'gamepad', 'Oyun Kolu', 'Controller', {
-    group('aim', 'Hedefleme', 'Aiming', {
-        AIM_MODE,
-        native('Nişan hassasiyeti', 'Aiming sensitivity'),
-    }),
-    group('vibration', 'Titreşim ve Bakış', 'Vibration & Look', {
-        NOTE_NATIVE,
-        native('Titreşim', 'Vibration'),
-        native('Bakışı ters çevir', 'Invert look'),
-        native('Bakış hassasiyeti', 'Look sensitivity'),
-    }),
-    group('types', 'Kontrol Tipi', 'Control Type', {
-        NOTE_NATIVE,
-        native('Birinci şahıs kontrol tipi', 'First-person control type'),
-        native('Üçüncü şahıs kontrol tipi', 'Third-person control type'),
-    }),
+-- ------------------------------------------------------------------ 1. Kontroller
+Schema.categories[#Schema.categories + 1] = cat('controller', 'gamepad', 'Kontroller', 'Controls', {
+    group('aim', 'Hedefleme', 'Aiming', { AIM_MODE }),
 })
 
--- ------------------------------------------------------------------ 2. Klavye / Fare
-Schema.categories[#Schema.categories + 1] = cat('mouse', 'mouse', 'Klavye / Fare', 'Keyboard / Mouse', {
-    group('sens', 'Fare Hassasiyeti', 'Mouse Sensitivity', {
-        NOTE_NATIVE,
-        native('Fare hassasiyeti', 'Mouse sensitivity'),
-        native('Fare yumuşatma', 'Mouse smoothing'),
-        native('Hassas nişan kontrolü', 'Precision aim control'),
-        native('Ters bakış', 'Invert look'),
-    }),
-    group('aim', 'Nişan Alma', 'Aiming', {
-        AIM_MODE,
-        native('Nişan alma davranışı (basılı tut / aç-kapat)', 'Aim behaviour (hold / toggle)'),
-    }),
-    group('vehicles', 'Araç Kontrolleri', 'Vehicle Controls', {
-        NOTE_NATIVE,
-        native('Araç için fare kontrolü', 'Mouse control for vehicles'),
-        native('Uçak için fare kontrolü', 'Mouse control for aircraft'),
-        native('Denizaltı için fare kontrolü', 'Mouse control for submarines'),
-    }),
-})
-
--- ------------------------------------------------------------------ 3. Tuş Atamaları (salt okunur + FiveM tuş menüsüne köprü)
+-- ------------------------------------------------------------------ 2. Tuş Atamaları (salt okunur)
 local NOTE_KEYS = info(
-    'Aşağıdaki tuşlar GTA varsayılan kontrolleridir ve güncel atamayı gösterir. Sunucudaki özel sistemler (envanter, telefon...) kendi tuşlarını kullanabilir; onlar "FiveM" grubunda listelenir.',
-    'The keys below are the GTA default controls and show the current binding. Server systems (inventory, phone...) may use their own keys; they are listed in the "FiveM" group.')
+    'Aşağıdaki tuşlar GTA varsayılan kontrolleridir ve güncel atamayı gösterir (salt okunur). Tuş değiştirmek için OPTIONS\'ın sonundaki GTA Ayarları → Tuş Atamaları. Sunucudaki özel sistemler (envanter, telefon...) kendi tuşlarını kullanır; onlar "FiveM" grubunda listelenir.',
+    'The keys below are the GTA default controls and show the current binding (read-only). To rebind, use GTA Settings at the bottom of OPTIONS → Key Bindings. Server systems (inventory, phone...) use their own keys; they are listed in the "FiveM" group.')
 
 -- Hızlı Eylemler: Config.Shortcuts'taki tek seferlik komutları menüden çalıştırır (id = 'cmd.<id>'; işleyici client/main.lua'da).
 -- cap: yalnızca yetkililere görünen satırların izin anahtarı (sunucu doğrular).
@@ -238,36 +196,24 @@ Schema.categories[#Schema.categories + 1] = cat('keys', 'keyboard', 'Tuş Atamal
 
 if #shortcutRows > 0 then
     local scRows = {
-        info('Bu eylemler, atanmış kısayol tuşuna basmakla aynı işi yapar; menü kapanır ve eylem çalışır. Tuşu değiştirmek için "Tuşları değiştir" satırını kullan.',
-             'These actions do the same as pressing the bound shortcut key; the menu closes and the action runs. Use "Change keys" to rebind a key.'),
+        info('Bu eylemler, atanmış kısayol tuşuna basmakla aynı işi yapar; menü kapanır ve eylem çalışır. Tuşu değiştirmek için GTA Ayarları → Tuş Atamaları → FiveM.',
+             'These actions do the same as pressing the bound shortcut key; the menu closes and the action runs. To rebind a key, use GTA Settings → Key Bindings → FiveM.'),
     }
     for _, r in ipairs(shortcutRows) do scRows[#scRows + 1] = r end
     table.insert(Schema.categories[#Schema.categories].groups, 1, group('shortcuts', 'Hızlı Eylemler', 'Quick Actions', scRows))
 end
 
--- ------------------------------------------------------------------ 4. Ses
+-- ------------------------------------------------------------------ 3. Ses
 Schema.categories[#Schema.categories + 1] = cat('audio', 'speaker', 'Ses', 'Audio', {
-    group('levels', 'Ses Seviyeleri', 'Volume Levels', {
-        NOTE_NATIVE,
-        native('Efekt seviyesi', 'Sound effects level'),
-        native('Müzik seviyesi', 'Music level'),
-        native('Diyalog seviyesi', 'Dialogue level'),
-    }),
     group('radio', 'Radyo', 'Radio', {
         toggle('audio.vehradio', 'Araç radyosu', 'Vehicle radio', true, {
             desc = L('Kapalıyken araçlarda radyo çalmaz ve radyo tekerleği devre dışı kalır.',
                      'When off, vehicle radios stay silent and the radio wheel is disabled.'),
         }),
-        native('Radyo istasyonlarını düzenle', 'Edit radio stations'),
-    }),
-    group('output', 'Cihaz ve Odak', 'Device & Focus', {
-        NOTE_NATIVE,
-        native('Ses çıkış cihazı', 'Audio output device'),
-        native('Oyun odağı kaybolunca sesi kapat', 'Mute when game loses focus'),
     }),
 })
 
--- ------------------------------------------------------------------ 5. Kamera
+-- ------------------------------------------------------------------ 4. Kamera
 local camOptions = function()
     return {
         opt('game',   'Oyun varsayılanı', 'Game default'),
@@ -294,16 +240,9 @@ if features.cameraOverrides ~= false then
 end
 Schema.categories[#Schema.categories + 1] = cat('camera', 'camera', 'Kamera', 'Camera', {
     group('view', 'Görüş Modu', 'View Mode', cameraRows),
-    group('fine', 'Kamera Ayarları', 'Camera Settings', {
-        NOTE_NATIVE,
-        native('Araç kamera yüksekliği', 'Vehicle camera height'),
-        native('Birinci şahıs görüş açısı (FOV)', 'First-person field of view'),
-        native('Birinci şahıs araç kamerası', 'First-person vehicle camera'),
-        native('Kamera sarsıntısı', 'Camera shake'),
-    }),
 })
 
--- ------------------------------------------------------------------ 6. Görüntü
+-- ------------------------------------------------------------------ 5. Görüntü
 Schema.categories[#Schema.categories + 1] = cat('display', 'monitor', 'Görüntü', 'Display', {
     group('hud', 'HUD ve Radar', 'HUD & Radar', {
         toggle('disp.radar', 'Radar ve HUD', 'Radar & HUD', true, {
@@ -314,73 +253,23 @@ Schema.categories[#Schema.categories + 1] = cat('display', 'monitor', 'Görünt�
         toggle('disp.gps', 'GPS rotası', 'GPS route', true, {
             desc = L('Kapalıyken harita işaretinin yol çizgisi gösterilmez.', 'When off, the waypoint route line is hidden.'),
         }),
-        native('Nişangâh boyutu', 'Crosshair size'),
-        native('Silah hedefi göstergesi', 'Weapon target indicator'),
-    }),
-    group('screen', 'Ekran', 'Screen', {
-        NOTE_NATIVE,
-        native('Parlaklık', 'Brightness'),
-        native('Güvenli alan', 'Safe zone', nil, 'safezone'),
-        native('Altyazılar', 'Subtitles', nil, 'subtitles'),
-        native('Ölçü birimi', 'Measurement units', nil, 'metric'),
-        native('Oyun dili', 'Game language', nil, 'language'),
     }),
 })
 
--- ------------------------------------------------------------------ 7. Grafikler
-Schema.categories[#Schema.categories + 1] = cat('graphics', 'chip', 'Grafikler', 'Graphics', {
-    group('screen', 'Ekran', 'Screen', {
-        NOTE_NATIVE,
-        native('Çözünürlük', 'Resolution', nil, 'resolution'),
-        native('Ekran seçimi', 'Display selection'),
-        native('FXAA', 'FXAA'),
-        native('MSAA', 'MSAA'),
-        native('VSync', 'VSync'),
-        native('Odak kaybında oyunu duraklat', 'Pause game on focus loss'),
-    }),
-    group('quality', 'Kalite', 'Quality', {
-        NOTE_NATIVE,
-        native('Doku kalitesi', 'Texture quality'),
-        native('Gölge kalitesi', 'Shadow quality'),
-        native('Yansıma kalitesi', 'Reflection quality'),
-        native('Su kalitesi', 'Water quality'),
-        native('Parçacık kalitesi', 'Particle quality'),
-        native('Çimen kalitesi', 'Grass quality'),
-    }),
-    group('distance', 'Mesafe Ayrıntıları', 'Distance Detail', {
-        NOTE_NATIVE,
-        native('Nüfus yoğunluğu', 'Population density'),
-        native('Nüfus çeşitliliği', 'Population variety'),
-        native('Uzak nesne mesafesi', 'Distance scaling'),
-    }),
-})
-
--- ------------------------------------------------------------------ 8. Gelişmiş Grafikler
-local advDistRows = { NOTE_NATIVE }
+-- ------------------------------------------------------------------ 6. Grafik (yalnızca script ile uygulanabilen ayar)
+local gfxRows = {}
 if features.lodScale ~= false then
-    advDistRows[#advDistRows + 1] = slider('gfx.lod', 'Mesafe ayrıntısı ölçeği', 'Distance detail scale', 1.0, 2.0, 0.1, 1.0, {
+    gfxRows[#gfxRows + 1] = slider('gfx.lod', 'Mesafe ayrıntısı ölçeği', 'Distance detail scale', 1.0, 2.0, 0.1, 1.0, {
         unit = 'x', decimals = 1,
         desc = L('Uzaktaki nesnelerin ayrıntı mesafesini artırır. 1.0 = oyun varsayılanı. Performansı düşürebilir.',
                  'Increases how far objects keep their detail. 1.0 = game default. May reduce performance.'),
     })
 end
-advDistRows[#advDistRows + 1] = native('Uzun gölge mesafesi', 'Long shadows')
-advDistRows[#advDistRows + 1] = native('Yüksek çözünürlüklü gölgeler', 'High-resolution shadows')
-advDistRows[#advDistRows + 1] = native('Yüksek detaylı akış', 'High detail streaming while flying')
-Schema.categories[#Schema.categories + 1] = cat('advgfx', 'sliders', 'Gelişmiş Grafikler', 'Advanced Graphics', {
-    group('distance', 'Mesafe', 'Distance', advDistRows),
-    group('effects', 'Efektler', 'Effects', {
-        NOTE_NATIVE,
-        native('Gölge yumuşatma', 'Soft shadows'),
-        native('Yansıma MSAA', 'Reflection MSAA'),
-        native('Anizotropik filtreleme', 'Anisotropic filtering'),
-        native('Ortam kapanması (SSAO)', 'Ambient occlusion'),
-        native('Tessellation', 'Tessellation'),
-        native('Sonradan işleme (Post FX)', 'Post FX'),
-    }),
+Schema.categories[#Schema.categories + 1] = cat('advgfx', 'sliders', 'Grafik', 'Graphics', {
+    group('distance', 'Mesafe', 'Distance', gfxRows),
 })
 
--- ------------------------------------------------------------------ 9. Sesli Sohbet
+-- ------------------------------------------------------------------ 7. Sesli Sohbet
 local voiceLevels, voiceMic = {}, {}
 if features.voice ~= false then
     local pct = { unit = '%', decimals = 0 }
@@ -397,17 +286,9 @@ end
 Schema.categories[#Schema.categories + 1] = cat('voice', 'mic', 'Sesli Sohbet', 'Voice Chat', {
     group('levels', 'Seviyeler', 'Levels', voiceLevels),
     group('mic', 'Mikrofon Tıkı', 'Mic Click', voiceMic),
-    group('devices', 'Cihazlar', 'Devices', {
-        NOTE_NATIVE,
-        native('Sesli sohbeti aç / kapat', 'Enable / disable voice chat'),
-        native('Mikrofon aygıtı', 'Microphone device'),
-        native('Ses çıkış aygıtı', 'Voice output device'),
-        native('Mikrofon seviyesi', 'Microphone level'),
-        native('Sohbet seviyesi', 'Chat volume'),
-    }),
 })
 
--- ------------------------------------------------------------------ 10. Rockstar Editor
+-- ------------------------------------------------------------------ 8. Rockstar Editor
 local editorRows = {}
 if features.recording ~= false then
     editorRows = {
@@ -426,16 +307,7 @@ Schema.categories[#Schema.categories + 1] = cat('editor', 'film', 'Rockstar Edit
     group('record', 'Kayıt', 'Recording', editorRows),
 })
 
--- ------------------------------------------------------------------ 11. Kayıt ve Başlangıç
-Schema.categories[#Schema.categories + 1] = cat('startup', 'save', 'Kayıt ve Başlangıç', 'Save & Startup', {
-    group('startup', 'Başlangıç', 'Startup', {
-        info('GTA\'nın kayıt yükleme ve başlangıç akışı seçenekleri FiveM\'de uygulanmaz: oyuna giriş FiveM istemcisi ve sunucu tarafından yönetilir, karakter verisi sunucuda saklanır.',
-             'GTA\'s save-loading and startup-flow options do not apply in FiveM: joining is handled by the FiveM client and the server, and character data is stored server-side.'),
-        info('Bu bölümde değiştirilebilir bir ayar yoktur.', 'There are no adjustable settings in this section.'),
-    }),
-})
-
--- ------------------------------------------------------------------ 12. Tercihler (LOE arayüzü; oyuncu bazında KVP)
+-- ------------------------------------------------------------------ 9. Tercihler (LOE arayüzü; oyuncu bazında KVP)
 Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler', 'Preferences', {
     group('look', 'Görünüm', 'Appearance', {
         { id = 'pref.accent', type = 'select', default = 'crimson', label = L('Vurgu rengi', 'Accent colour'),
@@ -476,7 +348,7 @@ Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler',
     }),
 })
 
--- ------------------------------------------------------------------ 13. Normal Menü
+-- ------------------------------------------------------------------ 10. Normal Menü
 -- Config.Hijack.allowNativeMenu = false (varsayılan) → bu kategori arayüzde GÖRÜNMEZ ve ESC her zaman bu menüyü açar
 -- (satırlar şemada kalır; böylece eski KVP değerleri doğrulanır ama hiçbir etkisi olmaz).
 Schema.categories[#Schema.categories + 1] = cat('menu', 'menu', 'Normal Menü', 'Standard Menu', {
@@ -494,14 +366,23 @@ Schema.categories[#Schema.categories + 1] = cat('menu', 'menu', 'Normal Menü', 
 Schema.categories[#Schema.categories].hidden = hijack.allowNativeMenu ~= true
 
 -- ------------------------------------------------------------------ yardımcı indeksler
--- Boş grupları at (özellik kapatılınca boş kalan gruplar arayüzde görünmesin).
+-- Boş grupları ve kategorileri at (özellik kapatılınca boş kalan ya da yalnızca bilgi notu kalan gruplar görünmesin).
+local function hasControl(g)
+    for _, r in ipairs(g.rows) do
+        if r.type ~= 'info' then return true end
+    end
+    return false
+end
+local keptCats = {}
 for _, c in ipairs(Schema.categories) do
     local kept = {}
     for _, g in ipairs(c.groups) do
-        if #g.rows > 0 then kept[#kept + 1] = g end
+        if hasControl(g) then kept[#kept + 1] = g end
     end
     c.groups = kept
+    if #kept > 0 then keptCats[#keptCats + 1] = c end
 end
+Schema.categories = keptCats
 
 Schema.rows = {}   -- id -> satır (yalnızca ayarlanabilir satırlar: toggle/select/slider)
 for _, c in ipairs(Schema.categories) do

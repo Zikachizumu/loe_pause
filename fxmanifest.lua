@@ -17,8 +17,7 @@ shared_scripts {
 client_scripts {
     'client/prefs.lua',
     'client/apply.lua',
-    'client/main.lua',
-    'client/gfxprobe.lua'      -- GEÇİCİ araştırma aracı (/loe_gfxtest, /loe_gfxrec)
+    'client/main.lua'
 }
 
 server_scripts {

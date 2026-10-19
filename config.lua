@@ -81,14 +81,10 @@ Config.Native = {
     keybinds = { menu = 'FE_MENU_VERSION_LANDING_KEYMAPPING_MENU', pause = true,  component = -1 },
 }
 
--- GEÇİCİ: GTA ayarlarını (Grafik, Ses, Fare...) menüde gösterme araştırması. /loe_gfxtest ve /loe_gfxrec komutları
--- yalnızca `ace` yetkisi olanlarda çalışır; sonuç sunucuda resource klasörüne gfxprobe_*.json yazılır. Araştırma bitince kaldırılır.
-Config.GfxProbe = { enabled = true, ace = 'admin' }
-
 -- ================================================================ ÖZELLİKLER
 -- false yapılan özellik arayüzden tamamen kalkar ve uygulanmaz.
 Config.Features = {
-    allGtaSettings = true, -- sağ alttaki "Tüm GTA ayarları" düğmesi (yerleşik GTA ayar ekranını açar)
+    allGtaSettings = true, -- GTA'nın kendi ayar ekranına giriş: Game Settings → OPTIONS'ın sonundaki "GTA Settings" + ana ekranın sağ altındaki "All GTA settings"
     recording = true,    -- Rockstar Editor: kayıt başlat / kaydet / iptal
     lodScale  = true,    -- Gelişmiş Grafikler: mesafe ayrıntısı ölçeği (OverrideLodscaleThisFrame, performansı etkiler)
     voice     = true,    -- Sesli Sohbet: pma-voice seviyeleri (pma-voice yoksa satırlar çalışmaz)

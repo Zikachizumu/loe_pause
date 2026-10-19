@@ -190,6 +190,9 @@ html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 .gs-opt.cur { color: #fff; }
 .gs-opt.cur .d { background: #fff; }
 .gs-opt span { white-space: nowrap; }
+.gs-opt.ext { margin-top: .9rem; }
+.gs-opt.ext .ico { display: inline-flex; width: .9em; height: .9em; opacity: .6; }
+.gs-opt.ext .ico svg { width: 100%; height: 100%; }
 
 .gs-panel { position: absolute; left: 69.75rem; top: 21.1rem; width: 37.4rem; bottom: 9.375rem; display: flex; flex-direction: column; }
 .gs-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; height: 3.65rem; flex: none; }
@@ -219,7 +222,7 @@ html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 .gs-row:hover { background: rgba(44, 44, 48, .72); }
 .gs-row.sel { background: rgba(50, 50, 54, .82); }
 .gs-row.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .28rem; background: var(--accent); }
-.gs-row.t-toggle, .gs-row.t-native, .gs-row.t-action { cursor: pointer; }
+.gs-row.t-toggle, .gs-row.t-gta, .gs-row.t-action { cursor: pointer; }
 .gs-row .gl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
 .gs-row .gc { display: flex; align-items: center; flex: none; height: 100%; width: 18.9rem; }
 

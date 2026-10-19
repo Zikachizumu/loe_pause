@@ -59,11 +59,11 @@ lua.execute((ROOT / 'config.lua').read_text(encoding='utf-8'))
 lua.execute((ROOT / 'shared/schema.lua').read_text(encoding='utf-8'))
 cats = lua_to_py(lua.eval('Schema.categories'))
 
-expected = ['controller', 'mouse', 'keys', 'audio', 'camera', 'display', 'graphics', 'advgfx', 'voice', 'editor', 'startup', 'prefs', 'menu']
+expected = ['controller', 'keys', 'audio', 'camera', 'display', 'advgfx', 'voice', 'editor', 'prefs', 'menu']
 check([c['id'] for c in cats] == expected, f'kategori sırası beklenenden farklı: {[c["id"] for c in cats]}')
 
-tr_names = ['Oyun Kolu', 'Klavye / Fare', 'Tuş Atamaları', 'Ses', 'Kamera', 'Görüntü', 'Grafikler', 'Gelişmiş Grafikler',
-            'Sesli Sohbet', 'Rockstar Editor', 'Kayıt ve Başlangıç', 'Tercihler', 'Normal Menü']
+tr_names = ['Kontroller', 'Tuş Atamaları', 'Ses', 'Kamera', 'Görüntü', 'Grafik',
+            'Sesli Sohbet', 'Rockstar Editor', 'Tercihler', 'Normal Menü']
 check([c['label']['tr'] for c in cats] == tr_names, 'Türkçe kategori adları/sırası beklenenle uyuşmuyor')
 check([c['id'] for c in cats if c.get('hidden')] == ['menu'], 'Normal Menü yalnızca allowNativeMenu=false iken gizli olmalı (başka gizli kategori olmamalı)')
 
@@ -74,7 +74,7 @@ for c in cats:
         check(len(g['rows']) > 0, f'{c["id"]}.{g["id"]}: boş grup')
         for r in g['rows']:
             t = r['type']
-            check(t in ('toggle', 'select', 'slider', 'key', 'action', 'native', 'info'), f'bilinmeyen tür {t}')
+            check(t in ('toggle', 'select', 'slider', 'key', 'action', 'info'), f'bilinmeyen/izin verilmeyen tür {t} (GTA bağlantı satırları kaldırıldı)')
             if t in ('toggle', 'select', 'slider', 'action'):
                 check('id' in r, f'{c["id"]}.{g["id"]}: id yok ({t})')
             if 'id' in r and t != 'action':
@@ -87,22 +87,16 @@ for c in cats:
                 check(len(vals) == len(set(vals)), f'{r["id"]}: yinelenen seçenek')
             if t == 'slider':
                 check(r['min'] <= r['default'] <= r['max'], f'{r["id"]}: varsayılan aralık dışı')
-            if t == 'native':
-                check(r['target'] in ('settings', 'keybinds', 'game', 'map'), f'native hedefi geçersiz: {r["target"]}')
-                if r.get('read'):
-                    check(r['read'] in ('subtitles', 'metric', 'safezone', 'resolution', 'language'), f'{r["label"]["tr"]}: bilinmeyen read anahtarı {r["read"]}')
-                    check(f"read('{r['read']}'" in (ROOT / 'client/main.lua').read_text(encoding='utf-8'), f'{r["read"]}: main.lua okuyucusu yok')
-            if t in ('toggle', 'select', 'slider', 'key', 'native', 'action'):
+            if t in ('toggle', 'select', 'slider', 'key', 'action'):
                 check(bool(r['label'].get('tr')) and bool(r['label'].get('en')), f'{r.get("id") or r["label"]}: etiket eksik')
             if t == 'key':
                 check(('control' in r) != ('command' in r), f'key satırı control XOR command olmalı: {r["label"]}')
 
 native_targets = set(lua_to_py(lua.eval('(function() local t = {} for k in pairs(Config.Native) do t[k] = true end return t end)()')).keys())
+check('settings' in native_targets, 'Config.Native.settings tanımlı olmalı (OPTIONS → GTA Settings bunu açar)')
 for c in cats:
     for g in c['groups']:
-        for r in g['rows']:
-            if r['type'] == 'native':
-                check(r['target'] in native_targets, f'{r["target"]} Config.Native içinde yok')
+        check(any(r['type'] != 'info' for r in g['rows']), f'{c["id"]}.{g["id"]}: yalnızca bilgi notu olan grup kalmamalı')
 
 # Her ayarlanabilir id'nin client/apply.lua'da karşılığı olmalı (yalnızca pref.*/menu.* UI tarafında olabilir)
 apply_src = (ROOT / 'client/apply.lua').read_text(encoding='utf-8')
@@ -495,26 +489,7 @@ sim.pause = true; sim.frames(64)
 check(sim.count(sim.serverEvents, hello) == n0 + 1, 'S7b: 10 sn içinde tekrar istenmemeli')
 sim.exported.Close()
 
--- S8: GTA'nın güncel ayar değerleri (salt okunur) menü açılırken iletilir; okunamayan/geçersiz değer hiç gönderilmez
 sim.frames(700)
-IsSubtitlePreferenceSwitchedOn = function() return true end
-ShouldUseMetricMeasurements = function() return true end
-GetSafeZoneSize = function() return 0.95 end
-GetActualScreenResolution = function() return 2560, 1440 end
-GetCurrentLanguage = function() return 0 end
-sim.pause = true; sim.frames(64)
-local nv = sim.lastOpen().native
-check(type(nv) == 'table' and nv.subtitles == true and nv.metric == true and nv.safezone == 95
-    and nv.resolution == '2560x1440' and nv.language == 0, 'S8: GTA ayar değerleri menü açılırken iletilmeli')
-sim.exported.Close(); sim.frames(700)
-GetSafeZoneSize = function() return 5.0 end                 -- geçersiz aralık
-GetActualScreenResolution = function() return 0, 0 end
-GetCurrentLanguage = function() error('native yok') end     -- native patlarsa menü yine açılmalı
-sim.pause = true; sim.frames(64)
-nv = sim.lastOpen().native
-check(isOpen() == true, 'S8: okuma hatası menüyü bozmamalı')
-check(nv.safezone == nil and nv.resolution == nil and nv.language == nil, 'S8: geçersiz/okunamayan değer gönderilmemeli')
-sim.exported.Close(); sim.frames(700)
 
 -- S8b: yerleşik GTA menüsü KAPALI (allowNativeMenu = false): eski tercih true olsa bile ESC her zaman LOE menüsünü açar
 check(Config.Hijack.allowNativeMenu == false, 'S8b: allowNativeMenu varsayılanı false olmalı')
@@ -710,162 +685,6 @@ check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
-
--- S15: GEÇİCİ gfxprobe — yetki sunucudan gelir; test sırasında ana döngü yerleşik menüye dokunmaz; bitince her şey eski haline döner
-local realPrint, realEncode = print, json.encode
-print = function() end
-json.encode = function(t) sim.encoded = t; return 'X' end
-sim.frames(800)
-check(type(LoeProbe) == 'table' and LoeProbe.active == false, 'S15: LoeProbe tanımlı ve pasif olmalı')
-local actP = sim.calls.Activate or 0
-sim.commands['loe_gfxtest']()
-check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: komut önce sunucudan yetki istemeli')
-check(sim.pause == false, 'S15: yetki gelmeden menü açılmamalı')
-sim.fire('loe_pause:client:gfxprobeGo', 'auto', false)
-sim.frames(2000)
-check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
-
-sim.latent, sim.encoded = nil, nil
-sim.commands['loe_gfxtest']()
-sim.fire('loe_pause:client:gfxprobeGo', 'auto', true)
-sim.frames(1600)
-check(LoeProbe.active == true and sim.pause == true and isOpen() == false, 'S15: test GTA ayar menüsünü açmalı')
-sim.escFrame = true; sim.step(16); sim.frames(500)
-check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
-sim.frames(30000)
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'auto', 'S15: sonuç sunucuya gönderilmeli')
-local phases = {}
-for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'phase' then phases[#phases + 1] = e.name end end
-check(table.concat(phases, ',') == 'open,patch,deeper0,nav-g2,nav-g0,walk,hidden,scaleform,end', 'S15: faz sırası: ' .. table.concat(phases, ','))
-check(sim.calls.GoDeeper == 0, 'S15: ayar sayfasına GoDeeper(0) ile girilmeli')
-check(sim.encoded and sim.encoded.patched == false, 'S15: yama yokken patched=false raporlanmalı')
-
--- yamalı scaleform (sahte): LOE_PING / LOE_DUMP; yalnızca grup 2 girdisi menüyü hareket ettirir
-local fake = { buf = '', all = '', handles = {} }
-local function feed(s) fake.buf = fake.buf .. s; fake.all = fake.all .. s end
-BeginScaleformMovieMethodOnFrontend = function(name) fake.last = { name = name, params = {} }; return true end
-ScaleformMovieMethodAddParamInt = function(v) fake.last.params[#fake.last.params + 1] = v end
-EndScaleformMovieMethodReturnValue = function()
-    local c, r = fake.last, ''
-    if c.name == 'LOE_PING' then r = 'LOE_OK'
-    elseif c.name == 'LOE_DUMP' then r = fake.buf:sub(1, c.params[1]); fake.buf = fake.buf:sub(c.params[1] + 1) end
-    fake.handles[#fake.handles + 1] = r
-    return #fake.handles
-end
-IsScaleformMovieMethodReturnValueReady = function(h) return fake.handles[h] ~= nil end
-GetScaleformMovieMethodReturnValueString = function(h) return fake.handles[h] end
-SetControlValueNextFrame = function(g, c) if g == 2 then feed('SET_COLUMN_HIGHLIGHT\31' .. c .. '\30') end end
-feed(string.rep('x', 4500))
-sim.latent, sim.encoded = nil, nil
-sim.frames(800)
-sim.commands['loe_gfxtest']()
-sim.fire('loe_pause:client:gfxprobeGo', 'auto', true)
-sim.frames(32000)
-local chunks = {}
-for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sflog' then chunks[#chunks + 1] = e.s end end
-check(sim.encoded and sim.encoded.patched == true and sim.encoded.navGroup == 2, 'S15: yama algılanmalı, çalışan girdi grubu 2 bulunmalı')
-check(table.concat(chunks) == fake.all and fake.buf == '', 'S15: scaleform kaydı sırayla ve eksiksiz okunmalı')
-check(LoeProbe.active == false and sim.pause == false, 'S15: yamalı testten sonra her şey kapanmalı')
--- /loe_gfxpath: AS2 yolu okuma — sahte oyun: ayar sütununda dataViewMC0 altında 2 satır klibi var
-local V = 'currentPage.columnList.1.menuContainer.dataViewMC0'
-local resp = {
-    ['currentPage.columnList.1.dbgID.toString'] = 'PAUSE_MENU_SETTINGS',
-    [V .. '.toString'] = '_level0.x.menuMC.dataViewMC0',
-    [V .. '.settingsListItem0MC.toString'] = '_level0.x.settingsListItem0MC',
-    [V .. '.settingsListItem0MC._uniqueID.toString'] = '10',
-    [V .. '.settingsListItem0MC.menuID.toString'] = '1',
-    [V .. '.settingsListItem0MC.type.toString'] = '2',
-    [V .. '.settingsListItem0MC.initialIndex.toString'] = '1',
-    [V .. '.settingsListItem0MC.isSelectable.toString'] = '1',
-    [V .. '.settingsListItem0MC.itemTextLeft.text.substr'] = 'Texture Quality',
-    [V .. '.settingsListItem0MC.itemTextRight.text.substr'] = 'High',
-    [V .. '.settingsListItem0MC.multiListItems.join'] = 'Normal|High|Very High',
-    [V .. '.settingsListItem1MC._uniqueID.toString'] = '11',
-    [V .. '.settingsListItem1MC.itemTextLeft.text.substr'] = 'Shadow Quality',
-}
-local seq = {}
-BeginScaleformMovieMethodOnFrontend = function(path) fake.last = { name = path, params = {} }; return true end
-ScaleformMovieMethodAddParamTextureNameString = function(v) fake.last.sep = v end
-ScaleformMovieMethodAddParamInt = function(v) fake.last.params[#fake.last.params + 1] = v end
-local hn = 1000
-local hv = {}
-EndScaleformMovieMethodReturnValue = function()
-    hn = hn + 1
-    local r = resp[fake.last.name]
-    -- substr(start, len): yalnızca ilk parça var (kısa metin)
-    if r and fake.last.name:sub(-7) == '.substr' and (fake.last.params[1] or 0) > 0 then r = '' end
-    hv[hn] = r
-    seq[hn] = fake.last
-    return hn
-end
-IsScaleformMovieMethodReturnValueReady = function(h) return hv[h] ~= nil end
-GetScaleformMovieMethodReturnValueString = function(h) return hv[h] end
-SetControlValueNextFrame = function() end
-sim.latent, sim.encoded = nil, nil
-sim.frames(800)
-sim.commands['loe_gfxpath']()
-check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: gfxpath önce sunucudan yetki istemeli')
-sim.fire('loe_pause:client:gfxprobeGo', 'path', true)
-sim.frames(160000)
-local rowEvents, pathEvents, discovered = {}, 0, false
-for _, e in ipairs((sim.encoded or {}).log or {}) do
-    if e.k == 'rows' then rowEvents[#rowEvents + 1] = e end
-    if e.k == 'path' then
-        pathEvents = pathEvents + 1
-        if e.p == 'currentPage.columnList.1.dbgID.toString' and e.s == 'PAUSE_MENU_SETTINGS' then discovered = true end
-    end
-end
-check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData == 2, 'S15: gfxpath 2 adımın tamamında veri bulmalı')
-local r1 = rowEvents[1] and rowEvents[1].rows and rowEvents[1].rows[1]
-check(#rowEvents == 2 and rowEvents[1].view == 0 and rowEvents[1].n == 2 and r1 and r1.uid == '10' and r1.label == 'Texture Quality'
-      and r1.value == 'High' and r1.init == '1' and r1.opts == 'Normal|High|Very High', 'S15: gfxpath satır klibi alanları okunmalı')
-check(pathEvents >= 13, 'S15: gfxpath keşif yolları kaydedilmeli')
-local sepOk = false
-for _, c in pairs(seq) do if c.name:find('multiListItems.join', 1, true) and c.sep == '|' then sepOk = true end end
-check(sepOk, 'S15: seçenek listesi "|" ayırıcıyla istenmeli')
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: gfxpath bitince menü kapanmalı')
-BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamTextureNameString, EndScaleformMovieMethodReturnValue = nil, nil, nil
-IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString, SetControlValueNextFrame = nil, nil, nil
-BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethodReturnValue = nil, nil, nil
-IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString, SetControlValueNextFrame = nil, nil, nil
-
--- kayıt: profil değişikliği yakalanmalı, ESC kaydı bitirmemeli, Delete bitirmeli
-sim.latent, sim.encoded = nil, nil
-sim.frames(800)
-sim.commands['loe_gfxrec']()
-sim.fire('loe_pause:client:gfxprobeGo', 'record', true)
-sim.frames(6000)
-check(LoeProbe.active == true and sim.pause == true, 'S15: kayıt GTA ayar menüsünü açmalı')
-sim.profile[203] = 1; sim.frames(600); sim.profile[203] = nil; sim.frames(600)
-sim.escFrame = true; sim.step(16); sim.frames(300)
-check(sim.pause == true and LoeProbe.active == true, 'S15: kayıtta ESC kaydı bitirmemeli')
-sim.delFrame = true; sim.step(16); sim.frames(3000)
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: Delete kaydı bitirmeli, menü kapanmalı')
-local prof, reason = 0, nil
-for _, e in ipairs((sim.encoded or {}).log or {}) do
-    if e.k == 'profile' then prof = prof + 1 end
-    if e.k == 'recordEnd' then reason = e.reason end
-end
-check(sim.encoded and sim.encoded.kind == 'record' and reason == 'delete' and prof == 2, 'S15: kayıt sonucu (tür/neden/profil değişikliği): ' .. tostring(reason) .. ' ' .. prof)
-
--- hata yolu: test ortasında native hata verirse test kapanmalı, hata raporlanmalı, ESC yakalama geri gelmeli
-local realAct = ActivateFrontendMenu
-ActivateFrontendMenu = function() error('boom') end
-sim.latent, sim.encoded = nil, nil
-sim.frames(800)
-sim.commands['loe_gfxtest']()
-sim.fire('loe_pause:client:gfxprobeGo', 'auto', true)
-sim.frames(4000)
-ActivateFrontendMenu = realAct
-check(LoeProbe.active == false and sim.encoded and sim.encoded.error ~= nil, 'S15: hata olursa test kapanmalı ve hata raporlanmalı')
-
--- test bittikten sonra ESC yine LOE menüsünü açmalı
-sim.frames(700)
-sim.pause = true; sim.frames(64)
-check(isOpen() == true, 'S15: test sonrası ESC yakalama geri gelmeli')
-sim.exported.Close(); sim.frames(700)
-print, json.encode = realPrint, realEncode
 return R
 '''
 
@@ -873,7 +692,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua', 'client/gfxprobe.lua'):
+for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
@@ -939,47 +758,6 @@ sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
 
 
-# GEÇİCİ gfxprobe: yalnızca admin ACE, oran sınırı, boyut sınırı, dosya adı
-sv.execute(r'''
-saved = {}
-function SaveResourceFile(res, name, data, len) saved[#saved + 1] = { res = res, name = name, n = #data } return true end
-function GetCurrentResourceName() return 'loe_pause' end
-function TriggerClientEvent(n, t, ...) local a = { ... }; sent[#sent + 1] = { n = n, t = t, list = a[1], allowed = a[2] } end
-''')
-ASK = sv.eval('''function(src, adv, admin, mode)
-    source = src; now = now + (adv or 0)
-    aceTable[tostring(src) .. ':admin'] = admin == true
-    handlers['loe_pause:server:gfxprobeAsk'](mode)
-    return #sent
-end''')
-PUT = sv.eval('''function(src, adv, admin, payload)
-    source = src; now = now + (adv or 0)
-    aceTable[tostring(src) .. ':admin'] = admin == true
-    handlers['loe_pause:server:gfxprobe'](payload)
-    return #saved
-end''')
-n1 = int(sv.eval('#sent'))
-check(ASK(11, 5000, False, 'auto') == n1 + 1, 'sunucu: gfxprobe yetki isteği yanıtlanmalı')
-lastp = lua_to_py(sv.eval('sent[#sent]'))
-check(lastp['n'] == 'loe_pause:client:gfxprobeGo' and lastp['list'] == 'auto' and lastp.get('allowed') is False, 'sunucu: yetkisiz oyuncuya izin verilmemeli')
-check(ASK(11, 100, True, 'record') == n1 + 1, 'sunucu: gfxprobe yetki isteği 3 sn sınırlanmalı')
-check(ASK(11, 3500, True, 'record') == n1 + 2 and lua_to_py(sv.eval('sent[#sent]')).get('allowed') is True
-      and lua_to_py(sv.eval('sent[#sent].list')) == 'record', 'sunucu: admin oyuncuya izin verilmeli')
-check(ASK(11, 3500, True, 'evil') == n1 + 3 and lua_to_py(sv.eval('sent[#sent].list')) == 'auto', 'sunucu: bilinmeyen mod auto olmalı')
-check(ASK(11, 3500, True, 'path') == n1 + 4 and lua_to_py(sv.eval('sent[#sent].list')) == 'path', 'sunucu: path modu kabul edilmeli')
-check(PUT(12, 0, False, '{"a":1}') == 0, 'sunucu: yetkisiz oyuncunun sonucu kaydedilmemeli')
-check(PUT(12, 0, True, '{"a":1}') == 1, 'sunucu: admin sonucu kaydedilmeli')
-sv1 = lua_to_py(sv.eval('saved[1]'))
-import re  # noqa: E402
-check(sv1['res'] == 'loe_pause' and re.fullmatch(r'gfxprobe_\d{8}_\d{6}_12\.json', sv1['name']) is not None, f'sunucu: dosya adı biçimi: {sv1["name"]}')
-check(PUT(12, 500, True, '{"b":1}') == 1, 'sunucu: 10 sn içinde ikinci sonuç yok sayılmalı')
-check(PUT(12, 11000, True, 'z' * 1500001) == 1, 'sunucu: çok büyük sonuç reddedilmeli')
-check(PUT(12, 0, True, 123) == 1 and PUT(12, 0, True, '') == 1, 'sunucu: metin olmayan / boş sonuç reddedilmeli')
-check(PUT(12, 0, True, '{"c":1}') == 2, 'sunucu: geçersiz istekler oran sınırını tüketmemeli')
-sv.execute('Config.GfxProbe.enabled = false')
-check(PUT(12, 20000, True, '{"d":1}') == 2 and ASK(13, 0, True, 'auto') and lua_to_py(sv.eval('sent[#sent]')).get('allowed') is False,
-      'sunucu: GfxProbe kapalıyken hiçbir şey kabul edilmemeli')
-sv.execute('Config.GfxProbe.enabled = true')
 
 
 # ------------------------------------------------------------------ 6) GEÇİCİ: scaleform araçları
