@@ -610,31 +610,27 @@ local function runPath()
     info('opened')
 
     phase('discover')
-    local CHAIN = 'CONTENT.contentMC.pageContainerMC.pageMC.c2MC'
+    local VL = SETCOL .. '.model.viewList.0'
     local HYP = {
-        -- H1: sonu rakamlı klip adı (c2MC) ada göre çözülüyor mu?
-        { 'CONTENT.toString' }, { 'CONTENT.contentMC.toString' }, { 'CONTENT.contentMC.pageContainerMC.toString' },
-        { 'CONTENT.contentMC.pageContainerMC.pageMC.toString' }, { CHAIN .. '.toString' }, { CHAIN .. '.menuMC.toString' },
-        -- H2: mutlak yollar
-        { '_root.CONTENT.toString' }, { '_level0.CONTENT.toString' }, { '_root.TIMELINE.menuLevel.toString' },
-        -- H4: sayı indeksi — düz değerli diziler ve klip dizisi
-        { 'menuGFXList.join', '|' }, { 'menuGFXList.0.toString' }, { 'menuList.0.toString' },
-        { 'currentPage.columnList.0.toString' }, { SETCOL .. '.model.viewList.0.toString' },
-        -- diğer adlı alt klipler
-        { SETCOL .. '.CONTENT.scrollBase.toString' }, { SETCOL .. '.customMC.toString' }, { SETCOL .. '.CONTENT.customMC.toString' },
+        -- görünüm nesnesi çözülüyor mu? (nesne döndüren metod: çözülürse '' döner, çözülmezse zaman aşımı)
+        { VL .. '.__get__params' }, { VL .. '.__get__index' }, { VL .. '.__get__maxitems' },
+        { VL .. '.itemList.join', '|' }, { VL .. '.dataList.join', '|' },
+        { SETCOL .. '.model.getCurrentView', nil, { 0 } },
+        -- alt çizgili özellik ve düz nesne zinciri
+        { 'pageLoaderObject._mc.toString' }, { SETCOL .. '.model._scrollBar.toString' },
+        { SETCOL .. '.model.viewIndex.toString' },
+        -- diğer sütun (kategori listesi) için aynı denemeler
+        { 'currentPage.columnList.0.model.viewList.0.__get__params' },
+        { 'currentPage.columnList.0.model.viewList.0.itemList.join', '|' },
+        -- sayısal dizi indeksi denetimi
+        { 'menuList.0.toString' }, { 'currentPage.columnList.1.toString' },
     }
     for _, d in ipairs(HYP) do
         local str, int, st = sfRead(d[1], d[2], d[3])
         add('path', { p = d[1], s = str, i = int, st = st })
     end
-    -- H3: derinlik taraması (iki yoldan), bulunanlar kaydedilir
+    -- v8: menuMC.dataViewMC0..60 adla çözülmedi (rakamlı klip adları çözülemiyor) → tarama kaldırıldı
     local found = {}
-    for dep = 0, 60 do
-        local a = sfRead(SETCOL .. '.menuContainer.dataViewMC' .. dep .. '.toString')
-        local b = (a == nil) and sfRead(CHAIN .. '.menuMC.dataViewMC' .. dep .. '.toString') or nil
-        if a or b then found[#found + 1] = { dep = dep, a = a, b = b } end
-        if #found >= 3 then break end
-    end
     add('views', { found = found })
     local views = {}
     for _, f in ipairs(found) do views[#views + 1] = f.dep end
