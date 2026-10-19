@@ -1,11 +1,13 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v3)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v4)
 --
--- v2 sonucu: yazma çalışıyor (kök SET_COLUMN_INPUT_EVENT ve sol/sağ tuşu); GetProfileSetting yalnızca menü kapanınca
--- güncelleniyor; satır kimliği menuUniqueID'den okunuyor (yalnızca tuşla gezinince değişir).
+-- Bulgular: yazma çalışıyor (kök SET_COLUMN_INPUT_EVENT ve sol/sağ tuşu); GetProfileSetting yalnızca menü kapanınca
+-- güncelleniyor; satır kimliği menuUniqueID'den okunuyor (tuşla gezinince değişir); SuppressFrontendRenderingThisFrame
+-- ile gizlenen menü tuş İŞLEMİYOR (v3).
 --
---   /loe_gtaset : (~2 dk, GTA menüsü GİZLİ açılır)
---     1) v2'nin Music seviyesinde bıraktığı +1 farkı geri alır (değer hâlâ 1 ise).
---     2) Tüm kategorilere girip yalnızca aşağı tuşuyla satır kimliklerini toplar (değer değiştirmez).
+--   /loe_gtaset : (~2 dk) GTA menüsü normal açılır, üstünü NUI'deki tam ekran "Applying GTA settings…" katmanı örter.
+--     1) NUI odağı açıkken tuşlar menüyü hareket ettiriyor mu?
+--     2) v2'nin Music seviyesinde bıraktığı +1 farkı geri alır (değer hâlâ 1 ise).
+--     3) Tüm kategorilere girip yalnızca aşağı tuşuyla satır kimliklerini toplar (değer değiştirmez).
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -183,14 +185,8 @@ local function gotoState(want, max, tag)
     return false
 end
 
-local function openAudio(tag)
-    if not openSettings() then return false end
-    sleep(2500)          -- LANDING_MENU doğrudan Ayarlar sayfasını açar
-    return gotoState(STATE_AUDIO, 8, tag)
-end
-
 local function send(extra)
-    local payload = { kind = 'walk3', log = log }
+    local payload = { kind = 'walk4', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -201,29 +197,20 @@ local function send(extra)
     say(('Result sent to the server (%d events, %d KB).'):format(#log, math.ceil(#data / 1024)))
 end
 
--- Gizli mod: menü açık ve girdi alıyor ama ekrana çizilmiyor (SuppressFrontendRenderingThisFrame her karede)
-local hidden = false
-local function hide(on)
-    if on and not hidden then
-        hidden = true
-        CreateThread(function()
-            while hidden do
-                SuppressFrontendRenderingThisFrame()
-                Wait(0)
-            end
-        end)
-    elseif not on then
-        hidden = false
-    end
+-- NUI'deki tam ekran örtü (html: #gtaCover). Arkadaki GTA menüsü görünmez, tuşları yine işler.
+local covered = false
+local function cover(on)
+    covered = on == true
+    SendNUIMessage({ action = 'cover', on = covered, text = 'Applying GTA settings…' })
 end
 
 local function begin()
     log, t0 = {}, GetGameTimer()
     LoeProbe.active = true
-    -- Güvenlik: test ne olursa olsun 150 sn sonra ESC yakalama geri gelir
+    -- Güvenlik: test ne olursa olsun 240 sn sonra ESC yakalama geri gelir
     local token = {}
     LoeProbe.token = token
-    SetTimeout(150000, function()
+    SetTimeout(240000, function()
         if LoeProbe.token == token and LoeProbe.active then
             busy = false
             LoeProbe.active = false
@@ -232,45 +219,62 @@ local function begin()
 end
 
 local function finish()
-    hidden = false
     closeMenu()
+    if covered then cover(false) end
+    SetNuiFocus(false, false)
     SetTimeout(1000, function() LoeProbe.active = false; busy = false end)
 end
 
--- ---------------------------------------------------------------- /loe_gtaset (v3)
+-- ---------------------------------------------------------------- /loe_gtaset (v4)
+-- v3: SuppressFrontendRenderingThisFrame ile gizlenen menü tuşları İŞLEMİYOR. Bu yüzden GTA menüsü normal açılır,
+-- üstünü NUI'deki tam ekran katman örter. Gerçek kullanımdaki gibi NUI odağı da açıktır (tuşlar yine çalışıyor mu?).
 local MUSIC_PROFILE, MUSIC_ROW_UID = 301, '9'   -- v2: Audio satır 1 (kimlik 9) ↔ profil 301; test onu 0 → 1 yaptı
+local KEYMAP_UID = '148'                         -- Key Bindings: Enter ayrı tuş atama ekranını açar → girilmez
 
--- 1) v2'nin bıraktığı Music farkını geri al (yalnızca değer hâlâ 1 ise)
+-- İlk aşağı basış kategoriyi değiştirdi mi? Değiştirmediyse NUI odağını kapatıp bir kez daha dene.
+local function inputCheck()
+    phase('input-check')
+    local a = look('ic0').uid
+    press(C_DOWN)
+    sleep(800)
+    local b = look('ic1').uid
+    local res = { focus = true, ok = a ~= b }
+    if not res.ok then
+        SetNuiFocus(false, false)
+        res.focus = false
+        press(C_DOWN)
+        sleep(800)
+        res.ok = look('ic2').uid ~= b
+    end
+    add('inputCheck', res)
+    return res.ok
+end
+
+-- v2'nin bıraktığı Music farkını geri al (yalnızca değer hâlâ 1 ise). Kategori listesindeyken çağrılır.
 local function fixMusic()
     phase('fix-music')
     local before = GetProfileSetting(MUSIC_PROFILE)
     add('music', { before = before })
     if before ~= 1 then return 'skip' end
-    if not openAudio('fnav') then closeMenu() return 'no-audio' end
+    if not gotoState(STATE_AUDIO, 12, 'fnav') then return 'no-audio' end
     press(C_ACCEPT)
     sleep(900)
     look('fix-entered')
     press(C_DOWN)
     sleep(600)
     local row = look('fix-down').uid
-    local done = false
-    if row == MUSIC_ROW_UID then
+    local done = row == MUSIC_ROW_UID
+    if done then
         press(C_LEFT)
         sleep(800)
-        done = true
     end
     press(C_BACK)
     sleep(800)
-    closeMenu()
-    sleep(2000)
-    local after = GetProfileSetting(MUSIC_PROFILE)
-    add('music', { row = row, pressed = done, after = after })
-    return done and (after == 0 and 'fixed' or 'not-saved') or 'row-mismatch'
+    add('music', { row = row, pressed = done })
+    return done and 'pressed' or 'row-mismatch'
 end
 
--- 2) Tüm kategorilerde satır kimliklerini topla (yalnızca aşağı tuşu; değer değişmez)
-local KEYMAP_UID = '148'   -- Key Bindings: Enter ayrı tuş atama ekranını açar → girilmez
-
+-- Tüm kategorilerde satır kimliklerini topla (yalnızca aşağı tuşu; değer değişmez)
 local function walkRows(first)
     local ids, times = { first }, {}
     for _ = 1, 40 do
@@ -290,9 +294,6 @@ end
 
 local function walk()
     phase('walk')
-    if not openSettings() then add('err', { what = 'walk-open' }) return 0 end
-    hide(true)
-    sleep(2500)
     local seen, cats = {}, 0
     for c = 0, 19 do
         if not IsPauseMenuActive() then add('err', { what = 'closed', at = c }) break end
@@ -317,8 +318,6 @@ local function walk()
         press(C_DOWN)
         sleep(700)
     end
-    hide(false)
-    closeMenu()
     return cats
 end
 
@@ -326,19 +325,33 @@ local function run()
     begin()
     base = snap()
     add('profileStart', { list = list(base) })
-    hide(true)
-    local fix = fixMusic()
-    hide(false)
-    add('fix', { result = fix })
-    sleep(1000)
-    local cats = walk()
-    hide(false)
+    cover(true)
+    SetNuiFocus(true, true)
+    sleep(300)
+
+    phase('open')
+    if not openSettings() then
+        say('Could not open the GTA settings menu.')
+        finish()
+        send({ failed = 'open' })
+        return
+    end
+    sleep(2500)
+    local inputOk = inputCheck()
+    local fix, cats = 'not-run', 0
+    if inputOk then
+        fix = fixMusic()
+        cats = walk()
+    end
+    phase('close')
     finish()
     sleep(2500)
     check('final')
+    local music = GetProfileSetting(MUSIC_PROFILE)
+    if fix == 'pressed' then fix = music == 0 and 'fixed' or 'not-saved' end
     beep()
     say(('Settings walk finished: %d categories, music fix: %s'):format(cats, fix))
-    send({ cats = cats, fix = fix })
+    send({ cats = cats, fix = fix, inputOk = inputOk, music = music })
 end
 
 -- ---------------------------------------------------------------- komut (sunucu yetkiyi onaylayınca başlar)
