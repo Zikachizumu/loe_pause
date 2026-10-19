@@ -411,6 +411,7 @@ const gPendingCount = () => Object.keys(S.gpend).length;
 const gHuman = (id) => String(id).replace(/^MO_/, '').replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
 const gText = (id) => S.glabels[id] || gHuman(id);
 const gDisplay = (r, v) => (r.inv ? gMax(r) - v : v);          // ters kaydırıcıda (güvenli bölge) sağ = küçük profil değeri
+const gShow = (r, v) => `${(r.base || 0) + gDisplay(r, v)}${r.unit || ''}`;   // ör. güvenli bölge: %90..%100
 
 // Şemadaki GTA satırlarına GTA'nın kendi metinlerini (oyuncunun GTA diliyle) etiket olarak yazar
 const applyGtaLabels = () => {
@@ -674,7 +675,7 @@ const buildGSlider = (r, base, label, mark, hover, arrow) => {
     const max = Math.max(1, r.max || 1);
     const pos = () => gDisplay(r, gVal(r));
     const fill = h('div', { class: 'sl-fill', style: `width:${(pos() / max) * 100}%` });
-    const out = h('span', { class: 'sl-val' }, String(pos()));
+    const out = h('span', { class: 'sl-val' }, gShow(r, gVal(r)));
     const track = h('div', { class: 'sl-track' }, fill);
     const fromEvent = (ev) => {
         if (S.gbusy) return;
@@ -682,7 +683,7 @@ const buildGSlider = (r, base, label, mark, hover, arrow) => {
         const f = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
         const p = Math.round(f * max);
         setG(r, r.inv ? max - p : p);
-        fill.style.width = `${(pos() / max) * 100}%`; out.textContent = String(pos());
+        fill.style.width = `${(pos() / max) * 100}%`; out.textContent = gShow(r, gVal(r));
         const row = track.closest('.gs-row');
         if (row) row.classList.toggle('chg', S.gpend[r.pid] !== undefined);
         renderApply();
@@ -1010,6 +1011,7 @@ window.addEventListener('message', (ev) => {
         if (S.screen === 'settings') refreshSettings(false);
     }
     else if (d.action === 'gtaDone') onGtaDone(d);
+    else if (d.action === 'lab') { const b = document.getElementById('labBanner'); b.textContent = String(d.text || ''); b.classList.toggle('hidden', !d.text); }
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();

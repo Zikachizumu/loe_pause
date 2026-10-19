@@ -83,6 +83,10 @@ Config.Native = {
     graphics = { menu = 'FE_MENU_VERSION_LANDING_MENU',           pause = true,  component = -1, category = 6 },
 }
 
+-- GEÇİCİ: GTA ses/okuma deneyleri (/loe_gtalab). Yalnızca `ace` yetkisi olanlarda çalışır; sonuç sunucuda resource klasörüne
+-- gfxprobe_*.json yazılır. Araştırma bitince kaldırılır.
+Config.GfxProbe = { enabled = true, ace = 'admin' }
+
 -- ================================================================ ÖZELLİKLER
 -- false yapılan özellik arayüzden tamamen kalkar ve uygulanmaz.
 Config.Features = {

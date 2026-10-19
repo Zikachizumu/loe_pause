@@ -52,7 +52,7 @@ local function gtaRows(catId)
             for _, r in ipairs(c.rows) do
                 if r.pid and not GTA_SKIP[r.pid] and (r.kind == 'slider' or r.kind == 'list') then
                     if r.kind == 'slider' then
-                        rows[#rows + 1] = { id = 'gta.' .. r.pid, type = 'gtaslider', pid = r.pid, text = r.text, max = r.max, inv = r.inv }
+                        rows[#rows + 1] = { id = 'gta.' .. r.pid, type = 'gtaslider', pid = r.pid, text = r.text, max = r.max, inv = r.inv, base = r.base, unit = r.unit }
                     else
                         rows[#rows + 1] = { id = 'gta.' .. r.pid, type = 'glist', pid = r.pid, text = r.text, labels = r.labels }
                     end

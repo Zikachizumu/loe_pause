@@ -82,7 +82,7 @@ GtaSetData = {
             { uid = 32, kind = 'slider', text = 'MO_RET_SIZE', pid = 415, max = 10 },
             { uid = 33, kind = 'list', text = 'MO_DISPGPS', pid = 207, labels = { 'MO_OFF', 'MO_ON' } },
             { uid = 15, kind = 'slider', text = 'MO_BRI', pid = 213, max = 30 },
-            { uid = 34, kind = 'slider', text = 'MO_SAFEZONE', pid = 212, max = 10, inv = true },
+            { uid = 34, kind = 'slider', text = 'MO_SAFEZONE', pid = 212, max = 10, inv = true, base = 90, unit = '%' },
             { uid = 27, kind = 'list', text = 'MO_SKFX', pid = 226, labels = { 'MO_OFF', 'MO_ON' } },
             { uid = 28, kind = 'list', text = 'MO_SUB', pid = 203, labels = { 'MO_OFF', 'MO_ON' } },
             { uid = 184, kind = 'list', text = 'MO_MEASUREMENT', pid = 227, labels = { 'MS_IMPERIAL', 'MS_METRIC' } },
