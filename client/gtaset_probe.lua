@@ -1,11 +1,10 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v8: eşleştirme)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v9: kaydırıcı aralıkları)
 --
 -- Bulgular: GTA ayar menüsü gizliyken (SuppressFrontendRenderingThisFrame) tuş işlemiyor ama kök scaleform metodları
--- çalışıyor: SET_INPUT_EVENT (8/9 gezinme, 10/11 değer) ve MENU_SHIFT_DEPTH(±1) (satırlara gir/çık). Değer menü kapanınca
--- profile yazılıyor (GetProfileSetting); satır kimliği menuUniqueID'den okunuyor; çağrılar arası 50 ms yetiyor (v7).
+-- çalışıyor: SET_INPUT_EVENT (9 gezinme, 10/11 değer) ve MENU_SHIFT_DEPTH(±1) (satırlara gir/çık). Değer menü kapanınca
+-- profile yazılıyor (GetProfileSetting). Satır tablosu: shared/gtaset_data.lua (v8 eşleştirmesinden).
 --
---   /loe_gtaset : (~4-5 dk, GTA menüsü hiç görünmez) Controls, Keyboard/Mouse, Audio, Camera, Display satırlarını
---                 tek tek bir adım değiştirip geri alır; her satırın profil kimliğini ve adım ölçeğini kaydeder.
+--   /loe_gtaset : (~7-10 dk, GTA menüsü hiç görünmez) 24 kaydırıcının en büyük değerini ölçer ve eski değerine döndürür.
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -16,7 +15,7 @@ local P = Config.GfxProbe or {}
 if P.enabled ~= true then return end
 
 local PROFILE_MAX = 1200
-local MAX_LOG = 6000
+local MAX_LOG = 3000
 local SETTINGS_MENU = (Config.Native and Config.Native.settings and Config.Native.settings.menu) or 'FE_MENU_VERSION_LANDING_MENU'
 
 
@@ -156,7 +155,7 @@ local function closeMenu()
 end
 
 local function send(extra)
-    local payload = { kind = 'map8', log = log }
+    local payload = { kind = 'ranges9', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -186,10 +185,10 @@ end
 local function begin()
     log, t0 = {}, GetGameTimer()
     LoeProbe.active = true
-    -- Güvenlik: test ne olursa olsun 10 dk sonra ESC yakalama geri gelir
+    -- Güvenlik: test ne olursa olsun 30 dk sonra ESC yakalama geri gelir
     local token = {}
     LoeProbe.token = token
-    SetTimeout(600000, function()
+    SetTimeout(1800000, function()
         if LoeProbe.token == token and LoeProbe.active then
             busy = false
             LoeProbe.active = false
@@ -209,7 +208,6 @@ end
 -- adım değiştirip menüyü kapatır, profil farkından satırın profil kimliğini ve adım ölçeğini çıkarır, sonra geri alır.
 -- Değişmeyen satır (en uçta ya da profile bağlı değil) ters yönle bir kez daha denenir.
 local DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT = 9, 10, 11
-local MAP_CATS = { ['0'] = true, ['1'] = true, ['3'] = true, ['4'] = true, ['5'] = true }
 
 -- Zamanlama (v7 çalıştı, v8 ilk iki deneme çalışmadı): menü her işlemden sonra kısa süre meşgul; o sırada gelen çağrı
 -- YUTULUR. Art arda gezinme 60 ms aralıkla yeterli; giriş/çıkış ve değer adımı önceki işlemden en az 250 ms sonra;
@@ -223,7 +221,6 @@ end
 
 local function uid() return val('menuUniqueID.toString') end
 local function level() return tostring(val('menuLevel.toString')) end
-local function opposite(dir) return dir == DPAD_RIGHT and DPAD_LEFT or DPAD_RIGHT end
 
 -- Kök gezinme: çağır, menuUniqueID değişene kadar bekle; yutulursa en çok 3 deneme. Yalnızca sorunlar kaydedilir.
 local function nav(dir, tag)
@@ -276,6 +273,18 @@ local function step(dir)
     lastAct = GetGameTimer()
 end
 
+-- Toplu değer adımı: n kez, aralık gap ms (günlüğe yazılmaz)
+local function stepN(dir, n, gap)
+    pace(ACT_GAP)
+    for _ = 1, n do
+        pcall(BeginScaleformMovieMethodOnFrontend, 'SET_INPUT_EVENT')
+        pcall(ScaleformMovieMethodAddParamInt, dir)
+        pcall(EndScaleformMovieMethod)
+        sleep(gap)
+    end
+    lastAct = GetGameTimer()
+end
+
 local function openHidden()
     hide(true)
     ActivateFrontendMenu(GetHashKey(SETTINGS_MENU), true, -1)
@@ -323,7 +332,11 @@ local function session(cat, steps)
     local ok = openHidden() and gotoCat(cat) and depth(1)
     if ok then
         for _, s in ipairs(steps) do
-            if gotoRow(s.row) then step(s.dir) else ok = false end
+            if gotoRow(s.row) then
+                if s.n then stepN(s.dir, s.n, s.gap) else step(s.dir) end
+            else
+                ok = false
+            end
         end
         if not depth(-1) then ok = false end
     end
@@ -344,115 +357,97 @@ local function settle()
     end
 end
 
--- Satır listelerini topla (tek gizli oturum, yalnızca aşağı). Çıkış başarısızsa dur (yanlış listede kalmamak için).
-local function collectRows()
-    phase('rows')
-    local cats = {}
-    if not openHidden() then shut() return cats end
-    local seen = {}
-    for _ = 0, 14 do
-        if level() ~= '1' then add('err', { what = 'collect-level', level = level() }) break end
-        local c = uid()
-        if seen[c] then break end
-        seen[c] = true
-        if MAP_CATS[c] then
-            if not depth(1) then break end
-            local first = uid()
-            local rows = { first }
-            for _ = 1, 45 do
-                if not nav(DPAD_DOWN, 'collect') then break end
-                local u = uid()
-                if u == first then break end
-                rows[#rows + 1] = u
-            end
-            cats[#cats + 1] = { cat = c, rows = rows }
-            add('rows', { cat = c, rows = rows })
-            if not depth(-1) then break end
-        end
-        if not nav(DPAD_DOWN, 'next-cat') then break end
-    end
-    shut()
-    return cats
+-- ---------------------------------------------------------------- v9: kaydırıcı aralıkları
+-- v8 eşleştirmesi tamamlandı (shared/gtaset_data.lua). Kaydırıcılar uçta durur (stepVal sınırlar). Her kaydırıcıyı sağa
+-- uca kadar iterek en büyük değeri bulur (kaydırıcı en küçük değeri 0), sonra eski değerine döndürür.
+-- Önce adım aralığı ölçülür: çok hızlı basış yutulabiliyor (v7/v8: gezinme 60 ms yetti, değer adımı için doğrulanmadı).
+local cats = {}
+for _, c in ipairs(GtaSetData.cats) do
+    local sliders = {}
+    for _, r in ipairs(c.rows) do if r.kind == 'slider' then sliders[#sliders + 1] = r end end
+    if #sliders > 0 then cats[#cats + 1] = { id = c.id, uid = tostring(c.uid), sliders = sliders } end
 end
 
+local R_DIR, L_DIR = DPAD_RIGHT, DPAD_LEFT
 local cur = {}          -- profil ayarlarının bilinen güncel durumu
-local pending           -- geri alınması gereken son değişiklik: { cat, row, dir, ids = { { id, eski, yeni } } }
-local fails = 0
 
-local function restoredOk(p)
-    for _, x in ipairs(p.ids) do
-        if (cur[x[1]] or 0) ~= x[2] then return false end
+local function orig(base_, pid) return base_[pid] or 0 end
+
+-- Bir kaydırıcıyı kesin eski değerine döndür ve doğrula: ilk deneme verilen aralıkla, sonrakiler yavaş (250 ms); en çok 3 deneme
+local function putBack(c, r, want, gap)
+    for try = 1, 3 do
+        local now_ = cur[r.pid] or 0
+        if now_ == want then return true end
+        local dir, n = (now_ > want) and L_DIR or R_DIR, math.abs(now_ - want)
+        session(c.uid, { { row = tostring(r.uid), dir = dir, n = n, gap = try == 1 and gap or 250 } })
+        cur = settle()
     end
-    return true
+    return (cur[r.pid] or 0) == want
 end
 
-local function restoreAlone()
-    local p = pending
-    pending = nil
-    session(p.cat, { { row = p.row, dir = opposite(p.dir) } })
-    cur = settle()
-    add('restore', { cat = p.cat, row = p.row, ok = restoredOk(p) })
-end
-
--- Satırı `dir` yönünde bir adım değiştir; aynı kategorideki önceki değişikliği aynı oturumda geri al
-local function probeRow(it, dir)
-    local steps, restoring = {}, nil
-    if pending and pending.cat == it.cat then
-        restoring, pending = pending, nil
-        steps[1] = { row = restoring.row, dir = opposite(restoring.dir) }
-    elseif pending then
-        restoreAlone()
+-- Adım aralığı: liste satırı (MO_CTY, 12 seçenek, uçlarda dönüyor → kırpma yok) 10 basışta tam 10 adım ilerlemeli.
+-- Kaydırıcı olmaz: uçta durup ölçümü yanıltır. Geri alma: kalan adımlar (12 - 10) yavaş basılır, doğrulanır.
+local function calibrate()
+    local cat, row
+    for _, c in ipairs(GtaSetData.cats) do
+        for _, r in ipairs(c.rows) do
+            if r.text == 'MO_CTY' then cat, row = c, r end
+        end
     end
-    steps[#steps + 1] = { row = it.row, dir = dir }
-    local before = cur
-    local ok = session(it.cat, steps)
-    cur = settle()
-    local own = {}
-    if restoring then for _, x in ipairs(restoring.ids) do own[x[1]] = true end end
-    local mine = {}
-    for _, x in ipairs(diff(before, cur)) do
-        if not own[x[1]] then mine[#mine + 1] = x end
+    if not row then return 250 end
+    local count = #row.labels
+    for _, gap in ipairs({ 50, 70, 100, 150, 250 }) do
+        local before = cur[row.pid] or 0
+        session(tostring(cat.uid), { { row = tostring(row.uid), dir = R_DIR, n = 10, gap = gap } })
+        cur = settle()
+        local after = cur[row.pid] or 0
+        local ok = after == (before + 10) % count
+        add('calibrate', { gap = gap, pid = row.pid, before = before, after = after, ok = ok })
+        for _ = 1, 3 do   -- eski değere dön (liste dönüyor: yalnızca sağa basılır)
+            local back = ((before - (cur[row.pid] or 0)) % count)
+            if back == 0 then break end
+            session(tostring(cat.uid), { { row = tostring(row.uid), dir = R_DIR, n = back, gap = 250 } })
+            cur = settle()
+        end
+        if ok then return gap end
     end
-    if restoring then add('restore', { cat = restoring.cat, row = restoring.row, ok = restoredOk(restoring) }) end
-    fails = ok and 0 or fails + 1
-    return ok, mine
+    return 250
 end
 
 local function run()
     begin()
     base = snap()
     cur = base
-    pending, fails = nil, 0
     add('profileStart', { list = list(base) })
 
-    local cats = collectRows()
-    local items = {}
-    for _, c in ipairs(cats) do
-        for _, r in ipairs(c.rows) do items[#items + 1] = { cat = c.cat, row = r } end
-    end
-    add('items', { n = #items })
+    phase('calibrate')
+    local gap = calibrate()
+    add('gap', { gap = gap })
 
-    phase('map')
-    local results, retry, aborted = {}, {}, false
-    for _, it in ipairs(items) do
-        local ok, mine = probeRow(it, DPAD_RIGHT)
-        results[#results + 1] = { cat = it.cat, row = it.row, dir = 'right', ok = ok, ids = mine }
-        add('map', results[#results])
-        if #mine > 0 then pending = { cat = it.cat, row = it.row, dir = DPAD_RIGHT, ids = mine }
-        elseif ok then retry[#retry + 1] = it end
-        if fails >= 3 then aborted = true break end
-    end
-    if not aborted then
-        phase('map-left')
-        for _, it in ipairs(retry) do
-            local ok, mine = probeRow(it, DPAD_LEFT)
-            results[#results + 1] = { cat = it.cat, row = it.row, dir = 'left', ok = ok, ids = mine }
-            add('map', results[#results])
-            if #mine > 0 then pending = { cat = it.cat, row = it.row, dir = DPAD_LEFT, ids = mine } end
-            if fails >= 3 then aborted = true break end
+    phase('ranges')
+    local ranges, failed = {}, {}
+    for _, c in ipairs(cats) do
+        local plan = {}
+        for _, r in ipairs(c.sliders) do plan[#plan + 1] = { row = tostring(r.uid), dir = R_DIR, n = 25, gap = gap } end
+        session(c.uid, plan)
+        cur = settle()
+        -- 25 adımda uca varmayanlar (ör. 0..100 fare hassasiyeti) için ikinci tur
+        local more = {}
+        for _, r in ipairs(c.sliders) do
+            if (cur[r.pid] or 0) - orig(base, r.pid) >= 25 then more[#more + 1] = { row = tostring(r.uid), dir = R_DIR, n = 110, gap = gap } end
+        end
+        if #more > 0 then
+            session(c.uid, more)
+            cur = settle()
+        end
+        for _, r in ipairs(c.sliders) do
+            ranges[tostring(r.pid)] = { cat = c.id, uid = r.uid, text = r.text, from = orig(base, r.pid), max = cur[r.pid] or 0 }
+            add('range', ranges[tostring(r.pid)])
+        end
+        for _, r in ipairs(c.sliders) do
+            if not putBack(c, r, orig(base, r.pid), gap) then failed[#failed + 1] = r.pid end
         end
     end
-    if pending then restoreAlone() end
 
     phase('close')
     finish()
@@ -460,10 +455,10 @@ local function run()
     local leftover = diff(base, snap())
     add('profile', { tag = 'final', diff = leftover })
     beep()
-    local mapped = 0
-    for _, r in ipairs(results) do if #r.ids > 0 then mapped = mapped + 1 end end
-    say(('Settings map finished: %d rows, %d mapped, leftover changes: %d%s'):format(#items, mapped, #leftover, aborted and ', ABORTED' or ''))
-    send({ cats = cats, results = results, items = #items, mapped = mapped, leftover = #leftover, aborted = aborted })
+    local n = 0
+    for _ in pairs(ranges) do n = n + 1 end
+    say(('Slider ranges finished: %d sliders, gap %d ms, leftover changes: %d'):format(n, gap, #leftover))
+    send({ gap = gap, ranges = ranges, failed = failed, leftover = #leftover })
 end
 
 -- ---------------------------------------------------------------- komut (sunucu yetkiyi onaylayınca başlar)

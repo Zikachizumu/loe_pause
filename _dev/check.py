@@ -699,22 +699,32 @@ sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
 sim.frames(2000)
 check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
 
--- sahte oyun (yalnızca kök metodlar): SET_INPUT_EVENT 9 kategori ya da satır gezer (40 ms içinde gelen ikinci gezinme
--- yutulur), 10/11 satırın profil değerini bir adım değiştirir (liste başa döner, kaydırıcı uçta durur; oyun gibi menü
--- KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar, sonra 300 ms gezinme yutulur; çıkınca kimlik
--- bir gezinmeye kadar -1 olur; giriş/çıkış ve değer adımı önceki işlemden 150 ms geçmeden gelirse yutulur. Graphics (6) eşleştirilmez.
-local CATS = {
-    { uid = '0', rows = { { u = '48' }, { u = '4', p = 0, max = 3, wrap = true } } },
-    { uid = '1', rows = { { u = '123', p = 750, max = 2, wrap = true }, { u = '128', p = 754, max = 100 } } },
-    { uid = '148', rows = {} },
-    { uid = '3', rows = { { u = '8', p = 300, max = 10 }, { u = '9', p = 301, max = 10 }, { u = '180' } } },
-    { uid = '4', rows = { { u = '132', p = 231, max = 10 } } },
-    { uid = '5', rows = { { u = '29', p = 204, max = 2, wrap = true } } },
-    { uid = '6', rows = { { u = '103', p = 900, max = 2, wrap = true } } },
-}
-local START = { [0] = 3, [750] = 0, [754] = 50, [300] = 1, [301] = 10, [231] = 5, [204] = 1, [900] = 1 }
+-- sahte oyun: kategori/satır yapısı GERÇEK tablodan (shared/gtaset_data.lua) kurulur; kaydırıcılar uçta durur, listeler döner.
+-- Kök SET_INPUT_EVENT 9 gezinir (40 ms içinde gelen ikinci gezinme yutulur), 10/11 değeri değiştirir (aralık HIZ: 40 ms'den
+-- sık gelen değer adımı yutulur); oyun gibi değer menü KAPANINCA kaydedilir. MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar,
+-- sonra 300 ms gezinme yutulur; çıkınca kimlik bir gezinmeye kadar -1 olur; giriş/çıkış ve değer adımı önceki işlemden
+-- 150 ms geçmeden gelirse yutulur.
+local RANGE = { [754] = 100, [755] = 100, [756] = 100, [757] = 100, [760] = 100, [761] = 20, [213] = 30, [212] = 10, [240] = 28, [238] = 28 }
+local CATS = {}
+for _, c in ipairs(GtaSetData.cats) do
+    local rows = {}
+    for _, r in ipairs(c.rows) do
+        local row = { u = tostring(r.uid), p = r.pid, kind = r.kind }
+        if r.kind == 'slider' then row.max = RANGE[r.pid] or 10
+        elseif r.kind == 'list' then row.max = #r.labels - 1; row.wrap = true end
+        rows[#rows + 1] = row
+    end
+    CATS[#CATS + 1] = { uid = tostring(c.uid), rows = rows }
+end
+CATS[#CATS + 1] = { uid = '6', rows = { { u = '103', p = 900, max = 2, wrap = true, kind = 'list' } } }   -- Graphics: dokunulmaz
+table.insert(CATS, 3, { uid = '148', rows = {} })                                                     -- Key Bindings: girilmez
+local START = {}
+for _, c in ipairs(CATS) do
+    for i, r in ipairs(c.rows) do if r.p then START[r.p] = (r.kind == 'slider') and math.min(r.max, 1 + (r.p % 5)) or 0 end end
+end
+START[754] = 50; START[755] = 50; START[213] = 18
 for k, v in pairs(START) do sim.profile[k] = v end
-local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0 }
+local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0, minGap = 1e9 }
 local realActivate, realSFA = ActivateFrontendMenu, SetFrontendActive
 ActivateFrontendMenu = function(...)
     fk.cat, fk.row, fk.focus, fk.pending, fk.sessions, fk.left = 1, 0, false, {}, fk.sessions + 1, false
@@ -733,9 +743,14 @@ ScaleformMovieMethodAddParamBool = function(v) fk.cur.a[#fk.cur.a + 1] = v end
 EndScaleformMovieMethod = function()
     if not sim.pause then return end
     local c, a = CATS[fk.cat], fk.cur.a
-    local gap = sim.now - (fk.lastAny or -1000)      -- oyun meşgulken (önceki işlemden hemen sonra) gelen çağrıyı yutar
-    if fk.cur.p == 'MENU_SHIFT_DEPTH' or a[1] == 10 or a[1] == 11 then
-        if gap < 150 then return end                     -- giriş/çıkış ve değer adımı: önceki işlemden 150 ms sonra
+    local gap = sim.now - (fk.lastAny or -1000)
+    if fk.cur.p == 'MENU_SHIFT_DEPTH' then
+        if gap < 150 then return end
+    elseif a[1] == 10 or a[1] == 11 then
+        local vgap = sim.now - (fk.lastVal or -1000)
+        if vgap >= 0 and vgap < fk.minGap then fk.minGap = vgap end
+        if vgap < 40 or gap < 40 then return end
+        fk.lastVal = sim.now
     end
     fk.lastAny = sim.now
     if fk.cur.p == 'SET_INPUT_EVENT' then
@@ -754,7 +769,7 @@ EndScaleformMovieMethod = function()
             end
         end
     elseif fk.cur.p == 'MENU_SHIFT_DEPTH' then
-        fk.lockUntil = sim.now + 300                     -- oyun gibi: seviye değişince kısa süre gezinme yutulur
+        fk.lockUntil = sim.now + 300
         if a[1] == 1 and #c.rows > 0 then fk.focus, fk.row, fk.left = true, 0, false
         elseif a[1] == -1 and fk.focus then fk.focus, fk.left = false, true end
     end
@@ -781,28 +796,37 @@ sim.latent, sim.encoded = nil, nil
 sim.commands['loe_gtaset']()
 sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
 sim.frames(3000)
-check(LoeProbe.active == true and sim.pause == true and isOpen() == false and isHidden(), 'S15: eşleştirme GTA menüsünü gizli açmalı')
+check(LoeProbe.active == true and sim.pause == true and isOpen() == false and isHidden(), 'S15: ölçüm GTA menüsünü gizli açmalı')
 sim.escFrame = true; sim.step(16); sim.frames(300)
 check(isOpen() == false, 'S15: test sırasında ESC yakalama LOE menüsünü açmamalı')
-sim.frames(400000)
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: eşleştirme bitince menü kapanmalı')
+sim.frames(1200000)
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: ölçüm bitince menü kapanmalı')
 check(fk.visibleRead == false, 'S15: GTA menüsü hiçbir an görünür olmamalı')
 local enc = sim.encoded or {}
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and enc.kind == 'map8' and enc.aborted == false
-    and enc.items == 9 and enc.mapped == 7 and enc.leftover == 0,
-    'S15: eşleştirme sonucu (items=' .. tostring(enc.items) .. ', mapped=' .. tostring(enc.mapped) .. ', leftover=' .. tostring(enc.leftover) .. ')')
-local got = {}
-for _, r in ipairs(enc.results or {}) do
-    if #r.ids > 0 then got[r.row] = r.dir .. ':' .. r.ids[1][1] .. ':' .. r.ids[1][2] .. '>' .. r.ids[1][3] end
+local issues = {}
+for _, e in ipairs(enc.log or {}) do
+    if e.k == 'sessionFail' or e.k == 'depthFail' or e.k == 'navFail' or e.k == 'err' then
+        issues[#issues + 1] = e.k .. ':' .. tostring(e.cat or e.at or e.what) .. '/' .. tostring(e.look and e.look.level) .. '/' .. tostring(e.dir) .. tostring(e.uid) .. tostring(e.level) .. tostring(e.look and e.look.uid) .. tostring(e.look and e.look.active)
+    end
 end
-local want = { ['4'] = 'right:0:3>0', ['123'] = 'right:750:0>1', ['128'] = 'right:754:50>51', ['8'] = 'right:300:1>2',
-               ['9'] = 'left:301:10>9', ['132'] = 'right:231:5>6', ['29'] = 'right:204:1>2' }
-local bad = {}
-for k, v in pairs(want) do if got[k] ~= v then bad[#bad + 1] = k .. '=' .. tostring(got[k]) end end
-check(#bad == 0 and got['48'] == nil and got['180'] == nil and got['103'] == nil, 'S15: satır eşleşmeleri: ' .. table.concat(bad, ' '))
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and enc.kind == 'ranges9' and enc.leftover == 0,
+    'S15: ölçüm sonucu (leftover=' .. tostring(enc.leftover) .. ', sure=' .. tostring(enc.log and enc.log[#enc.log] and enc.log[#enc.log].t) .. ') ' .. table.concat(issues, ' '))
+local n, bad = 0, {}
+for _, c in ipairs(CATS) do
+    for _, r in ipairs(c.rows) do
+        if r.kind == 'slider' then
+            n = n + 1
+            local got = (enc.ranges or {})[tostring(r.p)]
+            if not got or got.max ~= r.max then bad[#bad + 1] = r.p .. '=' .. tostring(got and got.max) .. '/' .. r.max end
+        end
+    end
+end
+check(n == 24 and #bad == 0 and enc.log[#enc.log].t < 600000, 'S15: kaydırıcı aralıkları (n=' .. n .. ') ' .. table.concat(bad, ' ') .. ' sure=' .. tostring(enc.log[#enc.log].t) .. ' gap=' .. tostring(enc.gap))
+check(enc.gap and enc.gap >= 50 and enc.gap <= 250 and fk.minGap >= 40, 'S15: basış aralığı seçilmeli (gap=' .. tostring(enc.gap) .. ', en kısa=' .. tostring(fk.minGap) .. ')')
+check(#(enc.failed or {}) == 0, 'S15: hiçbir kaydırıcı geri alınamamazlık etmemeli')
 local same = true
 for k, v in pairs(START) do if sim.profile[k] ~= v then same = false end end
-check(same, 'S15: eşleştirme sonunda tüm değerler eski haline dönmeli')
+check(same and (sim.profile[900] or 0) == 0, 'S15: ölçüm sonunda tüm değerler eski haline dönmeli')
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
 print, json.encode = realPrint, realEncode
@@ -816,7 +840,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua', 'client/gtaset_probe.lua'):
+for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua', 'client/gtaset_probe.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
