@@ -1,10 +1,11 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v9: kaydırıcı aralıkları)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v10: kaydırıcı sınırları)
 --
 -- Bulgular: GTA ayar menüsü gizliyken (SuppressFrontendRenderingThisFrame) tuş işlemiyor ama kök scaleform metodları
 -- çalışıyor: SET_INPUT_EVENT (9 gezinme, 10/11 değer) ve MENU_SHIFT_DEPTH(±1) (satırlara gir/çık). Değer menü kapanınca
--- profile yazılıyor (GetProfileSetting). Satır tablosu: shared/gtaset_data.lua (v8 eşleştirmesinden).
+-- profile yazılıyor (GetProfileSetting). Satır tablosu: shared/gtaset_data.lua. Değer adımı 50 ms aralıkla güvenli (v9).
 --
---   /loe_gtaset : (~7-10 dk, GTA menüsü hiç görünmez) 24 kaydırıcının en büyük değerini ölçer ve eski değerine döndürür.
+--   /loe_gtaset : (~8-10 dk, GTA menüsü hiç görünmez) önce güvenli bölgeyi (v9'da ters yön yüzünden bozuldu) 3'e getirir,
+--                 sonra 24 kaydırıcının alt ve üst sınırını ölçüp eski değerine döndürür.
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -155,7 +156,7 @@ local function closeMenu()
 end
 
 local function send(extra)
-    local payload = { kind = 'ranges9', log = log }
+    local payload = { kind = 'ranges10', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -357,10 +358,20 @@ local function settle()
     end
 end
 
--- ---------------------------------------------------------------- v9: kaydırıcı aralıkları
--- v8 eşleştirmesi tamamlandı (shared/gtaset_data.lua). Kaydırıcılar uçta durur (stepVal sınırlar). Her kaydırıcıyı sağa
--- uca kadar iterek en büyük değeri bulur (kaydırıcı en küçük değeri 0), sonra eski değerine döndürür.
--- Önce adım aralığı ölçülür: çok hızlı basış yutulabiliyor (v7/v8: gezinme 60 ms yetti, değer adımı için doğrulanmadı).
+-- ---------------------------------------------------------------- v10: kaydırıcı alt/üst sınırı + güvenli bölge onarımı
+-- v9 sonucu: basış aralığı 50 ms yetiyor. Çoğu kaydırıcı 0..10 (denetleyici hassasiyetleri 0..14, parlaklık 0..30). Fare
+-- hassasiyeti 135 basışta bile uca varmadı (50 → 185). Güvenli bölge (212) TERS: sağa basış profil değerini AZALTIYOR
+-- (3 → 0 = %100) ve v9 bunu geri alamadı → v10 önce onu 3'e getirir. Sonra her kaydırıcının alt ve üst sınırı ölçülür.
+local R_DIR, L_DIR = DPAD_RIGHT, DPAD_LEFT
+local GAP = 50
+local INV = { [212] = true }            -- profil değerini sağa basış azaltır
+local WANT = { [212] = 3 }              -- kullanıcının asıl değeri (v9'da bozuldu)
+local MOUSE = { [754] = true, [755] = true, [756] = true, [757] = true, [760] = true }
+local cur = {}                          -- profil ayarlarının bilinen güncel durumu
+
+local function dirUp(r) return INV[r.pid] and L_DIR or R_DIR end      -- profil değerini ARTIRAN yön
+local function dirDown(r) return INV[r.pid] and R_DIR or L_DIR end
+
 local cats = {}
 for _, c in ipairs(GtaSetData.cats) do
     local sliders = {}
@@ -368,50 +379,39 @@ for _, c in ipairs(GtaSetData.cats) do
     if #sliders > 0 then cats[#cats + 1] = { id = c.id, uid = tostring(c.uid), sliders = sliders } end
 end
 
-local R_DIR, L_DIR = DPAD_RIGHT, DPAD_LEFT
-local cur = {}          -- profil ayarlarının bilinen güncel durumu
+local function want(pid) return WANT[pid] or base[pid] or 0 end
 
-local function orig(base_, pid) return base_[pid] or 0 end
-
--- Bir kaydırıcıyı kesin eski değerine döndür ve doğrula: ilk deneme verilen aralıkla, sonrakiler yavaş (250 ms); en çok 3 deneme
-local function putBack(c, r, want, gap)
+-- Bir kaydırıcıyı istenen değere getir ve doğrula: ilk deneme GAP, sonrakiler 250 ms; en çok 3 deneme
+local function putBack(c, r)
+    local target = want(r.pid)
     for try = 1, 3 do
         local now_ = cur[r.pid] or 0
-        if now_ == want then return true end
-        local dir, n = (now_ > want) and L_DIR or R_DIR, math.abs(now_ - want)
-        session(c.uid, { { row = tostring(r.uid), dir = dir, n = n, gap = try == 1 and gap or 250 } })
+        if now_ == target then return true end
+        local dir = (now_ > target) and dirDown(r) or dirUp(r)
+        session(c.uid, { { row = tostring(r.uid), dir = dir, n = math.abs(now_ - target), gap = try == 1 and GAP or 250 } })
         cur = settle()
     end
-    return (cur[r.pid] or 0) == want
+    return (cur[r.pid] or 0) == target
 end
 
--- Adım aralığı: liste satırı (MO_CTY, 12 seçenek, uçlarda dönüyor → kırpma yok) 10 basışta tam 10 adım ilerlemeli.
--- Kaydırıcı olmaz: uçta durup ölçümü yanıltır. Geri alma: kalan adımlar (12 - 10) yavaş basılır, doğrulanır.
-local function calibrate()
-    local cat, row
-    for _, c in ipairs(GtaSetData.cats) do
-        for _, r in ipairs(c.rows) do
-            if r.text == 'MO_CTY' then cat, row = c, r end
-        end
+-- `rows` kaydırıcılarının üst ve alt sınırını ölç: hepsi üste (nUp basış), kapat, oku; hepsi alta (üst + 3 basış), kapat, oku
+local function measure(c, rows, nUp, out)
+    local plan = {}
+    for _, r in ipairs(rows) do plan[#plan + 1] = { row = tostring(r.uid), dir = dirUp(r), n = nUp, gap = GAP } end
+    session(c.uid, plan)
+    cur = settle()
+    local hi = {}
+    for _, r in ipairs(rows) do hi[r.pid] = cur[r.pid] or 0 end
+    plan = {}
+    for _, r in ipairs(rows) do plan[#plan + 1] = { row = tostring(r.uid), dir = dirDown(r), n = hi[r.pid] + 3, gap = GAP } end
+    session(c.uid, plan)
+    cur = settle()
+    for _, r in ipairs(rows) do
+        local lo = cur[r.pid] or 0
+        out[tostring(r.pid)] = { cat = c.id, uid = r.uid, text = r.text, from = want(r.pid), lo = lo, hi = hi[r.pid],
+                                 inv = INV[r.pid] == true, open = hi[r.pid] - lo >= nUp }
+        add('range', out[tostring(r.pid)])
     end
-    if not row then return 250 end
-    local count = #row.labels
-    for _, gap in ipairs({ 50, 70, 100, 150, 250 }) do
-        local before = cur[row.pid] or 0
-        session(tostring(cat.uid), { { row = tostring(row.uid), dir = R_DIR, n = 10, gap = gap } })
-        cur = settle()
-        local after = cur[row.pid] or 0
-        local ok = after == (before + 10) % count
-        add('calibrate', { gap = gap, pid = row.pid, before = before, after = after, ok = ok })
-        for _ = 1, 3 do   -- eski değere dön (liste dönüyor: yalnızca sağa basılır)
-            local back = ((before - (cur[row.pid] or 0)) % count)
-            if back == 0 then break end
-            session(tostring(cat.uid), { { row = tostring(row.uid), dir = R_DIR, n = back, gap = 250 } })
-            cur = settle()
-        end
-        if ok then return gap end
-    end
-    return 250
 end
 
 local function run()
@@ -420,45 +420,47 @@ local function run()
     cur = base
     add('profileStart', { list = list(base) })
 
-    phase('calibrate')
-    local gap = calibrate()
-    add('gap', { gap = gap })
-
-    phase('ranges')
     local ranges, failed = {}, {}
     for _, c in ipairs(cats) do
-        local plan = {}
-        for _, r in ipairs(c.sliders) do plan[#plan + 1] = { row = tostring(r.uid), dir = R_DIR, n = 25, gap = gap } end
-        session(c.uid, plan)
-        cur = settle()
-        -- 25 adımda uca varmayanlar (ör. 0..100 fare hassasiyeti) için ikinci tur
-        local more = {}
+        -- 1) güvenli bölgeyi onar (ve her kategoride ilk önce değerleri hedefe getir)
         for _, r in ipairs(c.sliders) do
-            if (cur[r.pid] or 0) - orig(base, r.pid) >= 25 then more[#more + 1] = { row = tostring(r.uid), dir = R_DIR, n = 110, gap = gap } end
+            if WANT[r.pid] and (cur[r.pid] or 0) ~= WANT[r.pid] then
+                phase('fix-' .. r.pid)
+                putBack(c, r)
+                add('fix', { pid = r.pid, now = cur[r.pid] or 0, want = WANT[r.pid] })
+            end
         end
-        if #more > 0 then
-            session(c.uid, more)
-            cur = settle()
-        end
+
+        -- 2) fare hassasiyetleri: çok geniş (v9: 135 basışta uca varmadı) → 400 basış; diğerleri ≤ 30 → 35 basış
+        phase('ranges-' .. c.id)
+        local mouse, others = {}, {}
         for _, r in ipairs(c.sliders) do
-            ranges[tostring(r.pid)] = { cat = c.id, uid = r.uid, text = r.text, from = orig(base, r.pid), max = cur[r.pid] or 0 }
-            add('range', ranges[tostring(r.pid)])
+            if MOUSE[r.pid] then mouse[#mouse + 1] = r else others[#others + 1] = r end
         end
+        if #others > 0 then measure(c, others, 35, ranges) end
+        if #mouse > 0 then measure(c, mouse, 400, ranges) end
+
+        -- 3) eski değerlere döndür
+        phase('restore-' .. c.id)
         for _, r in ipairs(c.sliders) do
-            if not putBack(c, r, orig(base, r.pid), gap) then failed[#failed + 1] = r.pid end
+            if not putBack(c, r) then failed[#failed + 1] = r.pid end
         end
     end
 
     phase('close')
     finish()
     sleep(2500)
-    local leftover = diff(base, snap())
-    add('profile', { tag = 'final', diff = leftover })
+    local leftover = {}
+    for _, d in ipairs(diff(base, snap())) do
+        if d[1] ~= 212 then leftover[#leftover + 1] = d end         -- 212 bilerek onarıldı (base bozuk değerdi)
+    end
+    local sz = GetProfileSetting(212)
+    add('profile', { tag = 'final', diff = leftover, safezone = sz })
     beep()
     local n = 0
     for _ in pairs(ranges) do n = n + 1 end
-    say(('Slider ranges finished: %d sliders, gap %d ms, leftover changes: %d'):format(n, gap, #leftover))
-    send({ gap = gap, ranges = ranges, failed = failed, leftover = #leftover })
+    say(('Slider limits finished: %d sliders, safe zone %d, leftover changes: %d'):format(n, sz, #leftover))
+    send({ gap = GAP, ranges = ranges, failed = failed, leftover = #leftover, safezone = sz })
 end
 
 -- ---------------------------------------------------------------- komut (sunucu yetkiyi onaylayınca başlar)
