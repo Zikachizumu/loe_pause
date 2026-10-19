@@ -699,29 +699,29 @@ sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
 sim.frames(2000)
 check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
 
--- sahte oyun: kategori listesi (aşağı = sonraki), Enter satırlara girer, Geri çıkar; sütun durumu kategoriye göre.
--- Kök SET_COLUMN_HIGHLIGHT satırı seçer ve menuUniqueID'yi satır kimliği yapar; SET_COLUMN_INPUT_EVENT ve sol/sağ tuşları
--- Audio'da satır (300 + satır) profil değerini değiştirir.
-local STATES = { [0] = '1', '0', '0', '2', '0', '0', '5', '4' }
-local fk = { cat = 0, row = 0, focus = false, hn = 0, hv = {}, lastPress = {} }
-sim.profile[300], sim.profile[301] = 5, 7
+-- sahte oyun: kategoriler (aşağı = sonraki, sonda başa döner), Enter satırlara girer, Geri çıkar.
+-- menuUniqueID: satırlardayken satır kimliği, değilse kategori kimliği. Audio satır 1'de sol → profil 301 bir azalır.
+local CATS = {
+    { uid = '0', state = '1', rows = { '20', '21', '22' } },
+    { uid = '1', state = '0', rows = { '30', '31' } },
+    { uid = '148', state = '0', rows = {} },
+    { uid = '3', state = '2', rows = { '8', '9', '10' } },
+    { uid = '4', state = '0', rows = { '40' } },
+    { uid = '6', state = '5', rows = { '103', '104', '105' } },
+}
+local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, lastPress = {}, keymap = false, suppress = 0 }
+sim.profile[301] = 1
 local realActivate = ActivateFrontendMenu
-ActivateFrontendMenu = function(...) fk.cat, fk.row, fk.focus = 0, 0, false; return realActivate(...) end
-local function step(id, dir) if fk.cat == 3 and fk.focus then sim.profile[id] = (sim.profile[id] or 0) + dir end end
+ActivateFrontendMenu = function(...) fk.cat, fk.row, fk.focus = 1, 0, false; return realActivate(...) end
+SuppressFrontendRenderingThisFrame = function() fk.suppress = fk.suppress + 1 end
 BeginScaleformMovieMethodOnFrontend = function(path) fk.cur = { p = path, a = {} }; return 1 end
 ScaleformMovieMethodAddParamInt = function(v) fk.cur.a[#fk.cur.a + 1] = v end
-ScaleformMovieMethodAddParamBool = function(v) fk.cur.a[#fk.cur.a + 1] = v end
-EndScaleformMovieMethod = function()
-    local c = fk.cur
-    if c.p == 'SET_COLUMN_HIGHLIGHT' and c.a[1] == 1 then fk.row = c.a[2]
-    elseif c.p == 'SET_COLUMN_INPUT_EVENT' and c.a[1] == 1 then step(300 + fk.row, c.a[2] == 11 and 1 or -1) end
-end
 EndScaleformMovieMethodReturnValue = function()
     fk.hn = fk.hn + 1
-    local p, r = fk.cur.p, nil
-    if p == 'currentPage.columnList.1.state.toString' then r = STATES[fk.cat] or '0'
+    local p, c, r = fk.cur.p, CATS[fk.cat], nil
+    if p == 'currentPage.columnList.1.state.toString' then r = c.state
     elseif p == 'currentPage.columnList.1.columnIsFocused.toString' then r = tostring(fk.focus)
-    elseif p == 'menuUniqueID.toString' and fk.focus and fk.row < 12 then r = tostring(100 + fk.row)
+    elseif p == 'menuUniqueID.toString' then r = fk.focus and c.rows[fk.row + 1] or c.uid
     elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1' end
     fk.hv[fk.hn] = r
     return fk.hn
@@ -729,63 +729,57 @@ end
 IsScaleformMovieMethodReturnValueReady = function(h) return fk.hv[h] ~= nil end
 GetScaleformMovieMethodReturnValueString = function(h) return fk.hv[h] end
 GetScaleformMovieMethodReturnValueInt = function(h) return tonumber(fk.hv[h]) or 0 end
-SetControlValueNextFrame = function(g, c)
-    if g ~= 2 then return end
-    if sim.now - (fk.lastPress[c] or -1000) <= 40 then fk.lastPress[c] = sim.now return end   -- basılı tutma tek basış sayılır
-    fk.lastPress[c] = sim.now
-    if c == 187 then if fk.focus then fk.row = fk.row + 1 else fk.cat = fk.cat + 1 end
-    elseif c == 201 then fk.focus, fk.row = true, 0
-    elseif c == 202 then fk.focus = false
-    elseif c == 190 then step(300 + fk.row, 1)
-    elseif c == 189 then step(300 + fk.row, -1) end
+SetControlValueNextFrame = function(g, ctl)
+    if g ~= 2 or not sim.pause then return end
+    if sim.now - (fk.lastPress[ctl] or -1000) <= 40 then fk.lastPress[ctl] = sim.now return end   -- basılı tutma tek basış
+    fk.lastPress[ctl] = sim.now
+    local c = CATS[fk.cat]
+    if ctl == 187 then
+        if fk.focus then fk.row = (fk.row + 1) % #c.rows else fk.cat = fk.cat % #CATS + 1 end
+    elseif ctl == 201 then
+        if c.uid == '148' then fk.keymap = true else fk.focus, fk.row = true, 0 end
+    elseif ctl == 202 then fk.focus = false
+    elseif ctl == 189 and fk.focus and c.uid == '3' and fk.row == 1 then sim.profile[301] = math.max(0, sim.profile[301] - 1) end
 end
 
 sim.latent, sim.encoded = nil, nil
 sim.commands['loe_gtaset']()
 sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
 sim.frames(5000)
-check(LoeProbe.active == true and sim.pause == true and isOpen() == false, 'S15: test GTA ayar menüsünü açmalı')
+check(LoeProbe.active == true and sim.pause == true and isOpen() == false and fk.suppress > 0, 'S15: test GTA ayar menüsünü gizli açmalı')
 sim.escFrame = true; sim.step(16); sim.frames(500)
 check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
-sim.frames(90000)
+sim.frames(150000)
 check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'write2'
-    and sim.encoded.audio == true and sim.encoded.changed == true, 'S15: sonuç sunucuya gönderilmeli, değişiklik görülmeli')
-local phases, diffs, ids = {}, {}, {}
+local sup = fk.suppress
+sim.frames(1000)
+check(fk.suppress == sup, 'S15: test bitince gizleme durmalı')
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'walk3'
+    and sim.encoded.fix == 'fixed' and sim.encoded.cats == 6, 'S15: sonuç gönderilmeli (fix=' .. tostring(sim.encoded and sim.encoded.fix) .. ', cats=' .. tostring(sim.encoded and sim.encoded.cats) .. ')')
+local cats, final = {}, nil
 for _, e in ipairs((sim.encoded or {}).log or {}) do
-    if e.k == 'phase' then phases[#phases + 1] = e.name end
-    if e.k == 'profile' then diffs[e.tag] = e.diff end
-    if e.k == 'rowIds' then ids[e.tag] = e.ids end
+    if e.k == 'cat' then cats[e.uid] = e end
+    if e.k == 'profile' and e.tag == 'final' then final = e.diff end
 end
-check(table.concat(phases, ',') == 'open,enter,write-as,write-input,back,close,restore,gfx-ids,close2', 'S15: faz sırası: ' .. table.concat(phases, ','))
-local function has(tag, id, a, b)
-    for _, d in ipairs(diffs[tag] or {}) do if d[1] == id and d[2] == a and d[3] == b then return true end end
-    return false
-end
-check(#(diffs['as-live'] or {}) == 1 and has('as-live', 300, 5, 4), 'S15: kök metod yolu satır 0 (SFX) değerini bir adım azaltmalı')
-check(#(diffs['input-live'] or {}) == 2 and has('input-live', 301, 7, 6), 'S15: girdi yolu satır 1 (Music) değerini bir adım azaltmalı')
-check(#(diffs['closed'] or {}) == 2, 'S15: kapanıştan sonra iki fark ölçülmeli')
-check(#(diffs['final'] or { 0 }) == 0 and sim.profile[300] == 5 and sim.profile[301] == 7, 'S15: test sonunda değerler eski haline dönmeli')
-check(ids.audio and ids.audio[1] == '100' and ids.audio[2] == '101' and #ids.audio == 12, 'S15: Audio satır kimlikleri okunmalı')
-check(ids.graphics and #ids.graphics == 24 and ids.graphics[1] == '100' and ids.graphics[13] == 'timeout', 'S15: Graphics satır kimlikleri okunmalı (liste sonu zaman aşımı)')
-check(fk.focus == false, 'S15: Graphics satırlarından çıkılmalı')
+check(sim.profile[301] == 0 and final and #final == 1 and final[1][1] == 301 and final[1][2] == 1 and final[1][3] == 0, 'S15: Music farkı geri alınmalı, başka değer değişmemeli')
+check(cats['3'] and table.concat(cats['3'].rows or {}, ',') == '8,9,10', 'S15: Audio satır kimlikleri toplanmalı')
+check(cats['6'] and table.concat(cats['6'].rows or {}, ',') == '103,104,105' and cats['0'] and #cats['0'].rows == 3, 'S15: diğer kategorilerin satırları toplanmalı')
+check(cats['148'] and cats['148'].rows == nil and fk.keymap == false, 'S15: Key Bindings kategorisine girilmemeli')
 
--- Audio bulunamazsa hiçbir değer yazılmamalı
-STATES[3] = '0'
+-- Music zaten 0 ise düzeltme atlanır, gezinme yine yapılır
 sim.latent, sim.encoded = nil, nil
 sim.frames(3000)
 sim.commands['loe_gtaset']()
 sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
-sim.frames(60000)
-local wrote = false
-for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sfdo' then wrote = true end end
-check(sim.encoded and sim.encoded.audio == false and not wrote and sim.profile[300] == 5, 'S15: Audio bulunamazsa yazma denenmemeli')
-check(LoeProbe.active == false and sim.pause == false, 'S15: Audio yokken de test kapanmalı')
+sim.frames(150000)
+check(sim.encoded and sim.encoded.fix == 'skip' and sim.encoded.cats == 6 and sim.profile[301] == 0, 'S15: Music 0 iken düzeltme atlanmalı')
+check(LoeProbe.active == false and sim.pause == false, 'S15: ikinci testten sonra her şey kapanmalı')
 ActivateFrontendMenu = realActivate
+SuppressFrontendRenderingThisFrame = nil
 print, json.encode = realPrint, realEncode
-BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethod = nil, nil, nil
+BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt = nil, nil
 EndScaleformMovieMethodReturnValue, IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString = nil, nil, nil
-GetScaleformMovieMethodReturnValueInt, SetControlValueNextFrame, ScaleformMovieMethodAddParamBool = nil, nil, nil
+GetScaleformMovieMethodReturnValueInt, SetControlValueNextFrame = nil, nil
 return R
 '''
 
