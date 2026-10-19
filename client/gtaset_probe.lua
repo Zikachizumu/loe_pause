@@ -215,29 +215,40 @@ local MAP_CATS = { ['0'] = true, ['1'] = true, ['3'] = true, ['4'] = true, ['5']
 local function uid() return val('menuUniqueID.toString') end
 local function opposite(dir) return dir == DPAD_RIGHT and DPAD_LEFT or DPAD_RIGHT end
 
--- Kök gezinme: çağır, menuUniqueID değişene kadar (en çok 700 ms) bekle. Yalnızca başarısızlık kaydedilir.
+-- Kök gezinme: çağır, menuUniqueID değişene kadar bekle. Menü meşgulken (ör. satırlara girip çıktıktan hemen sonra)
+-- çağrı yutulabiliyor (v8 ilk deneme) → en çok 3 deneme. Yalnızca başarısızlık kaydedilir.
 local function nav(dir, tag)
     local before = uid()
-    local t = GetGameTimer()
-    pcall(BeginScaleformMovieMethodOnFrontend, 'SET_INPUT_EVENT')
-    pcall(ScaleformMovieMethodAddParamInt, dir)
-    pcall(EndScaleformMovieMethod)
-    local u
-    repeat
-        Wait(0)
-        u = uid()
-    until u ~= before or GetGameTimer() - t > 700
-    if u == before then add('navFail', { tag = tag, dir = dir, at = before }) end
-    return u ~= before
+    for try = 1, 3 do
+        local t = GetGameTimer()
+        pcall(BeginScaleformMovieMethodOnFrontend, 'SET_INPUT_EVENT')
+        pcall(ScaleformMovieMethodAddParamInt, dir)
+        pcall(EndScaleformMovieMethod)
+        local u
+        repeat
+            Wait(0)
+            u = uid()
+        until u ~= before or GetGameTimer() - t > 400
+        if u ~= before then
+            if try > 1 then add('navRetry', { tag = tag, tries = try }) end
+            return true
+        end
+        sleep(150)
+    end
+    add('navFail', { tag = tag, dir = dir, at = before })
+    return false
 end
 
 local function level() return tostring(val('menuLevel.toString')) end
 
+-- Satırlara gir (+1) / çık (-1). Seviye değiştikten sonra menü kısa süre gezinmeyi yutuyor → 400 ms bekle (v7'de 500 ms
+-- beklemeyle sorun yoktu)
 local function depth(dir)
     sfDo('MENU_SHIFT_DEPTH', { dir, false, false })
     local want = dir > 0 and '2' or '1'
     local t = GetGameTimer()
     repeat Wait(0) until level() == want or GetGameTimer() - t > 800
+    sleep(400)
     return level() == want
 end
 
