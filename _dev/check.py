@@ -165,7 +165,8 @@ menu_ids = list(menu_ids.values()) if isinstance(menu_ids, dict) else list(menu_
 for mid in menu_ids:
     check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
 check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
-check(all(x in menu_ids for x in ('resume', 'game', 'ui', 'position', 'quit')), 'Config.Menu: ana maddeler eksik')
+check(all(x in menu_ids for x in ('resume', 'game', 'ui', 'battlepass', 'shop', 'quit')) and 'position' not in menu_ids,
+      'Config.Menu: ana maddeler eksik ya da KONUM MODU hâlâ listede')
 check(lua.eval("(function() for _, m in ipairs(Config.Menu) do if m.id == 'map' then return m.enabled end end end)()") is False, 'Config.Menu: MAP varsayılan kapalı olmalı (harita yalnızca M)')
 # İngilizce varsayılan: arayüz metinlerinde TR/EN anahtar seti aynı olmalı, İngilizce metinlerde Türkçe harf olmamalı
 def str_keys(block):
@@ -703,13 +704,41 @@ sim.pause = true; sim.frames(64)
 local op = sim.lastOpen()
 check(isOpen() == true and op.stats.id == 7 and op.stats.name == 'Mark Smith' and op.stats.job == 'LSPD'
     and op.stats.grade == 'Lieutenant' and op.stats.cash == 0 and op.stats.bank == 27640295, 'S12: oyuncu kartı verisi (kimlik/ad/meslek/para) iletilmeli')
-local ids, soonId = {}, nil
-for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soonId = m.id end end
-check(table.concat(ids, ',') == 'resume,game,ui,position,quit', 'S12: ana menü sırası (MAP yok, harita yalnızca M): ' .. table.concat(ids, ','))
+local ids, soons = {}, {}
+for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soons[#soons + 1] = m.id end end
+check(table.concat(ids, ',') == 'resume,game,ui,battlepass,shop,quit', 'S12: ana menü sırası (MAP yok, KONUM MODU yok, DISCONNECT son): ' .. table.concat(ids, ','))
 check(sim.nui('menu', { id = 'map' }).ok == false, 'S12: MAP menüden kaldırıldı, menu callback reddetmeli')
-check(soonId == 'position', 'S12: KONUM MODU "yakında" olarak işaretlenmeli')
+check(sim.nui('menu', { id = 'position' }).ok == false, 'S12: KONUM MODU kaldırıldı, menu callback reddetmeli')
+check(table.concat(soons, ',') == 'battlepass,shop', 'S12: resource çalışmayan Battlepass/Shop "yakında" olarak işaretlenmeli: ' .. table.concat(soons, ','))
+check(sim.nui('menu', { id = 'battlepass' }).page == 'soon', 'S12: resource yokken Battlepass "yakında" sayfası döndürmeli')
 check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok == false, 'S12: kapalı menü maddesi (stats) reddedilmeli')
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
+-- S12b: meslek / rütbe loe_jobcore'dan okunur (qbx_core job'u "unemployed / Freelancer" kalır)
+local jc = { ready = true, state = { primaryJob = 'lspd', onDuty = false, jobs = { lspd = { name = 'lspd', label = 'LSPD', gradeLabel = 'Lieutenant' } } } }
+rawset(exports, 'qbx_core', { GetPlayerData = function() return {
+    citizenid = 'ABC123', charinfo = { firstname = 'Mark', lastname = 'Smith' },
+    job = { label = 'Civilian', grade = { name = 'Freelancer' } }, money = { cash = 0, bank = 1 } } end })
+rawset(exports, 'loe_jobcore', {
+    IsReady = function() return jc.ready end, GetPlayerState = function() return jc.state end, GetJobLabel = function() return 'Unemployed' end })
+local function reopen() sim.exported.Close(); sim.frames(700); sim.pause = true; sim.frames(64); return sim.lastOpen().stats end
+sim.exported.Close(); sim.frames(700)
+sim.started.loe_jobcore = true
+local sj = reopen()
+check(sj.job == 'LSPD' and sj.grade == 'Lieutenant', 'S12b: jobcore mesleği/rütbesi kartta görünmeli, Freelancer değil (' .. tostring(sj.job) .. '/' .. tostring(sj.grade) .. ')')
+jc.state = { primaryJob = 'lspd', activeJob = 'mechanic', onDuty = true, jobs = { lspd = { label = 'LSPD', gradeLabel = 'Lieutenant' }, mechanic = { label = 'Mechanic', gradeLabel = 'Trainee' } } }
+sj = reopen()
+check(sj.job == 'Mechanic' and sj.grade == 'Trainee', 'S12b: mesaideki meslek birincil meslekten önce gelmeli (' .. tostring(sj.job) .. ')')
+jc.state = { onDuty = false, jobs = {} }
+sj = reopen()
+check(sj.job == 'Unemployed' and sj.grade == nil, 'S12b: mesleği olmayan oyuncuda jobcore işsiz etiketi gösterilmeli, Freelancer değil (' .. tostring(sj.job) .. ')')
+jc.ready = false
+sj = reopen()
+check(sj.job == nil and sj.name == 'Mark Smith', 'S12b: jobcore hazır değilken yanlış meslek gösterilmemeli')
+jc.ready = true
+sim.started.loe_jobcore = nil
+sj = reopen()
+check(sj.job == 'Civilian' and sj.grade == 'Freelancer', 'S12b: jobcore yokken qbx_core mesleğine düşmeli')
+rawset(exports, 'loe_jobcore', nil)
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
 

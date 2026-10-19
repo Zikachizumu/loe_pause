@@ -78,7 +78,7 @@ local function buildMenu()
                 id = item.id,
                 available = (not item.resource) or resourceStarted(item.resource),
                 external = item.resource ~= nil,
-                soon = item.soon == true,
+                soon = item.soon == true or (item.resource ~= nil and not resourceStarted(item.resource)),   -- harici sistem yoksa "Yakında"
             }
         end
     end
@@ -98,6 +98,25 @@ local function buildLinks()
     return out
 end
 
+--- Meslek / rütbe loe_jobcore'dan okunur (qbx_core'daki job alanı güncel tutulmaz). Aktif (mesaideki) meslek, yoksa birincil meslek.
+--- @return boolean usable  jobcore çalışıyor mu (false → qbx_core'a düş)
+--- @return string? label, string? grade
+local function jobcoreJob()
+    local res = (Config.JobSystem or {}).resource
+    if not resourceStarted(res) then return false end
+    local okR, ready = pcall(function() return exports[res]:IsReady() end)
+    if okR and ready == false then return true end                      -- henüz senkron olmadı: yanlış meslek göstermektense boş bırak
+    local ok, state = pcall(function() return exports[res]:GetPlayerState() end)
+    if not ok or type(state) ~= 'table' then return false end
+    local name = (state.onDuty and state.activeJob) or state.primaryJob
+    local job = name and type(state.jobs) == 'table' and state.jobs[name]
+    if type(job) == 'table' then
+        return true, job.label or job.name, job.gradeLabel or job.gradeName
+    end
+    local okL, label = pcall(function() return exports[res]:GetJobLabel() end)      -- meslek yok: jobcore'un kendi "işsiz" etiketi
+    return true, (okL and type(label) == 'string') and label or nil, nil
+end
+
 local function buildStats()
     local out = {}
     local ok, pd = pcall(function() return exports.qbx_core:GetPlayerData() end)
@@ -106,7 +125,10 @@ local function buildStats()
         out.id = GetPlayerServerId(PlayerId())
         out.name = trim((ci.firstname or '') .. ' ' .. (ci.lastname or ''))
         out.cid = pd.citizenid
-        if type(pd.job) == 'table' then
+        local usable, label, grade = jobcoreJob()
+        if usable then
+            out.job, out.grade = label, grade
+        elseif type(pd.job) == 'table' then
             out.job = pd.job.label or pd.job.name
             if type(pd.job.grade) == 'table' then out.grade = pd.job.grade.name end
         end

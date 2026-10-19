@@ -32,18 +32,17 @@ Config.Hijack = {
 }
 
 -- ================================================================ ANA MENÜ
--- Sıra = ekrandaki sıra. 'quit' (DISCONNECT) her zaman altta ayrı gösterilir. enabled = false → gizlenir.
--- resume / map / game (Oyun Ayarları) / ui (Arayüz Ayarları) / quit yerleşiktir. soon = true → "Yakında" etiketli, tıklanınca bilgi verir.
--- stats / battlepass / shop varsayılan kapalıdır; açarsan aynı listede görünür (resource/export verilirse harici sistem açılır).
+-- Sıra = ekrandaki sıra; 'quit' (DISCONNECT) listenin son satırıdır. enabled = false → gizlenir.
+-- resume / map / game (Oyun Ayarları) / ui (Arayüz Ayarları) / quit yerleşiktir. soon = true → "Yakında" etiketli, tıklanınca bilgi sayfası açar.
+-- battlepass / shop: resource çalışıyorsa export'u açar; çalışmıyorsa otomatik "Yakında" etiketli görünür. stats varsayılan kapalıdır.
 Config.Menu = {
     { id = 'resume' },
     { id = 'map',        enabled = false },   -- büyük harita yalnızca M tuşuyla açılır (Config.MapKey); true → menüde de görünür
     { id = 'game' },
     { id = 'ui' },
-    { id = 'position',   soon = true },   -- KONUM MODU: henüz bir işlevi yok (HUD konumlandırma gibi bir özellik bağlanabilir)
     { id = 'stats',      enabled = false },   -- yerleşik karakter / sağlık özeti sayfası
-    { id = 'battlepass', enabled = false, resource = 'loe_battlepass', export = 'Open' },
-    { id = 'shop',       enabled = false, resource = 'loe_shop',       export = 'Open' },
+    { id = 'battlepass', resource = 'loe_battlepass', export = 'Open' },
+    { id = 'shop',       resource = 'loe_shop',       export = 'Open' },
     { id = 'quit' },
 }
 
@@ -62,6 +61,10 @@ Config.MapResource = { resource = 'loe_3dmap', open = 'Open', isOpen = 'IsOpen' 
 -- Oyuncu tuşu FiveM tuş atamalarından değiştirebilir. Boş bırakırsan tuş kaydedilmez (komut yine çalışır).
 Config.MapCommand = 'loe_bigmap'
 Config.MapKey     = 'M'
+
+-- Oyuncu kartındaki ve İstatistik sayfasındaki meslek / rütbe: meslekleri loe_jobcore yönetir (qbx_core'daki PlayerData.job hep
+-- "unemployed / Freelancer" kalır). Menü yalnızca onun istemci export'unu okur (GetPlayerState); resource çalışmıyorsa qbx_core'a düşer.
+Config.JobSystem = { resource = 'loe_jobcore' }
 
 -- İstatistik sayfasındaki "Sağlık" kartı: hastalık sistemi loe_jobcreator'dadır. Menü o resource'a dokunmaz; yalnızca sunucunun
 -- bu oyuncuya zaten gönderdiği durum olayını dinler (resource/olay adları değişirse buradan güncelle).
