@@ -35,7 +35,7 @@ const STR = {
         // Ana menü etiketleri [kalın kısım, ince kısım]; başlıkta ve maddelerde boşluksuz birleşik yazılır (tasarım gereği)
         pm_title: ['DURAKLATMA', 'MENÜSÜ'],
         menu_resume: ['DEVAM', 'ET'], menu_map: ['HARİTA', ''], menu_game: ['OYUN', 'AYARLARI'], menu_ui: ['ARAYÜZ', 'AYARLARI'],
-        menu_position: ['KONUM', 'MODU'], menu_stats: ['İSTATİSTİKLER', ''], menu_battlepass: ['BATTLE', 'PASS'],
+        menu_stats: ['İSTATİSTİKLER', ''], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['AYRIL', ''],
         all_gta: 'Tüm GTA ayarları', game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
         opts_title: 'SEÇENEKLER', search_title: 'Arama', restore: ['SAYFAYI', 'SIFIRLA'], restore_title: 'Varsayılana dön?',
@@ -63,7 +63,7 @@ const STR = {
     en: {
         pm_title: ['PAUSE', 'MENU'],
         menu_resume: ['RESUME', ''], menu_map: ['MAP', ''], menu_game: ['GAME', 'SETTINGS'], menu_ui: ['UI', 'SETTINGS'],
-        menu_position: ['POSITION', 'MODE'], menu_stats: ['STATISTICS', ''], menu_battlepass: ['BATTLE', 'PASS'],
+        menu_stats: ['STATISTICS', ''], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['DISCONNECT', ''],
         all_gta: 'All GTA settings', game_title: 'Game Settings', ui_title: 'UI Settings',
         opts_title: 'OPTIONS', search_title: 'Search', restore: ['RESTORE', 'DEFAULTS'], restore_title: 'Restore defaults?',
@@ -90,7 +90,7 @@ const STR = {
     },
 };
 
-const DEFAULT_MENU = ['resume', 'map', 'game', 'ui', 'position', 'quit'].map(id => ({ id, available: true, soon: id === 'position' }));
+const DEFAULT_MENU = ['resume', 'map', 'game', 'ui', 'battlepass', 'shop', 'quit'].map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop' }));
 const LINK_ICONS = { youtube: 'youtube', store: 'globe', discord: 'discord' };
 // Yalnızca bu ana makineden gelen (Lua yapılandırmasından) https adresleri açılır; arayüzden adres alınmaz.
 const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
@@ -262,9 +262,7 @@ const renderMenu = () => {
         }, h('span', { class: 'ind' }), h('span', { class: 'lbl' }, h('b', {}, a), b ? h('i', {}, b) : null),
         item.soon ? h('span', { class: 'pill' }, t('soon_pill')) : null);
     };
-    const main = S.menu.filter(it => it.id !== 'quit');
-    $('#menuList').replaceChildren(...main.map((it, n) => make(it, n)));
-    $('#menuQuit').replaceChildren(...S.menu.filter(it => it.id === 'quit').map(it => make(it, main.length + 1)));
+    $('#menuList').replaceChildren(...S.menu.map((it, n) => make(it, n)));
 };
 
 const setMainIdx = (i) => {
@@ -281,7 +279,7 @@ const activateMenu = async (id) => {
     if (id === 'ui') return openSettings('ui');
     if (id === 'quit') return confirmQuit();
     const item = S.menu.find(it => it.id === id);
-    if (item && item.soon) return toast(t('soon_text'));
+    if (item && item.soon) return showPage('soon', id);
     const res = await post('menu', { id });
     if (!res || !res.ok) return;
     if (res.page === 'stats') showPage('stats', id);

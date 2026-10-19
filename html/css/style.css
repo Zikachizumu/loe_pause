@@ -99,7 +99,6 @@ html[lang="tr"] .pm-item .lbl i, html[lang="tr"] .pm-suffix i { margin-left: .2e
 html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 
 .pm-list { position: absolute; left: 10rem; top: 17.83rem; display: flex; flex-direction: column; }
-.pm-quit { position: absolute; left: 10rem; bottom: 14.85rem; display: flex; flex-direction: column; }
 
 .pm-item {
     display: flex; align-items: center; height: 2.13rem; width: max-content; min-width: 16rem; text-align: left;
@@ -335,7 +334,7 @@ html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* ============================================================ PORTRE / DAR EKRANLAR */
-html.portrait .pm-head, html.portrait .pm-list, html.portrait .pm-quit, html.portrait .hints-main { left: 3rem; }
+html.portrait .pm-head, html.portrait .pm-list, html.portrait .hints-main { left: 3rem; }
 html.portrait .pm-card { left: 7.34rem; }
 html.portrait .pm-links { right: 3rem; }
 html.portrait .pm-gta { right: 3rem; }
