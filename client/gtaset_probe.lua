@@ -1,11 +1,12 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v6)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v7)
 --
 -- Bulgular: yazma çalışıyor (kök SET_COLUMN_INPUT_EVENT ve sol/sağ tuşu); GetProfileSetting yalnızca menü kapanınca
 -- güncelleniyor; satır kimliği menuUniqueID'den okunuyor. Gizli menü (SuppressFrontendRenderingThisFrame) tuş işlemiyor
 -- ama kök SET_INPUT_EVENT ile geziniyor (v5). NUI odağı tuşları engelliyor, NUI örtüsü GTA menüsünün altında kalıyor (v4).
 --
---   /loe_gtaset : (~20 sn) GTA menüsü hiç görünmeden: Audio'ya in, satırlara gir (MENU_SHIFT_DEPTH), SFX'i bir adım
---                 azalt, çık, kapat, ölç; sonra aynı yolla geri al.
+--   /loe_gtaset : (~25 sn) GTA menüsü hiç görünmeden: Audio'ya in, satırlara gir (MENU_SHIFT_DEPTH), çağrılar arası
+--                 güvenli beklemeyi ölç, SFX'i bir adım azalt, çık, kapat, ölç; sonra aynı yolla geri al.
+--                 v6: gizli gezinme ve giriş/çıkış çalışıyor; art arda (14 ms) gelen ikinci gezinme yutuluyor.
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -161,7 +162,7 @@ local function closeMenu()
 end
 
 local function send(extra)
-    local payload = { kind = 'hidden6', log = log }
+    local payload = { kind = 'hidden7', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -285,8 +286,26 @@ local function run()
     local r = enterAudio('w')
     local res = { enter = r, sfx0 = sfx0 }
     if r == true then
-        res.rowDown = nav(DPAD_DOWN, 'row-down')
+        -- v6: aşağıdan hemen sonra (14 ms) gelen yukarı yutuldu → çağrılar arası en kısa güvenli bekleme ölçülür
+        local speeds = {}
+        for _, gap in ipairs({ 50, 100, 150, 250 }) do
+            local ok = 0
+            for _ = 1, 3 do
+                if nav(DPAD_DOWN, 'spd' .. gap) then ok = ok + 1 end
+                sleep(gap)
+            end
+            speeds[#speeds + 1] = { gap = gap, ok = ok }
+        end
+        add('speed', { list = speeds })
+        sleep(250)
         res.rowUp = nav(DPAD_UP, 'row-up')
+        sleep(250)
+        -- SFX satırına (kimlik 8) yalnızca aşağı yönle, 250 ms aralıkla git (liste başa döner)
+        for _ = 1, 15 do
+            if val('menuUniqueID.toString') == '8' then break end
+            nav(DPAD_DOWN, 'to-sfx')
+            sleep(250)
+        end
         res.row0 = val('menuUniqueID.toString')
         res.wrote = sfx0 >= 1 and res.row0 == '8'
         if res.wrote then

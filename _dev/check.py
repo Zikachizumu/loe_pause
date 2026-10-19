@@ -701,6 +701,7 @@ check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or
 
 -- sahte oyun (yalnızca kök metodlar): SET_INPUT_EVENT 8/9 kategori ya da satır gezer, 10/11 Audio satır 0'da profil 300'ü
 -- değiştirir (oyun gibi: menü KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar (noDepth: yok sayılır).
+-- Oyun gibi: önceki gezinmeden 100 ms geçmeden gelen gezinme yutulur.
 local CATS = {
     { uid = '0', state = '1', rows = { '48', '4' } },
     { uid = '1', state = '0', rows = { '123', '128' } },
@@ -725,7 +726,9 @@ EndScaleformMovieMethod = function()
     if not sim.pause then return end
     local c, a = CATS[fk.cat], fk.cur.a
     if fk.cur.p == 'SET_INPUT_EVENT' then
+        if (a[1] == 9 or a[1] == 8) and sim.now - (fk.lastNav or -1000) < 100 then return end   -- oyun art arda gezinmeyi yutar
         if a[1] == 9 or a[1] == 8 then
+            fk.lastNav = sim.now
             local d = a[1] == 9 and 1 or -1
             if fk.focus then fk.row = (fk.row + d) % #c.rows else fk.cat = (fk.cat - 1 + d) % #CATS + 1 end
         elseif (a[1] == 10 or a[1] == 11) and fk.focus and c.uid == '3' and fk.row == 0 then
@@ -777,11 +780,14 @@ local sup = fk.suppressN
 sim.frames(1000)
 check(fk.suppressN == sup, 'S15: test bitince gizleme durmalı')
 check(fk.visibleRead == false, 'S15: GTA menüsü hiçbir an görünür olmamalı')
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'hidden6'
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'hidden7'
     and sim.encoded.enter == 'true' and sim.encoded.saved == true and sim.encoded.restored == 'ok',
     'S15: gizli yazma kaydedilmeli ve geri alınmalı (enter=' .. tostring(sim.encoded and sim.encoded.enter) .. ', saved=' .. tostring(sim.encoded and sim.encoded.saved) .. ', restored=' .. tostring(sim.encoded and sim.encoded.restored) .. ')')
 local fd = finalDiff()
 check(fd and #fd == 0 and sim.profile[300] == 1, 'S15: test sonunda SFX eski değerinde olmalı')
+local spd
+for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'speed' then spd = e.list end end
+check(spd and #spd == 4 and spd[1].gap == 50 and spd[4].gap == 250 and spd[4].ok == 3, 'S15: gezinme hızı ölçülmeli (250 ms aralık güvenli)')
 
 -- B) satırlara girilemiyor: yazma denenmez
 fk.noDepth = true
