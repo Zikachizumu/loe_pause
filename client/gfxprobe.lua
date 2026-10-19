@@ -535,17 +535,34 @@ end
 -- type, menuID, isSelectable, multiListItems (seçenekler). Oyuna yazma: <satır>.setPref(değer).
 local SETCOL = 'currentPage.columnList.1'
 local PATH_DISCOVER = {
-    'currentPage.columnList.0.dbgID.toString',
-    SETCOL .. '.dbgID.toString',
-    SETCOL .. '.state.toString',
-    SETCOL .. '.menuContainer.toString',
-    SETCOL .. '.menuContainer.dataViewMC0.toString',
-    SETCOL .. '.menuContainer.dataViewMC1.toString',
-    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC.toString',
-    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC._uniqueID.toString',
-    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC.itemTextLeft.text.toString',
-    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC.labelMC.titleTF.text.toString',
-    'menuState.toString',
+    -- denetim (önceki turda çalışanlar)
+    { SETCOL .. '.state.toString' },
+    { SETCOL .. '.menuContainer.toString' },
+    -- alt klibe ADIYLA inilebiliyor mu? (menuMC adı biliniyor)
+    { SETCOL .. '.CONTENT.toString' },
+    { SETCOL .. '.CONTENT.menuMC.toString' },
+    { SETCOL .. '.menuContainer._name.toString' },
+    -- menuMC içinde hangi derinlikler dolu?
+    { SETCOL .. '.menuContainer.getNextHighestDepth' },
+    { SETCOL .. '.menuContainer.getInstanceAtDepth', nil, { 0 } },
+    { SETCOL .. '.menuContainer.getInstanceAtDepth', nil, { 1 } },
+    { SETCOL .. '.menuContainer.dataViewMC0._name.toString' },
+    { SETCOL .. '.menuContainer.dataViewMC1._name.toString' },
+    { SETCOL .. '.menuContainer.dataViewMC2._name.toString' },
+    -- dizi elemanı biçimleri
+    { SETCOL .. '.model.viewList.toString' },
+    { SETCOL .. '.model.viewList.0.viewIndex.toString' },
+    { SETCOL .. '.model.viewList.0.viewContainer.toString' },
+    { SETCOL .. '.model.viewList.0.viewContainer._name.toString' },
+    { SETCOL .. '.model.viewList.slice', nil, { 0, 1 } },
+    { SETCOL .. '.model.dataList.join', '|' },
+    { 'currentPage.columnList.0.model.viewList.join' },
+    { 'currentPage.column2.toString' },
+    { 'currentPage.column2.menuContainer.toString' },
+    -- sınıf örneği metodu (undefined dönerse zaman aşımı gibi görünür)
+    { SETCOL .. '.model.getCurrentSelection', nil, { 0 } },
+    { SETCOL .. '.model.getCurrentView', nil, { 0 } },
+    { SETCOL .. '.dbgID.substr', nil, { 0, 5 } },
 }
 
 -- Uzun metni 63 karakterlik parçalarla oku (String.substr(start, len))
@@ -605,15 +622,15 @@ local function runPath()
     info('opened')
 
     phase('discover')
-    for _, p in ipairs(PATH_DISCOVER) do
-        local str, int, st = sfRead(p)
-        add('path', { p = p, s = str, i = int, st = st })
+    for _, d in ipairs(PATH_DISCOVER) do
+        local str, int, st = sfRead(d[1], d[2], d[3])
+        add('path', { p = d[1], args = d[3], s = str, i = int, st = st })
     end
 
     -- Kategori listesinde aşağı in (yalnızca vurgu; sağ sütun o kategorinin satırlarını gösterir). Değer değişmez.
     phase('walk')
     local okSteps, view = 0, nil
-    for step = 0, 12 do
+    for step = 0, 2 do
         if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed' }) break end
         if step > 0 then press(2, C_DOWN); sleep(800) end
         view = findView(view)
@@ -624,7 +641,7 @@ local function runPath()
     info('end')
     phase('end')
     finish()
-    say(('Path test finished. Steps with data: %d / 13'):format(okSteps))
+    say(('Path test finished. Steps with data: %d / 3'):format(okSteps))
     send('path', { stepsWithData = okSteps })
 end
 
