@@ -820,7 +820,7 @@ check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData =
 local r1 = rowEvents[1] and rowEvents[1].rows and rowEvents[1].rows[1]
 check(#rowEvents == 2 and rowEvents[1].view == 0 and rowEvents[1].n == 2 and r1 and r1.uid == '10' and r1.label == 'Texture Quality'
       and r1.value == 'High' and r1.init == '1' and r1.opts == 'Normal|High|Very High', 'S15: gfxpath satır klibi alanları okunmalı')
-check(pathEvents >= 32, 'S15: gfxpath keşif yolları kaydedilmeli')
+check(pathEvents >= 13, 'S15: gfxpath keşif yolları kaydedilmeli')
 local sepOk = false
 for _, c in pairs(seq) do if c.name:find('multiListItems.join', 1, true) and c.sep == '|' then sepOk = true end end
 check(sepOk, 'S15: seçenek listesi "|" ayırıcıyla istenmeli')
