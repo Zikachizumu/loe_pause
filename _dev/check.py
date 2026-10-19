@@ -915,6 +915,22 @@ for _, m in ipairs(sim.msgs) do if m.action == 'lab' and m.text ~= '' then label
 check(sim.encoded and sim.encoded.kind == 'lab' and sim.encoded.error == nil, 'S15: lab sonucu gönderilmeli (' .. tostring(sim.encoded and sim.encoded.error) .. ')')
 check(table.concat(labels, ',') == 'LAB,P1:,P2:,P3:,P4:,P5:,P6:,P6b,P7:,M1:,M2:,M3:,M4:,G: ,P8:', 'S15: lab aşamaları sırayla: ' .. table.concat(labels, ','))
 check(sim.pause == false and GtaSet.busy == false and (sim.profile[203] or 0) == subBefore and fk.visibleRead == false, 'S15: lab sonunda menü kapanmalı, değer değişmemeli, menü görünmemeli')
+-- J) GEÇİCİ /loe_gtaprof: StatSetProfileSettingValue denemesi; menü açılmaz; değerler eski haline döner
+local statWrites = {}
+StatSetProfileSettingValue = function(pid, v) statWrites[#statWrites + 1] = { pid, v }; sim.profile[pid] = v end
+sim.latent, sim.encoded, sim.msgs = nil, nil, {}
+local profBefore = {}
+for _, pid in ipairs({ 203, 212, 300, 227, 754 }) do profBefore[pid] = sim.profile[pid] or 0 end
+local actJ = sim.calls.Activate or 0
+sim.commands['loe_gtaprof']()
+sim.frames(100)
+sim.fire('loe_pause:client:gfxprobeGo', 'lab', true)
+sim.frames(200000)
+local same = true
+for pid, v in pairs(profBefore) do if (sim.profile[pid] or 0) ~= v then same = false end end
+check(sim.encoded and sim.encoded.kind == 'lab' and sim.encoded.error == nil and #statWrites >= 10, 'S15: gtaprof tamamlanmalı (' .. tostring(sim.encoded and sim.encoded.error) .. ', yazma=' .. #statWrites .. ')')
+check(same and (sim.calls.Activate or 0) == actJ and GtaSet.busy == false and sim.pause == false, 'S15: gtaprof değerleri eski haline getirmeli, GTA menüsünü açmamalı')
+StatSetProfileSettingValue = nil
 json.encode, print = realEncode, realPrint
 
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA

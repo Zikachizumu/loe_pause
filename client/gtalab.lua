@@ -13,6 +13,7 @@ local P = Config.GfxProbe or {}
 if P.enabled ~= true then return end
 
 local log, t0, busy = {}, 0, false
+local wantProf = false
 local function now() return GetGameTimer() - t0 end
 local function add(kind, data)
     if #log >= 3000 then return end
@@ -164,6 +165,93 @@ local function run()
     send({ before = before, after = after })
 end
 
+-- ---------------------------------------------------------------- /loe_gtaprof: StatSetProfileSettingValue ile doğrudan yazma
+-- Belge: "Does not take effect immediately, unfortunately. profileSetting seems to only be 936, 937 and 938 in scripts".
+-- GTA menüsü hiç açılmaz (ses de çıkmaz). Her yazmadan sonra GetProfileSetting ve ilgili native'ler zaman içinde okunur;
+-- değerler sonda eski haline döner. Son aşamalarda SFX seviyesi 10 ve 0 yapılıp her biri 4 sn tık sesiyle dinlenir.
+local function sample(tag, pid, extra)
+    local d = { tag = tag, pid = pid, profile = GetProfileSetting(pid) }
+    if extra then for k, fn in pairs(extra) do local ok, v = pcall(fn); d[k] = ok and v or ('ERR ' .. tostring(v)) end end
+    add('sample', d)
+end
+
+local function writeTest(pid, value, extra)
+    local before = GetProfileSetting(pid)
+    add('write', { pid = pid, before = before, want = value })
+    local ok, err = pcall(StatSetProfileSettingValue, pid, value)
+    add('writeCall', { pid = pid, ok = ok, err = (not ok) and tostring(err) or nil })
+    local waited = 0
+    for _, ms in ipairs({ 50, 250, 1000, 3000 }) do      -- toplam bekleme bu noktalarda ölçülür
+        Wait(ms - waited)
+        waited = ms
+        sample('after ' .. ms .. 'ms', pid, extra)
+    end
+    pcall(StatSetProfileSettingValue, pid, before)
+    Wait(1500)
+    sample('restored', pid, extra)
+    return before
+end
+
+local function runProf()
+    log, t0 = {}, GetGameTimer()
+    GtaSet.busy = true
+    banner('PROF: starting')
+    Wait(1500)
+    local ids = { 203, 212, 300, 301, 754, 13, 231, 227 }
+    for _, pid in ipairs(ids) do sample('start', pid) end
+    add('natives', {
+        subtitles = IsSubtitlePreferenceSwitchedOn(), safezone = GetSafeZoneSize(), metric = ShouldUseMetricMeasurements(),
+    })
+
+    banner('W1: subtitles (203) toggle')
+    local sub0 = GetProfileSetting(203)
+    writeTest(203, sub0 == 1 and 0 or 1, { subtitlesOn = IsSubtitlePreferenceSwitchedOn })
+
+    banner('W2: safe zone (212) -> 0 (100%)')
+    writeTest(212, 0, { safezone = GetSafeZoneSize })
+
+    banner('W3: measurement (227) toggle')
+    local m0 = GetProfileSetting(227)
+    writeTest(227, m0 == 1 and 0 or 1, { metric = ShouldUseMetricMeasurements })
+
+    banner('W4: mouse look sens (754) +10')
+    writeTest(754, GetProfileSetting(754) + 10)
+
+    -- sesli deneme: SFX seviyesi (300) 10 ve 0; her aşamada 4 sn boyunca 500 ms'de bir ön yüz sesi çalınır
+    local sfx0 = GetProfileSetting(300)
+    local function clicks(ms)
+        local e = GetGameTimer() + ms
+        while GetGameTimer() < e do
+            PlaySoundFrontend(-1, 'NAV_UP_DOWN', 'HUD_FRONTEND_DEFAULT_SOUNDSET', true)
+            Wait(500)
+        end
+    end
+    banner('S0: clicks at your current SFX volume (4s)')
+    clicks(4000)
+    pcall(StatSetProfileSettingValue, 300, 10)
+    Wait(300)
+    banner('S1: SFX volume written = 10 - clicks (4s)')
+    add('sfx', { step = 'to10', profile = GetProfileSetting(300) })
+    clicks(4000)
+    pcall(StatSetProfileSettingValue, 300, 0)
+    Wait(300)
+    banner('S2: SFX volume written = 0 - clicks (4s)')
+    add('sfx', { step = 'to0', profile = GetProfileSetting(300) })
+    clicks(4000)
+    pcall(StatSetProfileSettingValue, 300, sfx0)
+    Wait(300)
+    banner('S3: SFX restored - clicks (4s)')
+    add('sfx', { step = 'restored', profile = GetProfileSetting(300), want = sfx0 })
+    clicks(4000)
+
+    banner('')
+    local final = {}
+    for _, pid in ipairs(ids) do final[#final + 1] = { pid, GetProfileSetting(pid) } end
+    GtaSet.busy = false
+    say('Profile write test finished.')
+    send({ final = final })
+end
+
 local function request()
     if busy or GtaSet.busy then say('Already running.') return end
     if IsPauseMenuActive() then say('Close the menu first.') return end
@@ -180,7 +268,8 @@ RegisterNetEvent('loe_pause:client:gfxprobeGo', function(_, allowed)
     end
     CreateThread(function()
         Wait(1200)
-        local ok, err = pcall(run)
+        local ok, err = pcall(wantProf and runProf or run)
+        wantProf = false
         if not ok then
             GtaSet.busy = false
             banner('')
@@ -196,3 +285,12 @@ RegisterNetEvent('loe_pause:client:gfxprobeSaved', function(name)
 end)
 
 RegisterCommand('loe_gtalab', request, false)
+
+-- /loe_gtaprof: aynı yetki akışı, farklı deney
+RegisterCommand('loe_gtaprof', function()
+    if busy or GtaSet.busy then say('Already running.') return end
+    if IsPauseMenuActive() then say('Close the menu first.') return end
+    busy, wantProf = true, true
+    TriggerServerEvent('loe_pause:server:gfxprobeAsk', 'prof')
+    SetTimeout(5000, function() if busy and not GtaSet.busy then busy, wantProf = false, false end end)
+end, false)
