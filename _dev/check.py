@@ -894,6 +894,29 @@ check((sim.calls.Activate or 0) == actH + 1 and sim.pause == true and CATS[fk.ca
 sim.pause = false; sim.frames(3000)
 fk.visibleOk = false
 check(sim.nui('native', { target = 'zzz' }) == nil or true, 'S15: geçersiz hedef sorun çıkarmamalı')
+-- I) GEÇİCİ /loe_gtalab: yetki sunucudan; gizli açılır; aşamalar sırayla; değer değişmez; sonuç sunucuya gider
+sim.exported.Close(); sim.frames(700)
+local realEncode, realPrint = json.encode, print
+print = function() end
+json.encode = function(x) sim.encoded = x; return 'X' end
+sim.latent, sim.encoded, sim.msgs = nil, nil, {}
+sim.commands['loe_gtalab']()
+check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: lab önce sunucudan yetki istemeli')
+sim.fire('loe_pause:client:gfxprobeGo', 'lab', false)
+sim.frames(3000)
+check(sim.pause == false and GtaSet.busy == false, 'S15: yetkisiz oyuncuda lab başlamamalı')
+local subBefore = sim.profile[203] or 0
+sim.commands['loe_gtalab']()
+sim.frames(100)
+sim.fire('loe_pause:client:gfxprobeGo', 'lab', true)
+sim.frames(400000)
+local labels = {}
+for _, m in ipairs(sim.msgs) do if m.action == 'lab' and m.text ~= '' then labels[#labels + 1] = m.text:sub(1, 3) end end
+check(sim.encoded and sim.encoded.kind == 'lab' and sim.encoded.error == nil, 'S15: lab sonucu gönderilmeli (' .. tostring(sim.encoded and sim.encoded.error) .. ')')
+check(table.concat(labels, ',') == 'LAB,P1:,P2:,P3:,P4:,P5:,P6:,P6b,P7:,M1:,M2:,M3:,M4:,P8:', 'S15: lab aşamaları sırayla: ' .. table.concat(labels, ','))
+check(sim.pause == false and GtaSet.busy == false and (sim.profile[203] or 0) == subBefore and fk.visibleRead == false, 'S15: lab sonunda menü kapanmalı, değer değişmemeli, menü görünmemeli')
+json.encode, print = realEncode, realPrint
+
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
 BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, ScaleformMovieMethodAddParamBool, EndScaleformMovieMethod = nil, nil, nil, nil
@@ -906,7 +929,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/gtaset.lua', 'client/main.lua'):
+for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/gtaset.lua', 'client/gtalab.lua', 'client/main.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
