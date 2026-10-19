@@ -13,7 +13,7 @@ local P = Config.GfxProbe or {}
 if P.enabled ~= true then return end
 
 local log, t0, busy = {}, 0, false
-local wantProf = false
+local wantProf, wantDuck = false, false
 local function now() return GetGameTimer() - t0 end
 local function add(kind, data)
     if #log >= 3000 then return end
@@ -252,6 +252,87 @@ local function runProf()
     send({ final = final })
 end
 
+-- ---------------------------------------------------------------- /loe_gtaduck: tık sesini kısmanın yolları
+-- Gizli GTA menüsünde aynı değer adımı dizisi (Display -> Subtitles, 6 adım; çift sayı → eski değere döner) farklı koşullarda
+-- tekrarlanır; oyuncu hangi aşamada tıkların kısıldığını/sustuğunu söyler:
+--   B0 normal · B1..B4 ses sahnesi etkin · B5 duraklatma sahnesi kapalı · Q: SFX seviyesi menüden 0 yapılır (sonda geri alınır)
+local function runDuck()
+    local T = GtaSet._t
+    log, t0 = {}, GetGameTimer()
+    GtaSet.busy = true
+    local sfx0 = GetProfileSetting(300)
+    local sub0 = GetProfileSetting(203)
+    banner('DUCK: starting')
+    T.sleep(1500)
+    if not T.openHidden() then
+        banner('')
+        GtaSet.busy = false
+        say('Could not open the GTA settings menu.')
+        return
+    end
+    -- kategoriler: Audio (3) ve Display (5); satır kimlikleri: SFX = 8, Subtitles = 28
+    local function toRow(cat, row)
+        if T.level() == '2' then T.depth(-1) end
+        local okC = T.gotoCat(cat)
+        local okD = okC and T.depth(1)
+        local okR = okD and T.gotoRow(row)
+        add('goto', { cat = cat, row = row, ok = okR and true or false })
+        T.sleep(600)
+        return okR
+    end
+    local function burst(label)
+        banner(label)
+        for _ = 1, 6 do
+            T.pace(250)
+            T.call('SET_INPUT_EVENT', 11)
+            T.sleep(450)
+        end
+        T.sleep(500)
+    end
+    banner('setup (ignore sounds)')
+    if toRow('5', '28') then
+        burst('B0: normal - 6 value steps')
+        local scenes = {
+            { 'B1: scene MP_LEADERBOARD_SCENE', 'MP_LEADERBOARD_SCENE' },
+            { 'B2: scene DEATH_SCENE', 'DEATH_SCENE' },
+            { 'B3: scene FADE_OUT_WORLD_250MS_SCENE', 'FADE_OUT_WORLD_250MS_SCENE' },
+            { 'B4: scene MP_CELEB_SCREEN_SCENE', 'MP_CELEB_SCREEN_SCENE' },
+        }
+        for _, sc in ipairs(scenes) do
+            local started = StartAudioScene(sc[2])
+            add('scene', { name = sc[2], started = tostring(started) })
+            T.sleep(400)
+            burst(sc[1])
+            StopAudioScene(sc[2])
+        end
+        StopAudioScene('PAUSE_MENU_SCENE')
+        burst('B5: pause menu scene stopped')
+        -- Q: SFX seviyesini menüden 0 yap (sesi azalırken tık duyulabilir), 6 adım, sonra geri al
+        banner('Q setup: SFX -> 0 (ignore sounds)')
+        if sfx0 > 0 and toRow('3', '8') then
+            T.stepN(10, sfx0, 100)                    -- sola: sfx0 adım (eski değerden 0'a)
+            T.sleep(600)
+            if toRow('5', '28') then
+                burst('Q: SFX is 0 - 6 value steps')
+            end
+            banner('Q restore: SFX back (ignore sounds)')
+            if toRow('3', '8') then
+                T.stepN(11, sfx0, 100)
+                T.sleep(600)
+            end
+        end
+    end
+    if T.level() == '2' then T.depth(-1) end
+    T.shut()
+    T.sleep(2500)
+    local after = { sfx = GetProfileSetting(300), sub = GetProfileSetting(203) }
+    add('final', { sfx0 = sfx0, sub0 = sub0, sfx = after.sfx, sub = after.sub })
+    banner('')
+    GtaSet.busy = false
+    say(('Duck test finished. SFX %d -> %d, Subtitles %d -> %d'):format(sfx0, after.sfx, sub0, after.sub))
+    send({ sfx0 = sfx0, sfx = after.sfx, sub0 = sub0, sub = after.sub })
+end
+
 local function request()
     if busy or GtaSet.busy then say('Already running.') return end
     if IsPauseMenuActive() then say('Close the menu first.') return end
@@ -268,8 +349,8 @@ RegisterNetEvent('loe_pause:client:gfxprobeGo', function(_, allowed)
     end
     CreateThread(function()
         Wait(1200)
-        local ok, err = pcall(wantProf and runProf or run)
-        wantProf = false
+        local ok, err = pcall(wantDuck and runDuck or (wantProf and runProf or run))
+        wantProf, wantDuck = false, false
         if not ok then
             GtaSet.busy = false
             banner('')
@@ -285,6 +366,15 @@ RegisterNetEvent('loe_pause:client:gfxprobeSaved', function(name)
 end)
 
 RegisterCommand('loe_gtalab', request, false)
+
+-- /loe_gtaduck: aynı yetki akışı
+RegisterCommand('loe_gtaduck', function()
+    if busy or GtaSet.busy then say('Already running.') return end
+    if IsPauseMenuActive() then say('Close the menu first.') return end
+    busy, wantDuck = true, true
+    TriggerServerEvent('loe_pause:server:gfxprobeAsk', 'duck')
+    SetTimeout(5000, function() if busy and not GtaSet.busy then busy, wantDuck = false, false end end)
+end, false)
 
 -- /loe_gtaprof: aynı yetki akışı, farklı deney
 RegisterCommand('loe_gtaprof', function()
