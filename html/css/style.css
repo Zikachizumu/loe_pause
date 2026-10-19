@@ -349,16 +349,16 @@ html.portrait .cards { grid-template-columns: minmax(0, 1fr); }
     * { transition: none !important; }
 }
 
-/* GTA ayarları uygulanırken arkadaki GTA menüsünü örten tam ekran katman (#app dışında: menü kapalıyken de görünür) */
-.gta-cover {
-    position: fixed; inset: 0; z-index: 9999; background: #09090b;
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font); color: #f4f4f6;
+/* GTA ayarları (profil ayarları): "Uygula" ile gizli GTA menüsünden yazılır */
+.gs-btn.primary { color: var(--on-accent); background: var(--accent); }
+.gs-btn.primary:hover { background: var(--accent); filter: brightness(1.12); }
+.gs-btn.primary em { font-style: normal; font-weight: 600; opacity: .8; }
+.gs-btn:disabled { cursor: default; filter: none; opacity: .85; }
+.gs-btn .spin {
+    display: inline-block; width: .8em; height: .8em; margin-right: .6em; vertical-align: -.1em; border-radius: 50%;
+    border: .14em solid rgba(255, 255, 255, .35); border-top-color: currentColor; animation: gs-spin .8s linear infinite;
 }
-.gtc-box { display: flex; align-items: center; gap: .9rem; font-size: 1.05rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.gtc-spin {
-    width: 1.3rem; height: 1.3rem; border-radius: 50%;
-    border: .18rem solid rgba(255, 255, 255, .15); border-top-color: var(--accent);
-    animation: gtc-spin .8s linear infinite;
-}
-@keyframes gtc-spin { to { transform: rotate(360deg); } }
+@keyframes gs-spin { to { transform: rotate(360deg); } }
+.gs-row.chg .gl b, .gs-row.chg .gl i { color: var(--accent); }
+.gs-row.chg .sl-val { color: var(--accent); }
+#app.gbusy .gs-panel .gs-rows, #app.gbusy .gs-opts, #app.gbusy .gs-search { pointer-events: none; opacity: .5; transition: opacity .2s; }

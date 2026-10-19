@@ -42,7 +42,11 @@ const STR = {
         restore_text: 'Bu sayfadaki ayarlar varsayılan değerlerine döner. Diğer sayfalar etkilenmez.', restore_yes: 'Evet, sıfırla',
         msg_restored: 'Varsayılanlar geri yüklendi',
         gta_settings: 'GTA Ayarları', gta_row: 'GTA ayar ekranı', gta_btn: 'Aç',
-        gta_text: 'Grafik, ses seviyeleri, fare ve oyun kolu hassasiyeti, ekran ve tuş atamaları GTA\'nın kendi ayar ekranında değiştirilir. Enter ile aç; ESC ile kapatınca buraya dönersin (Arayüz Ayarları → Menü Davranışı).',
+        gta_text: 'Grafik ayarları (doku, gölge, çözünürlük...), tuş atamaları ve diğer ayarlar GTA\'nın kendi ayar ekranında değiştirilir. Enter ile aç; ESC ile kapatınca buraya dönersin (Arayüz Ayarları → Menü Davranışı).',
+        gta_apply: ['DEĞİŞİKLİKLERİ', 'UYGULA'], gta_applying: 'Uygulanıyor…', gta_wait: 'GTA ayarları uygulanıyor, lütfen bekle…',
+        msg_gta_ok: 'GTA ayarları uygulandı', msg_gta_fail: 'Bazı ayarlar uygulanamadı',
+        gta_leave_title: 'Uygulanmamış değişiklikler', gta_leave_text: 'GTA ayarlarında henüz uygulanmamış değişikliklerin var.',
+        gta_leave_apply: 'Şimdi uygula', gta_leave_discard: 'Vazgeç ve çık', gta_leave_keep: 'Düzenlemeye devam',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
         hint_move: 'Gezin', hint_change: 'Değiştir', hint_select: 'Seç', hint_resume: 'Devam', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
         on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', readonly: 'Salt okunur — değiştirmek için GTA Ayarları → Tuş Atamaları', unbound: 'Atanmamış',
@@ -66,7 +70,11 @@ const STR = {
         restore_text: 'The settings on this page return to their defaults. Other pages are not affected.', restore_yes: 'Yes, restore',
         msg_restored: 'Defaults restored',
         gta_settings: 'GTA Settings', gta_row: 'GTA settings screen', gta_btn: 'Open',
-        gta_text: 'Graphics, audio levels, mouse and controller sensitivity, display and key bindings are changed in GTA\'s own settings screen. Press Enter to open it; closing it with ESC can bring you back here (UI Settings → Menu Behaviour).',
+        gta_text: 'Graphics settings (texture, shadows, resolution...), key bindings and other options are changed in GTA\'s own settings screen. Press Enter to open it; closing it with ESC can bring you back here (UI Settings → Menu Behaviour).',
+        gta_apply: ['APPLY', 'CHANGES'], gta_applying: 'Applying…', gta_wait: 'Applying GTA settings, please wait…',
+        msg_gta_ok: 'GTA settings applied', msg_gta_fail: 'Some settings could not be applied',
+        gta_leave_title: 'Unapplied changes', gta_leave_text: 'You have GTA setting changes that were not applied yet.',
+        gta_leave_apply: 'Apply now', gta_leave_discard: 'Discard and leave', gta_leave_keep: 'Keep editing',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
         hint_move: 'Navigate', hint_change: 'Change', hint_select: 'Select', hint_resume: 'Resume', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
         on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', readonly: 'Read-only — to rebind, open GTA Settings → Key Bindings', unbound: 'Unbound',
@@ -95,6 +103,8 @@ const S = {
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
     modal: null,
+    // GTA'nın kendi ayarları: gset = güncel profil değerleri, gpend = henüz uygulanmamış değişiklikler, glabels = GTA metinleri
+    gset: {}, gpend: {}, glabels: {}, gbusy: false,
 };
 
 const app = $('#app');
@@ -266,7 +276,7 @@ const setMainIdx = (i) => {
 };
 
 const activateMenu = async (id) => {
-    if (id === 'resume') return post('close');
+    if (id === 'resume') return guardPending(() => post('close'));
     if (id === 'game') return openSettings('game');
     if (id === 'ui') return openSettings('ui');
     if (id === 'quit') return confirmQuit();
@@ -393,6 +403,76 @@ const buildEntries = () => {
 const selectable = (e) => e && e.row.type !== 'info' && e.row.type !== 'head';
 const firstSelectable = () => { const i = S.entries.findIndex(selectable); return i < 0 ? 0 : i; };
 
+/* ============================================================ GTA AYARLARI (profil değerleri; "Uygula" ile yazılır) */
+const gCur = (r) => S.gset[r.pid] ?? 0;
+const gVal = (r) => (S.gpend[r.pid] !== undefined ? S.gpend[r.pid] : gCur(r));
+const gMax = (r) => (r.type === 'glist' ? (r.labels || []).length - 1 : (r.max || 0));
+const gPendingCount = () => Object.keys(S.gpend).length;
+const gHuman = (id) => String(id).replace(/^MO_/, '').replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+const gText = (id) => S.glabels[id] || gHuman(id);
+const gDisplay = (r, v) => (r.inv ? gMax(r) - v : v);          // ters kaydırıcıda (güvenli bölge) sağ = küçük profil değeri
+
+// Şemadaki GTA satırlarına GTA'nın kendi metinlerini (oyuncunun GTA diliyle) etiket olarak yazar
+const applyGtaLabels = () => {
+    for (const c of S.allSchema) for (const g of c.groups) for (const r of g.rows) {
+        if (r.type === 'gtaslider' || r.type === 'glist') { const s = gText(r.text); r.label = { tr: s, en: s }; }
+    }
+};
+
+const setG = (r, v) => {
+    if (S.gbusy) return;
+    v = clamp(Math.round(v), 0, gMax(r));
+    if (v === gCur(r)) delete S.gpend[r.pid]; else S.gpend[r.pid] = v;
+};
+
+// dir > 0: sağ ok. Liste: döner; kaydırıcı: uçta durur (ters kaydırıcıda sağ ok profil değerini azaltır)
+const stepG = (r, dir, shift) => {
+    const v = gVal(r), max = gMax(r);
+    if (r.type === 'glist') { setG(r, (v + dir + max + 1) % (max + 1)); return; }
+    const unit = (max > 30 ? Math.round(max / 40) : 1) * (shift ? 5 : 1);
+    setG(r, v + (r.inv ? -dir : dir) * unit);
+};
+
+const renderApply = () => {
+    const b = $('#gsApply'), n = gPendingCount();
+    b.classList.toggle('hidden', n === 0 && !S.gbusy);
+    b.disabled = S.gbusy;
+    if (S.gbusy) setKids(b, h('span', { class: 'spin' }), t('gta_applying'));
+    else { const [a, c] = t('gta_apply'); setKids(b, h('b', {}, a), c ? h('i', {}, ' ' + c) : null, h('em', {}, ` (${n})`)); }
+    app.classList.toggle('gbusy', S.gbusy);
+};
+
+const applyGta = async () => {
+    if (S.gbusy || !gPendingCount()) return;
+    S.gbusy = true;
+    renderApply();
+    toast(t('gta_wait'));
+    const res = await post('gtaApply', { changes: S.gpend });
+    if (!res || !res.ok) { S.gbusy = false; S.gpend = {}; renderApply(); renderRows(); toast(t('msg_gta_fail')); }
+};
+
+const onGtaDone = (d) => {
+    S.gbusy = false;
+    if (d.values && typeof d.values === 'object') S.gset = d.values;
+    S.gpend = {};
+    renderApply();
+    if (S.screen === 'settings') renderRows();
+    toast(t(d.ok ? 'msg_gta_ok' : 'msg_gta_fail'));
+};
+
+// Uygulanmamış GTA değişikliği varken ayarlardan çıkış: uygula / vazgeç / düzenlemeye devam
+const guardPending = (leave) => {
+    if (!gPendingCount() || S.gbusy) { leave(); return; }
+    openModal({
+        title: t('gta_leave_title'), text: t('gta_leave_text'),
+        buttons: [
+            { label: t('gta_leave_keep'), kind: 'ghost', cancel: true },
+            { label: t('gta_leave_discard'), kind: 'ghost', onClick: () => { S.gpend = {}; renderRows(); leave(); } },
+            { label: t('gta_leave_apply'), onClick: applyGta },
+        ],
+    });
+};
+
 /* ============================================================ AYARLAR: değer değiştirme */
 const fmtSlider = (r, v) => {
     const dec = r.decimals != null ? r.decimals : (r.step < 1 ? 1 : 0);
@@ -453,7 +533,8 @@ const activateRow = (e) => {
     if (r.type === 'toggle') setValue(r, !S.values[r.id]);
     else if (r.type === 'select') stepSelect(r, 1);
     else if (r.type === 'action') runAction(r);
-    else if (r.type === 'gta') openNative('settings');
+    else if (r.type === 'gta') openNative(r.target || 'settings');
+    else if (r.type === 'glist') { stepG(r, 1); renderRows(); }
 };
 
 const adjustRow = (e, dir, shift) => {
@@ -461,6 +542,7 @@ const adjustRow = (e, dir, shift) => {
     if (r.type === 'toggle') { const want = dir > 0; if (!!S.values[r.id] !== want) setValue(r, want); }
     else if (r.type === 'select') stepSelect(r, dir);
     else if (r.type === 'slider') stepSlider(r, dir, shift ? 5 : 1);
+    else if (r.type === 'gtaslider' || r.type === 'glist') { stepG(r, dir, shift); renderRows(); }
     else if (dir < 0) goBack();
 };
 
@@ -512,6 +594,20 @@ const buildRow = (e, i) => {
     }
 
     if (r.type === 'slider') return buildSlider(e, base, label, mark, hover, arrow);
+    if (r.type === 'gtaslider') return buildGSlider(r, base + (S.gpend[r.pid] !== undefined ? ' chg' : ''), label, mark, hover, arrow);
+
+    if (r.type === 'glist') {
+        const n = (r.labels || []).length, v = gVal(r), cls = base + (S.gpend[r.pid] !== undefined ? ' chg' : '');
+        if (n === 2) {
+            const seg = (i) => h('button', { class: i === v ? 'on' : '', type: 'button', onclick: (ev) => { ev.stopPropagation(); mark(); setG(r, i); renderRows(); } }, gText(r.labels[i]));
+            return h('div', { class: cls, onmouseenter: hover, onclick: () => { mark(); stepG(r, 1); renderRows(); } }, label, h('div', { class: 'gc seg' }, seg(0), seg(1)));
+        }
+        const [va, vb] = splitTwo(gText(r.labels[Math.min(v, n - 1)] || ''));
+        return h('div', { class: cls, onmouseenter: hover, onclick: () => { mark(); stepG(r, 1); renderRows(); } }, label,
+            h('div', { class: 'gc pick' }, arrow('‹', () => { stepG(r, -1); renderRows(); }),
+                h('span', { class: 'val' }, h('b', {}, va), vb ? h('i', {}, vb) : null),
+                arrow('›', () => { stepG(r, 1); renderRows(); })));
+    }
 
     if (r.type === 'key') {
         const token = r.control != null ? S.keys['c:' + r.control] : S.keys['m:' + r.command];
@@ -530,7 +626,7 @@ const buildRow = (e, i) => {
     }
 
     if (r.type === 'gta') {
-        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); openNative('settings'); } }, label,
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); openNative(r.target || 'settings'); } }, label,
             h('div', { class: 'gc end' }, h('button', { class: 'gs-btn sm', type: 'button' }, t('gta_btn')), ico('chevronR')));
     }
     return h('div', { class: base }, label);
@@ -573,6 +669,38 @@ const buildSlider = (e, base, label, mark, hover, arrow) => {
         h('div', { class: 'gc sl' }, arrow('‹', () => stepSlider(r, -1)), track, out, arrow('›', () => stepSlider(r, 1))));
 };
 
+// GTA kaydırıcısı: 0..max tam sayı adımları; sürükleme yalnızca bekleyen değeri değiştirir ("Uygula"ya kadar GTA'ya yazılmaz)
+const buildGSlider = (r, base, label, mark, hover, arrow) => {
+    const max = Math.max(1, r.max || 1);
+    const pos = () => gDisplay(r, gVal(r));
+    const fill = h('div', { class: 'sl-fill', style: `width:${(pos() / max) * 100}%` });
+    const out = h('span', { class: 'sl-val' }, String(pos()));
+    const track = h('div', { class: 'sl-track' }, fill);
+    const fromEvent = (ev) => {
+        if (S.gbusy) return;
+        const rect = track.getBoundingClientRect();
+        const f = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+        const p = Math.round(f * max);
+        setG(r, r.inv ? max - p : p);
+        fill.style.width = `${(pos() / max) * 100}%`; out.textContent = String(pos());
+        const row = track.closest('.gs-row');
+        if (row) row.classList.toggle('chg', S.gpend[r.pid] !== undefined);
+        renderApply();
+    };
+    track.addEventListener('pointerdown', (ev) => {
+        ev.stopPropagation();
+        mark();
+        track.setPointerCapture(ev.pointerId);
+        fromEvent(ev);
+        const move = (m) => fromEvent(m);
+        const up = () => { track.removeEventListener('pointermove', move); track.removeEventListener('pointerup', up); };
+        track.addEventListener('pointermove', move);
+        track.addEventListener('pointerup', up);
+    });
+    return h('div', { class: base, onmouseenter: hover }, label,
+        h('div', { class: 'gc sl' }, arrow('‹', () => { stepG(r, -1); renderRows(); }), track, out, arrow('›', () => { stepG(r, 1); renderRows(); })));
+};
+
 // OPTIONS sütunu: kategoriler (Game Settings) ya da arayüz ayar sayfaları (UI Settings); Game Settings'te en sonda "GTA Settings"
 const renderOpts = () => {
     $('#optTitle').textContent = t('opts_title');
@@ -613,6 +741,7 @@ const renderRows = (resetScroll) => {
     list.replaceChildren(...(S.entries.length ? S.entries.map((e, i) => buildRow(e, i)) : [h('div', { class: 'gs-empty' }, t('no_results'))]));
     list.scrollTop = resetScroll ? 0 : prev;
     $('#gsRestore').classList.toggle('hidden', pageIds().length === 0);
+    renderApply();
     paintNote();
 };
 
@@ -685,7 +814,7 @@ const goBack = () => {
     q.blur();
     if (S.query) { S.query = ''; q.value = ''; S.zone = 'rows'; refreshSettings(true); return; }
     if (S.zone === 'rows' || S.zone === 'search') { S.zone = 'cats'; renderRows(); paintZones(); return; }
-    showScreen('main');
+    guardPending(() => showScreen('main'));
 };
 
 const moveRow = (delta) => {
@@ -742,6 +871,8 @@ const onKey = (ev) => {
     if (!S.open) return;
     const k = ev.key;
 
+    if (S.gbusy) { ev.preventDefault(); return; }        // GTA ayarları uygulanırken menü girdi almaz
+
     if (k === 'Escape') {
         ev.preventDefault();
         if (S.modal) closeModal(); else if (S.screen !== 'main') goBack(); else post('close');   // ESC = bir adım geri; ana listede menüyü kapatır
@@ -781,6 +912,7 @@ const onKey = (ev) => {
     // ayarlar
     if (k === 'Backspace') { ev.preventDefault(); goBack(); return; }
     if (k === '/') { ev.preventDefault(); S.zone = 'search'; q.focus(); return; }
+    if ((k === 'a' || k === 'A') && gPendingCount()) { ev.preventDefault(); applyGta(); return; }
 
     if (S.zone === 'cats') {
         if (k === 'ArrowUp' || k === 'ArrowDown') {
@@ -820,6 +952,7 @@ const renderAll = () => {
 };
 
 $('#gsRestore').addEventListener('click', restoreDefaults);
+$('#gsApply').addEventListener('click', applyGta);
 $('#pBack').addEventListener('click', goBack);
 $('#pClose').addEventListener('click', () => post('close'));
 modalEl.addEventListener('click', (ev) => { if (ev.target === modalEl) closeModal(); });
@@ -842,6 +975,8 @@ const onOpen = (d) => {
     S.menu = (Array.isArray(d.menu) && d.menu.length) ? d.menu : DEFAULT_MENU;
     S.stats = d.stats || null;
     S.health = d.health || { known: false, conditions: [] };
+    S.gset = d.gta || {}; S.glabels = d.gtaLabels || {}; S.gpend = {}; S.gbusy = false;
+    applyGtaLabels();
     S.mainIdx = 0; S.cat = 0; S.grp = 0; S.row = 0; S.zone = 'cats'; S.query = ''; q.value = '';
     S.scope = 'game'; S.schema = scopeSchema('game');
     S.subSent = false;
@@ -874,12 +1009,7 @@ window.addEventListener('message', (ev) => {
         S.caps = d.caps || {};
         if (S.screen === 'settings') refreshSettings(false);
     }
-    else if (d.action === 'cover') {
-        // GTA ayarları uygulanırken GTA'nın kendi menüsü arkada açık kalır; bu tam ekran katman onu örter
-        const c = document.getElementById('gtaCover');
-        if (d.text) document.getElementById('gtaCoverText').textContent = String(d.text);
-        c.classList.toggle('hidden', !d.on);
-    }
+    else if (d.action === 'gtaDone') onGtaDone(d);
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();

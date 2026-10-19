@@ -242,7 +242,7 @@ local function close()
 end
 
 local function open(anim)
-    if isOpen then return end
+    if isOpen or GtaSet.busy then return end
     if not uiReady then pendingOpen = anim or 'open'; return end
     isOpen = true
     subActive = false
@@ -265,6 +265,8 @@ local function open(anim)
         stats  = buildStats(),
         health = healthPayload(),
         caps   = capsPayload(),
+        gta    = GtaSet.values(),
+        gtaLabels = GtaSet.labels(),
     })
     refreshHealth()
     refreshCaps()
@@ -273,7 +275,7 @@ end
 Apply.menuOpen = function() return isOpen end
 
 local function canOpenManually()
-    return not isOpen and not native.target and loggedIn() and not IsNuiFocused() and not IsPauseMenuActive()
+    return not isOpen and not GtaSet.busy and not native.target and loggedIn() and not IsNuiFocused() and not IsPauseMenuActive()
         and not IsPlayerSwitchInProgress() and not IsCutsceneActive()
 end
 
@@ -294,6 +296,13 @@ local function activateNative(target, noReturn)
         while not IsPauseMenuActive() and GetGameTimer() < deadline do Wait(0) end
         Wait(n.deeperDelayMs or 100)
         PauseMenuceptionGoDeeper(n.deeper)
+    end
+    if n.category ~= nil then
+        -- Ayarlar sayfası açılır; kategori listesinde istenen kategoriye (ör. Graphics) inilir (menü görünürken de çalışır)
+        local deadline = GetGameTimer() + 2500
+        while not IsPauseMenuActive() and GetGameTimer() < deadline do Wait(0) end
+        Wait(700)
+        GtaSet.focusCategory(n.category)
     end
     return true
 end
@@ -364,7 +373,15 @@ end
 CreateThread(function()
     while true do
         Wait(0)
-        if LoeProbe and LoeProbe.active then goto continue end   -- GEÇİCİ: gtaset_probe GTA ayar menüsünü kendisi yönetiyor
+        if GtaSet.busy then
+            -- client/gtaset.lua GTA ayar menüsünü GİZLİ açıp kapatıyor: ESC yakalama ona dokunmamalı; oyun girdisi yine kapalı kalır
+            if isOpen then
+                DisableAllControlActions(0)
+                DisableAllControlActions(2)          -- gizli GTA menüsü (frontend) gerçek ESC/Enter tuşlarını işlemesin
+                HideHudAndRadarThisFrame()
+            end
+            goto continue
+        end
 
         local now = GetGameTimer()
         local paused = IsPauseMenuActive()
@@ -379,7 +396,7 @@ CreateThread(function()
                 if sinceOpen > 350 and not subActive then close() else killPause() end
             elseif sinceOpen > 300 and not subActive and (IsDisabledControlJustPressed(0, 200) or IsDisabledControlJustPressed(0, 199)) then
                 close()
-            elseif sinceOpen > 400 and not IsNuiFocused() then
+            elseif sinceOpen > 400 and not IsNuiFocused() and now > (GtaSet.settleUntil or 0) then
                 close()     -- ESC odağı bıraktırdı ya da başka bir resource odağı aldı
             end
         else
@@ -449,8 +466,27 @@ RegisterNUICallback('ready', function(_, cb)
 end)
 
 RegisterNUICallback('close', function(_, cb)
+    if GtaSet.busy then return cb({ ok = false }) end      -- GTA ayarları uygulanırken menü kapanmaz
     cb({ ok = true })
     close()
+end)
+
+-- GTA ayarlarını uygula: { changes = { [pid] = hedef } }. Değerler client/gtaset.lua'da yeniden doğrulanır (pid tablosu, aralık).
+-- Uygulama GTA ayar menüsü gizli açılarak yapılır (birkaç saniye); bitince arayüze 'gtaDone' gider.
+RegisterNUICallback('gtaApply', function(d, cb)
+    if not isOpen or GtaSet.busy or type(d) ~= 'table' then return cb({ ok = false }) end
+    if (Config.Features or {}).gtaSettings == false then return cb({ ok = false }) end
+    local changes = GtaSet.clean(d.changes)
+    if not changes then return cb({ ok = false, empty = true }) end
+    cb({ ok = true })
+    GtaSet.apply(changes, function(res)
+        if isOpen then
+            SetNuiFocus(true, true)
+            SetNuiFocusKeepInput(false)
+        end
+        GtaSet.settleUntil = GetGameTimer() + 1500
+        SendNUIMessage({ action = 'gtaDone', ok = res.ok == true, failed = res.failed, values = res.values })
+    end)
 end)
 
 RegisterNUICallback('setting', function(d, cb)
