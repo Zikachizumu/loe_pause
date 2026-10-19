@@ -767,20 +767,33 @@ for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sflog' then chun
 check(sim.encoded and sim.encoded.patched == true and sim.encoded.navGroup == 2, 'S15: yama algılanmalı, çalışan girdi grubu 2 bulunmalı')
 check(table.concat(chunks) == fake.all and fake.buf == '', 'S15: scaleform kaydı sırayla ve eksiksiz okunmalı')
 check(LoeProbe.active == false and sim.pause == false, 'S15: yamalı testten sonra her şey kapanmalı')
--- /loe_gfxpath: AS2 yolu okuma — sahte oyun: yalnızca "currentPage.columnList.1" tabanında 2 satır var
+-- /loe_gfxpath: AS2 yolu okuma — sahte oyun: ayar sütununda dataViewMC0 altında 2 satır klibi var
+local V = 'currentPage.columnList.1.menuContainer.dataViewMC0'
 local resp = {
-    ['currentPage.dbgID.toString'] = 'PAUSE_MENU_PAGES_SETTINGS',
-    ['currentPage.columnList.1.model.viewList.0.dataList.0.join'] = '0|1|10|2|0|1|Texture Quality|High',
-    ['currentPage.columnList.1.model.viewList.0.dataList.1.join'] = '1|1|11|2|2|1|Shadow Quality|Normal',
+    ['currentPage.columnList.1.dbgID.toString'] = 'PAUSE_MENU_SETTINGS',
+    [V .. '.settingsListItem0MC._uniqueID.toString'] = '10',
+    [V .. '.settingsListItem0MC.menuID.toString'] = '1',
+    [V .. '.settingsListItem0MC.type.toString'] = '2',
+    [V .. '.settingsListItem0MC.initialIndex.toString'] = '1',
+    [V .. '.settingsListItem0MC.isSelectable.toString'] = '1',
+    [V .. '.settingsListItem0MC.itemTextLeft.text.substr'] = 'Texture Quality',
+    [V .. '.settingsListItem0MC.itemTextRight.text.substr'] = 'High',
+    [V .. '.settingsListItem0MC.multiListItems.join'] = 'Normal|High|Very High',
+    [V .. '.settingsListItem1MC._uniqueID.toString'] = '11',
+    [V .. '.settingsListItem1MC.itemTextLeft.text.substr'] = 'Shadow Quality',
 }
 local seq = {}
 BeginScaleformMovieMethodOnFrontend = function(path) fake.last = { name = path, params = {} }; return true end
 ScaleformMovieMethodAddParamTextureNameString = function(v) fake.last.sep = v end
+ScaleformMovieMethodAddParamInt = function(v) fake.last.params[#fake.last.params + 1] = v end
 local hn = 1000
 local hv = {}
 EndScaleformMovieMethodReturnValue = function()
     hn = hn + 1
-    hv[hn] = resp[fake.last.name]
+    local r = resp[fake.last.name]
+    -- substr(start, len): yalnızca ilk parça var (kısa metin)
+    if r and fake.last.name:sub(-7) == '.substr' and (fake.last.params[1] or 0) > 0 then r = '' end
+    hv[hn] = r
     seq[hn] = fake.last
     return hn
 end
@@ -798,16 +811,17 @@ for _, e in ipairs((sim.encoded or {}).log or {}) do
     if e.k == 'rows' then rowEvents[#rowEvents + 1] = e end
     if e.k == 'path' then
         pathEvents = pathEvents + 1
-        if e.p == 'currentPage.dbgID.toString' and e.s == 'PAUSE_MENU_PAGES_SETTINGS' then discovered = true end
+        if e.p == 'currentPage.columnList.1.dbgID.toString' and e.s == 'PAUSE_MENU_SETTINGS' then discovered = true end
     end
 end
 check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData == 13, 'S15: gfxpath 13 adımın tamamında veri bulmalı')
-check(#rowEvents == 26 and rowEvents[1].base == 'currentPage.columnList.1' and rowEvents[1].n == 2 and rowEvents[1].v and #rowEvents[1].v == 14
-      and rowEvents[1].rows[1] == resp['currentPage.columnList.1.model.viewList.0.dataList.0.join'], 'S15: gfxpath satırları doğru tabandan okumalı')
-check(discovered and pathEvents >= 16, 'S15: gfxpath keşif yolları kaydedilmeli')
+local r1 = rowEvents[1] and rowEvents[1].rows and rowEvents[1].rows[1]
+check(#rowEvents == 13 and rowEvents[1].view == 0 and rowEvents[1].n == 2 and r1 and r1.uid == '10' and r1.label == 'Texture Quality'
+      and r1.value == 'High' and r1.init == '1' and r1.opts == 'Normal|High|Very High', 'S15: gfxpath satır klibi alanları okunmalı')
+check(discovered and pathEvents >= 11, 'S15: gfxpath keşif yolları kaydedilmeli')
 local sepOk = false
-for _, c in pairs(seq) do if c.name:find('dataList.0.join', 1, true) and c.sep == '|' then sepOk = true end end
-check(sepOk, 'S15: satır okumaları "|" ayırıcıyla istenmeli')
+for _, c in pairs(seq) do if c.name:find('multiListItems.join', 1, true) and c.sep == '|' then sepOk = true end end
+check(sepOk, 'S15: seçenek listesi "|" ayırıcıyla istenmeli')
 check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: gfxpath bitince menü kapanmalı')
 BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamTextureNameString, EndScaleformMovieMethodReturnValue = nil, nil, nil
 IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString, SetControlValueNextFrame = nil, nil, nil
