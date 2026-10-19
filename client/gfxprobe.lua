@@ -528,91 +528,67 @@ local function sfRead(path, sep, ints)
     return nil, nil, 'timeout'
 end
 
+-- Bulgular (önceki turlar): yol çözümü adlı özelliklerde ve film kliplerinde çalışıyor, DİZİ elemanlarında (viewList.0)
+-- ve "length"te çalışmıyor; dönen metin en çok 63 karakter. Bu yüzden satırlara adlı kliplerden ulaşılır:
+--   currentPage.columnList.1.menuContainer.dataViewMC<d>.settingsListItem<i>MC
+-- Satır alanları (PauseMenuSettingsTextItem): itemTextLeft (ad), itemTextRight (değer metni), _uniqueID, initialIndex,
+-- type, menuID, isSelectable, multiListItems (seçenekler). Oyuna yazma: <satır>.setPref(değer).
+local SETCOL = 'currentPage.columnList.1'
 local PATH_DISCOVER = {
-    'currentPage.dbgID.toString',
-    'currentPage.columnList.join',
     'currentPage.columnList.0.dbgID.toString',
-    'currentPage.columnList.1.dbgID.toString',
-    'currentPage.columnList.2.dbgID.toString',
-    'currentPage.columnList.0.model.viewList.join',
-    'currentPage.columnList.1.model.viewList.join',
-    'currentPage.columnList.0.model.viewList.0.dataList.join',
-    'currentPage.columnList.1.model.viewList.0.dataList.join',
-    'currentPage.columnList.0.model.viewList.0.dataList.0.join',
-    'currentPage.columnList.1.model.viewList.0.dataList.0.join',
-    'currentPage.columnList.1.model.viewList.0.itemList.0.join',
-    'currentPage.columnList.1.model.viewList.0.itemList.0.label.toString',
-    'currentPage.columnList.1.model.viewList.0.itemList.0.setPref.toString',
+    SETCOL .. '.dbgID.toString',
+    SETCOL .. '.state.toString',
+    SETCOL .. '.menuContainer.toString',
+    SETCOL .. '.menuContainer.dataViewMC0.toString',
+    SETCOL .. '.menuContainer.dataViewMC1.toString',
+    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC.toString',
+    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC._uniqueID.toString',
+    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC.itemTextLeft.text.toString',
+    SETCOL .. '.menuContainer.dataViewMC0.settingsListItem0MC.labelMC.titleTF.text.toString',
     'menuState.toString',
-    'menuLevel.toString',
 }
 
-local PATH_BASES = {
-    'currentPage.columnList.0', 'currentPage.columnList.1', 'currentPage.columnList.2',
-    'columnList.0', 'columnList.1', 'columnList.2',
-}
+-- Uzun metni 63 karakterlik parçalarla oku (String.substr(start, len))
+local function readText(path)
+    local out = ''
+    for i = 0, 5 do
+        local s = sfRead(path .. '.substr', nil, { i * 63, 63 })
+        if type(s) ~= 'string' then return i == 0 and nil or out end
+        out = out .. s
+        if #s < 63 then break end
+    end
+    return out
+end
 
-local function rowsPath(base, r) return base .. '.model.viewList.0.dataList.' .. r .. '.join' end
+local function viewPath(d) return SETCOL .. '.menuContainer.dataViewMC' .. d end
 
-local function findBase(prefer)
-    local list = { prefer }
-    for _, b in ipairs(PATH_BASES) do if b ~= prefer then list[#list + 1] = b end end
-    for _, b in ipairs(list) do
-        local s = sfRead(rowsPath(b, 0), '|')
-        if type(s) == 'string' and s ~= '' then return b end
+local function findView(prefer)
+    local order = { prefer or 0 }
+    for d = 0, 4 do if d ~= prefer then order[#order + 1] = d end end
+    for _, d in ipairs(order) do
+        local s = sfRead(viewPath(d) .. '.settingsListItem0MC._uniqueID.toString')
+        if type(s) == 'string' and s ~= '' then return d end
     end
 end
 
-local function readRows(base)
+local function readItems(d)
     local rows = {}
-    for r = 0, 59 do
-        local s = sfRead(rowsPath(base, r), '|')
-        if s == nil then break end
-        rows[#rows + 1] = s
+    for i = 0, 24 do
+        local it = viewPath(d) .. '.settingsListItem' .. i .. 'MC'
+        local uid = sfRead(it .. '._uniqueID.toString')
+        if type(uid) ~= 'string' then break end
+        rows[#rows + 1] = {
+            i = i, uid = uid,
+            mid = sfRead(it .. '.menuID.toString'),
+            type = sfRead(it .. '.type.toString'),
+            init = sfRead(it .. '.initialIndex.toString'),
+            sel = sfRead(it .. '.isSelectable.toString'),
+            label = readText(it .. '.itemTextLeft.text'),
+            value = readText(it .. '.itemTextRight.text'),
+            opts = sfRead(it .. '.multiListItems.join', '|'),
+        }
     end
     return rows
-end
-
--- Yolun hangi parçasında takıldığını bulmak için varyantlar (her biri ayrı ayrı denenir)
-local SET = 'currentPage.columnList.1.model'
-local PATH_VARIANTS = {
-    SET .. '.viewList.length.toString',
-    SET .. '.viewList.0.toString',
-    SET .. '.viewList.0.viewIndex.toString',
-    SET .. '.viewList.0.dataList.length.toString',
-    SET .. '.viewList.0.dataList.toString',
-    SET .. '.viewList.0.itemList.length.toString',
-    SET .. '.viewList.0.dataList.0.toString',
-    SET .. '.viewList[0].dataList.join',
-    SET .. '.dataList.length.toString',
-    SET .. '.getCurrentSelection',
-    'currentPage.column2.model.viewList.0.dataList.join',
-    'currentPage.columnList.1.state.toString',
-    'currentPage.columnList.0.model.viewList.0.dataList.length.toString',
-    'currentPage.columnList.0.model.viewList.0.dataList.0.toString',
-}
-
-local C_ACCEPT, C_CANCEL = 201, 202
-
-local function readState(tag, step, variants)
-    local d = { tag = tag, step = step }
-    if variants then
-        d.v = {}
-        for _, p in ipairs(PATH_VARIANTS) do
-            local str, int, st = sfRead(p, nil)
-            d.v[#d.v + 1] = { p = p, s = str, i = int, st = st }
-        end
-    end
-    local base = findBase(PATH_BASES[2])
-    d.base = base
-    d.rows = base and readRows(base) or {}
-    d.n = #d.rows
-    local _, s0 = sfRead('GET_COLUMN_SELECTION', nil, { 0 })
-    local _, s1 = sfRead('GET_COLUMN_SELECTION', nil, { 1 })
-    d.sel0, d.sel1 = s0, s1
-    d.active = IsPauseMenuActive()
-    add('rows', d)
-    return #d.rows > 0
 end
 
 local function runPath()
@@ -630,22 +606,20 @@ local function runPath()
 
     phase('discover')
     for _, p in ipairs(PATH_DISCOVER) do
-        local str, int, st = sfRead(p, '|')
+        local str, int, st = sfRead(p)
         add('path', { p = p, s = str, i = int, st = st })
     end
 
-    -- Her kategori: vurgula (önizleme) → Enter ile gir → oku → Geri. Yalnızca gezinme; hiçbir değer değişmez.
+    -- Kategori listesinde aşağı in (yalnızca vurgu; sağ sütun o kategorinin satırlarını gösterir). Değer değişmez.
     phase('walk')
-    local okSteps = 0
+    local okSteps, view = 0, nil
     for step = 0, 12 do
         if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed' }) break end
-        if step > 0 then press(2, C_DOWN); sleep(700) end
-        local hl = readState('hl', step, step <= 1)
-        press(2, C_ACCEPT); sleep(900)
-        local inside = readState('in', step, step <= 1)
-        if hl or inside then okSteps = okSteps + 1 end
-        if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed after accept' }) break end
-        press(2, C_CANCEL); sleep(700)
+        if step > 0 then press(2, C_DOWN); sleep(800) end
+        view = findView(view)
+        local rows = view and readItems(view) or {}
+        if #rows > 0 then okSteps = okSteps + 1 end
+        add('rows', { step = step, view = view, n = #rows, rows = rows, state = sfRead(SETCOL .. '.state.toString') })
     end
     info('end')
     phase('end')
