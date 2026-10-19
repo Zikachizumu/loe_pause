@@ -2,9 +2,9 @@
 
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
-- Ana menü (tasarım: `PMenü.mp4` referans videosu): **RESUME · MAP · GAME SETTINGS · UI SETTINGS · CHARACTER STATS · BATTLEPASS · SHOP · DISCONNECT** (DISCONNECT listenin son satırıdır); başlıkta seçili maddenin adı "karıştırma" efektiyle yazılır, sol altta oyuncu kartı (ad [id], meslek, nakit / banka), sağ üstte bağlantılar
+- Ana menü (konsept: `_work/design/loe_pause_concept`, renk ve tarz `loe_illegalmarket`'ten: koyu mor paneller, pembe vurgu): solda panel menü **CONTINUE · MAP · CHARACTER · INVENTORY · BATTLEPASS · SHOP · SETTINGS · SUPPORT · DISCONNECT**; üstte LOE logosu + `PAUSE MENU` + sağda oyuncu kimliği / sunucu / saat; sağda karşılama kartı, Cash · Bank · Home · Vehicles kartları ve Battlepass / Shop kartları; arka plan bulanık, karartılmış oyun görüntüsü
 - Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, **İngilizce (varsayılan)** / Türkçe (Arayüz Ayarları → Language). Yeni metinler önce İngilizce yazılır (`Config.Defaults['pref.lang']`)
-- Bağımlılık yok: `qbx_core`, `pma-voice`, `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez.
+- Zorunlu bağımlılık yok: `qbx_core`, `pma-voice`, `loe_jobcore`, `ox_inventory`, `loe_hud` ve `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez. `oxmysql` yalnızca Home / Vehicles sayıları için kullanılır (sorgu başarısızsa kartlar "—" gösterir).
 
 ## Kurulum
 
@@ -84,19 +84,24 @@ Game Settings sayfalarında (Controls, Keyboard / Mouse, Audio, Camera, Display)
 
 ### Ana menü
 
-Referans videodaki yerleşim 1280x720 ölçülerinden birebir alınmıştır (soldan 10 rem, başlık / madde / kart konumları, 48 px seçili çizgi, iki ağırlıklı Montserrat). İngilizce etiketler videodaki gibi bitişik yazılır (`GAMESETTINGS`); Türkçede iki sözcük arasında küçük bir boşluk vardır. Videodaki üçüncü taraf tanıtım yazısı/logosu menünün parçası değildir ve kullanılmamıştır.
+Ana ekranın ölçüleri 1672x941'lik konsepttendir (CSS'te `--u` = 1 konsept pikseli; 1672 px = 120 rem, yani 1920x1080'de 1 rem = 16 px). Ayarlar ekranı `PSettings.mp4` yerleşimini korur, renkleri `loe_illegalmarket` paletine çevrilmiştir (vurgu varsayılanı **Pink**).
 
 | Madde | Davranış |
 |---|---|
-| RESUME (DEVAM ET) | Menüyü kapatır (ESC ile aynı) |
-| MAP (HARİTA) | **Menüde yok** (`Config.Menu` → `map`, `enabled = false`): büyük harita yalnızca **M** tuşuyla açılır (`Config.MapKey`). `enabled = true` yapılırsa menüde de görünür; o durumda `pref.mapReturn` açıkken kapanınca menüye dönülür |
-| GAME SETTINGS (OYUN AYARLARI) | Ayar ekranı (tasarım: `PSettings.mp4`): ana menü solda kalır, yanında **OPTIONS** sütunu (kategoriler), sağda ayar paneli (`GAMESETTINGS // GRAPHICS`). Satır türleri: `‹ değer ›` seçici, `OFF \| ON` anahtar, `‹ ▬▬ ›` kaydırıcı, tuş etiketi. OPTIONS'ın son maddesi **GTA SETTINGS**: seçilince açıklama ve "Open" düğmesi görünür, Enter doğrudan GTA'nın ayar ekranını açar. Seçili satırın açıklaması panelin altındaki not satırında görünür. **RESTORE DEFAULTS**: yalnızca o sayfadaki ayarları varsayılana döndürür (onay sorar; Lua yalnızca şemadaki id'leri kabul eder). Videodaki *APPLY CHANGES* ve *VIDEO MEMORY* **yoktur**: ayarlarımız anında uygulanır, GPU belleği okunamaz. Arama kutusu başlık satırının sağındadır (`/`). **ESC = bir adım geri** (satırlar → OPTIONS → ana liste → menüyü kapatır); arayüz alt ekranda iken Lua'ya `sub` bildirir ve ESC menüyü kapatmaz |
-| UI SETTINGS (ARAYÜZ AYARLARI) | Aynı ekran; OPTIONS sütununda "Tercihler" grupları (Appearance, Menu behaviour): vurgu rengi (varsayılan **Crimson**), koyu mod, portre modu, dil, GTA ekranlarından menüye dönüş, görünümü sıfırla |
-| BATTLEPASS / SHOP | `loe_battlepass` / `loe_shop` resource'u çalışıyorsa menüyü kapatıp `Open` export'unu çağırır; çalışmıyorsa "Yakında" etiketli görünür ve tıklayınca "Yakında" sayfası açılır (resource sonradan başlarsa etiket kendiliğinden kalkar; adlar `Config.Menu`'de) |
-| DISCONNECT (AYRIL) | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar. `ExecuteCommand('disconnect')` script'ten çalışmadığı için kullanılmaz) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
-| Oyuncu kartı | Sol altta ad [sunucu kimliği], meslek + rütbe, nakit ve banka. Ad/para `qbx_core` GetPlayerData'dan; **meslek ve rütbe `loe_jobcore`'dan** (`GetPlayerState`: mesaideki meslek, yoksa birincil meslek; rütbe = `gradeLabel`), çünkü qbx_core'daki job alanı güncel tutulmaz (hep "Freelancer"). Mesleği olmayan oyuncuda jobcore'un "Unemployed" etiketi; jobcore çalışmıyorsa qbx_core'a düşer (`Config.JobSystem`). Veri yoksa kart gizlenir |
-| YOUTUBE / STORE / DISCORD | Sağ üstte; `Config.Links` içinde `https://` adresi **doldurulan** bağlantılar görünür (varsayılan: boş → hiçbiri görünmez). Yalnızca config'teki adresler açılır |
-| CHARACTER STATS (KARAKTER İSTATİSTİKLERİ) | Ana listede UI SETTINGS'ten sonra; yerleşik sayfa kartları: **Character** (ad, vatandaş no, meslek / rütbe), **Finance** (nakit, banka), **Health**. Zamanla doldurulacak: yeni kart `renderPage` içindeki `stats` dalına (`app.js`), veri `buildStats` (`client/main.lua`) ile eklenir. `Config.Menu`'de `enabled = false` yapılırsa listeden kalkar. Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
+| CONTINUE | Menüyü kapatır (ESC ile aynı) |
+| MAP | GTA'nın büyük haritasını açar (menü kapanır; kapanınca `pref.mapReturn` açıksa menüye döner). **M tuşu** bu menüden bağımsızdır: `loe_hud/client/bigmap.lua` (komut `loe_bigmap`) açar; harita açıkken ESC yakalama ona dokunmaz (`exports.loe_hud:IsBigMapOpen`) |
+| CHARACTER | Yerleşik sayfa: **Character** (ad, vatandaş no, meslek / rütbe), **Finance** (nakit, banka), **Health**. Zamanla doldurulacak: yeni kart `renderPage` içindeki `stats` dalına (`app.js`), veri `buildStats` (`client/main.lua`) ile eklenir. Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
+| INVENTORY | Menü kapanır, `ox_inventory` çalışıyorsa `exports.ox_inventory:openInventory()` (oyuncunun kendi çantası) çağrılır; çalışmıyorsa "SOON" |
+| BATTLEPASS / SHOP | `loe_battlepass` / `loe_shop` resource'u çalışıyorsa menüyü kapatıp `Open` export'unu çağırır; çalışmıyorsa **SOON** etiketli görünür ve tıklayınca "Coming soon" sayfası açılır (resource başlarsa etiket kendiliğinden **NEW**'e döner). Sağdaki kartlar aynı maddeleri açar; Battlepass kartı `Config.Cards.battlepass` export'u (`{ season, level, maxLevel }`) varsa seviye çubuğunu gösterir, yoksa "Coming soon" yazar — uydurma veri gösterilmez |
+| SETTINGS | Ayar ekranı: ana menü solda kalır, yanında **OPTIONS** sütunu (GTA ayar kategorileri + Appearance / Menu behaviour arayüz tercihleri), sağda ayar paneli (`SETTINGS // GRAPHICS`). Satır türleri: `‹ değer ›` seçici, `OFF \| ON` anahtar, `‹ ▬▬ ›` kaydırıcı, tuş etiketi. OPTIONS'ın son maddesi **GTA SETTINGS**: Enter doğrudan GTA'nın ayar ekranını açar. **RESTORE DEFAULTS** yalnızca o sayfayı varsayılana döndürür; **APPLY CHANGES** GTA ayarlarını uygular (aşağıya bak). Arama kutusu `/`. **ESC = bir adım geri** (satırlar → OPTIONS → ana liste → menüyü kapatır) |
+| SUPPORT | `Config.Links` içindeki `discord` adresi doluysa onu açar; boşsa "SOON" sayfası |
+| DISCONNECT | Listenin son satırı. Onay penceresi → "Leave server" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar) / "Cancel". Oyunu tamamen kapatan seçenek yoktur |
+| Üst şerit | Oyuncu kimliği (`#<sunucu id>`), sunucu adı (`Config.ServerName`, yeşil nokta) ve gerçek saat / tarih (`GG.AA.YYYY`) |
+| Karşılama kartı | Los Santos silüeti + karşılama metni. **SEVİYE / XP çubuğu yalnızca `Config.Cards.level` export'u varsa görünür** (`{ level, xp, xpMax }`); şu an sunucuda böyle bir sistem yoktur, çubuk gösterilmez |
+| Cash · Bank | `qbx_core` GetPlayerData |
+| Home · Vehicles | Menü açılınca sunucu (`loe_pause:server:summary`, 2 sn sınırlı, yalnızca isteyen oyuncunun kendi kayıtları) sayar: araçlar = `player_vehicles`, ev = `loe_properties` (sahip ya da süresi dolmamış kiracı) + `loe_hotel_rooms` (süresi dolmamış). Tablo yoksa / yanıt gelmediyse "—" görünür. `oxmysql` gerekir |
+| Meslek / rütbe | CHARACTER sayfasında ve oyuncu verisinde: **`loe_jobcore`'dan** (`GetPlayerState`: mesaideki meslek, yoksa birincil meslek; rütbe = `gradeLabel`), çünkü qbx_core'daki job alanı güncel tutulmaz (hep "Freelancer"). Mesleği olmayan oyuncuda jobcore'un "Unemployed" etiketi; jobcore çalışmıyorsa qbx_core'a düşer (`Config.JobSystem`) |
+| YOUTUBE / STORE / DISCORD | Sağ altta; `Config.Links` içinde `https://` adresi **doldurulan** bağlantılar görünür (varsayılan: boş → hiçbiri görünmez). Yalnızca config'teki adresler açılır |
 
 Arka plan: oyun görüntüsü + koyu katman; `Config.Hijack.blurGame = true` iken oyun ekranı `TriggerScreenblurFadeIn` ile bulanıklaşır (videodaki derinlik). Bulanıklık fazla gelirse `false` yap.
 

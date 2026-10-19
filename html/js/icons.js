@@ -1,5 +1,14 @@
 // 24x24 çizgi simgeler (stroke = currentColor). Dolgulu olanlar kendi fill'ini taşır.
 window.ICONS = {
+    play: '<polygon points="7 4 20 12 7 20 7 4"/>',
+    bag: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/><rect x="10.5" y="11.5" width="3" height="3" rx=".5"/>',
+    star: '<polygon points="12 2.5 14.9 8.8 21.7 9.6 16.6 14.2 18 21 12 17.6 6 21 7.4 14.2 2.3 9.6 9.1 8.8"/>',
+    cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.5L21.5 8H6"/>',
+    help: '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+    bank: '<path d="M3 21h18"/><path d="M5 10v8"/><path d="M9.5 10v8"/><path d="M14.5 10v8"/><path d="M19 10v8"/><path d="M12 3 3 8.5h18z"/><path d="M3 18h18"/>',
+    home: '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+    car: '<path d="M5 17H3v-5l2-5a2 2 0 0 1 1.9-1.3h10.2A2 2 0 0 1 19 7l2 5v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5"/><path d="M3 12h18"/>',
+    person: '<circle cx="12" cy="7.5" r="4.2" fill="currentColor" stroke="none"/><path d="M3.5 21c0-4.7 3.8-8 8.5-8s8.5 3.3 8.5 8z" fill="currentColor" stroke="none"/>',
     map: '<path d="M9 4 3 6.5v13L9 17l6 3 6-2.5v-13L15 7 9 4Z"/><path d="M9 4v13M15 7v13"/>',
     gamepad: '<path d="M7 8h10a5 5 0 0 1 5 5v1.2a2.8 2.8 0 0 1-4.9 1.8L15.6 14H8.4l-1.5 2A2.8 2.8 0 0 1 2 14.2V13a5 5 0 0 1 5-5Z"/><path d="M8 10.6v2.8M6.6 12h2.8"/><circle cx="15.8" cy="11.2" r=".7" fill="currentColor"/><circle cx="17.8" cy="12.8" r=".7" fill="currentColor"/>',
     bars: '<rect x="4" y="12" width="3.6" height="8" rx=".8" fill="currentColor" stroke="none"/><rect x="10.2" y="5" width="3.6" height="15" rx=".8" fill="currentColor" stroke="none"/><rect x="16.4" y="9" width="3.6" height="11" rx=".8" fill="currentColor" stroke="none"/>',

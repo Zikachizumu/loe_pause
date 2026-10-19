@@ -39,7 +39,43 @@ RegisterNetEvent('loe_pause:server:caps', function()
     TriggerClientEvent('loe_pause:client:caps', src, allowed)
 end)
 
+-- Ana ekrandaki "Home" ve "Vehicles" kartları: oyuncunun KENDİ kayıtlarının sayısı. Yalnızca olayı gönderen oyuncu için hesaplanır;
+-- yanıtta başkasına ait veri yoktur. Tablo yoksa (ilgili resource kurulu değil) o alan gönderilmez → arayüz "—" gösterir.
+local lastSummary = {}
+
+local function citizenId(src)
+    local ok, player = pcall(function() return exports.qbx_core:GetPlayer(src) end)
+    return ok and type(player) == 'table' and player.PlayerData and player.PlayerData.citizenid or nil
+end
+
+local function count(query, params)
+    local ok, n = pcall(function() return MySQL.scalar.await(query, params) end)
+    return ok and tonumber(n) or nil
+end
+
+RegisterNetEvent('loe_pause:server:summary', function()
+    local src = source
+    if type(src) ~= 'number' or src <= 0 then return end
+
+    local now = GetGameTimer()
+    if lastSummary[src] and now - lastSummary[src] < 2000 then return end
+    lastSummary[src] = now
+
+    local cid = citizenId(src)
+    if not cid then return end
+
+    local out = {}
+    out.vehicles = count('SELECT COUNT(*) FROM player_vehicles WHERE citizenid = ?', { cid })
+
+    local props = count('SELECT COUNT(*) FROM loe_properties WHERE owner = ? OR (renter = ? AND (rent_expire IS NULL OR rent_expire > UNIX_TIMESTAMP()))', { cid, cid })
+    local rooms = count('SELECT COUNT(*) FROM loe_hotel_rooms WHERE citizenid = ? AND expire > UNIX_TIMESTAMP()', { cid })
+    if props or rooms then out.homes = (props or 0) + (rooms or 0) end
+
+    TriggerClientEvent('loe_pause:client:summary', src, out)
+end)
+
 AddEventHandler('playerDropped', function()
     lastLeave[source] = nil
     lastCaps[source] = nil
+    lastSummary[source] = nil
 end)

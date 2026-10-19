@@ -16,6 +16,13 @@ local function resourceStarted(name)
     return type(name) == 'string' and GetResourceState(name) == 'started'
 end
 
+--- M tuşuyla açılan büyük harita (loe_hud/client/bigmap.lua) kendi yerleşik menüsünü yönetir; ESC yakalama ona dokunmamalı.
+local function bigMapOpen()
+    if GetResourceState('loe_hud') ~= 'started' then return false end
+    local ok, open = pcall(function() return exports.loe_hud:IsBigMapOpen() end)
+    return ok and open == true
+end
+
 local function callExport(res, fnName, ...)
     local args = { ... }
     local ok, result = pcall(function()
@@ -79,7 +86,34 @@ local function buildMenu()
                 available = (not item.resource) or resourceStarted(item.resource),
                 external = item.resource ~= nil,
                 soon = item.soon == true or (item.resource ~= nil and not resourceStarted(item.resource)),   -- harici sistem yoksa "Yakında"
+                new = item.new == true,
             }
+        end
+    end
+    return out
+end
+
+--- Ana ekranın sağ kartları (seviye / battlepass): Config.Cards'taki export'lar yalnızca resource çalışıyorsa çağrılır;
+--- dönen değerlerden yalnızca bilinen sayısal alanlar alınır.
+local CARD_FIELDS = {
+    level      = { 'level', 'xp', 'xpMax' },
+    battlepass = { 'season', 'level', 'maxLevel' },
+}
+
+local function buildCards()
+    local out = {}
+    for id, fields in pairs(CARD_FIELDS) do
+        local c = (Config.Cards or {})[id]
+        if type(c) == 'table' and resourceStarted(c.resource) then
+            local ok, res = callExport(c.resource, c.export)
+            if ok and type(res) == 'table' then
+                local card = {}
+                for _, f in ipairs(fields) do
+                    local n = tonumber(res[f])
+                    if n then card[f] = n end
+                end
+                if next(card) then out[id] = card end
+            end
         end
     end
     return out
@@ -237,6 +271,12 @@ local function refreshHealth()
     TriggerServerEvent(HEALTH.helloEvent or 'loe_jobcreator:server:healthHello')
 end
 
+-- Home / Vehicles kartları (sunucu sayar): yalnızca menü açıksa arayüze iletilir; yalnızca sayısal alanlar geçer.
+RegisterNetEvent('loe_pause:client:summary', function(s)
+    if not isOpen or type(s) ~= 'table' then return end
+    SendNUIMessage({ action = 'summary', homes = tonumber(s.homes), vehicles = tonumber(s.vehicles) })
+end)
+
 -- ================================================================ AÇ / KAPAT
 local function restoreRadar()
     -- Oyuncu radarı kapattıysa kapalı kalsın; başka bir script açılıştan ÖNCE gizlemişse onun durumuna dön.
@@ -285,6 +325,8 @@ local function open(anim)
         keys   = buildKeys(),
         menu   = buildMenu(),
         stats  = buildStats(),
+        server = Config.ServerName or 'LOE RP',
+        cards  = buildCards(),
         health = healthPayload(),
         caps   = capsPayload(),
         gta    = GtaSet.values(),
@@ -292,6 +334,7 @@ local function open(anim)
     })
     refreshHealth()
     refreshCaps()
+    TriggerServerEvent('loe_pause:server:summary')
 end
 
 Apply.menuOpen = function() return isOpen end
@@ -445,7 +488,7 @@ CreateThread(function()
                     finishNative(native.seen)         -- menü kendi kapandı (ya da hiç açılmadı)
                 end
             elseif paused then
-                if nativeMenuWanted() or not canHijack() then
+                if nativeMenuWanted() or not canHijack() or bigMapOpen() then
                     -- yerleşik menü serbest (oyuncu tercihi / giriş yapılmamış / ara sahne)
                 else
                     killPause()
@@ -545,7 +588,7 @@ RegisterNUICallback('menu', function(d, cb)
     if id == 'map' then
         cb({ ok = true })
         CreateThread(openMap)
-    elseif id == 'stats' or id == 'battlepass' or id == 'shop' then
+    elseif id == 'stats' or id == 'battlepass' or id == 'shop' or id == 'inventory' then
         if item.resource and resourceStarted(item.resource) and item.export then
             cb({ ok = true })
             close()
