@@ -46,9 +46,8 @@
            { id: 'gunshot', label: 'Gunshot wound', symptom: 'You are bleeding.', suppressed: false, bandaged: true }]) };
 
     const send = (d) => window.postMessage(d, '*');
-    const native = { subtitles: true, metric: true, safezone: 95, resolution: '2560x1440', language: 0 };
     const caps = params.get('admin') === '1' ? { admin: true } : {};   // ?admin=1 → "Yönetici paneli" satırı görünür
-    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, native, caps });
+    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps });
 
     const handlers = {
         ready: () => { setTimeout(() => { send({ action: 'init', schema, links, gta: true, bg: { mode: 'image', image: '/_dev/mock_bg.jpg' } }); open(); }, 50); return { ok: true }; },

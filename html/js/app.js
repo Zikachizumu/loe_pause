@@ -40,10 +40,12 @@ const STR = {
         all_gta: 'Tüm GTA ayarları', game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
         opts_title: 'SEÇENEKLER', search_title: 'Arama', restore: ['SAYFAYI', 'SIFIRLA'], restore_title: 'Varsayılana dön?',
         restore_text: 'Bu sayfadaki ayarlar varsayılan değerlerine döner. Diğer sayfalar etkilenmez.', restore_yes: 'Evet, sıfırla',
-        msg_restored: 'Varsayılanlar geri yüklendi', native_note: 'Bu ayar yalnızca GTA\'nın kendi ayar ekranından değiştirilebilir; satıra tıklayınca o ekran açılır.',
+        msg_restored: 'Varsayılanlar geri yüklendi',
+        gta_settings: 'GTA Ayarları', gta_row: 'GTA ayar ekranı', gta_btn: 'Aç',
+        gta_text: 'Grafik, ses seviyeleri, fare ve oyun kolu hassasiyeti, ekran ve tuş atamaları GTA\'nın kendi ayar ekranında değiştirilir. Enter ile aç; ESC ile kapatınca buraya dönersin (Arayüz Ayarları → Menü Davranışı).',
         settings: 'Ayarlar', search: 'Ayarlarda ara…', no_results: 'Sonuç bulunamadı',
         hint_move: 'Gezin', hint_change: 'Değiştir', hint_select: 'Seç', hint_resume: 'Devam', hint_back: 'Geri', hint_close: 'Kapat', hint_search: 'Ara',
-        on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', native_tag: 'GTA Ayarları', readonly: 'Salt okunur — değiştirmek için FiveM tuş atamaları', unbound: 'Atanmamış',
+        on: 'Açık', off: 'Kapalı', metric: 'Metrik (km)', imperial: 'İngiliz (mil)', readonly: 'Salt okunur — değiştirmek için GTA Ayarları → Tuş Atamaları', unbound: 'Atanmamış',
         soon_pill: 'Yakında', soon_title: 'Yakında', soon_text: 'Bu özellik henüz sunucuda aktif değil. Çok yakında burada olacak.',
         quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılıp FiveM ana menüsüne dönersin.',
         quit_disconnect: 'Sunucudan ayrıl', cancel: 'Vazgeç',
@@ -62,10 +64,12 @@ const STR = {
         all_gta: 'All GTA settings', game_title: 'Game Settings', ui_title: 'UI Settings',
         opts_title: 'OPTIONS', search_title: 'Search', restore: ['RESTORE', 'DEFAULTS'], restore_title: 'Restore defaults?',
         restore_text: 'The settings on this page return to their defaults. Other pages are not affected.', restore_yes: 'Yes, restore',
-        msg_restored: 'Defaults restored', native_note: 'This setting can only be changed in GTA\'s own settings screen; click the row to open it.',
+        msg_restored: 'Defaults restored',
+        gta_settings: 'GTA Settings', gta_row: 'GTA settings screen', gta_btn: 'Open',
+        gta_text: 'Graphics, audio levels, mouse and controller sensitivity, display and key bindings are changed in GTA\'s own settings screen. Press Enter to open it; closing it with ESC can bring you back here (UI Settings → Menu Behaviour).',
         settings: 'Settings', search: 'Search settings…', no_results: 'No results',
         hint_move: 'Navigate', hint_change: 'Change', hint_select: 'Select', hint_resume: 'Resume', hint_back: 'Back', hint_close: 'Close', hint_search: 'Search',
-        on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', native_tag: 'GTA Settings', readonly: 'Read-only — change it in the FiveM key bindings', unbound: 'Unbound',
+        on: 'On', off: 'Off', metric: 'Metric (km)', imperial: 'Imperial (mi)', readonly: 'Read-only — to rebind, open GTA Settings → Key Bindings', unbound: 'Unbound',
         soon_pill: 'Soon', soon_title: 'Coming soon', soon_text: 'This feature is not active on the server yet. It will be here soon.',
         quit_title: 'Disconnect?', quit_text: 'You will leave the server and return to the FiveM main menu.',
         quit_disconnect: 'Leave server', cancel: 'Cancel',
@@ -87,7 +91,7 @@ const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
 const S = {
     open: false, lang: 'en',
     allSchema: [], schema: [], scope: 'game', links: [], gta: true, bg: { mode: 'game' }, subSent: false,
-    values: {}, keys: {}, native: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
+    values: {}, keys: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
     modal: null,
@@ -328,6 +332,14 @@ const renderPage = () => {
 
 /* ============================================================ AYARLAR: veri */
 const curCat = () => S.schema[S.cat];
+// Game Settings'te OPTIONS'ın son maddesi: GTA'nın kendi ayar ekranı (kategori değil; S.cat === S.schema.length)
+const hasGtaOpt = () => S.scope === 'game' && S.gta;
+const optCount = () => S.schema.length + (hasGtaOpt() ? 1 : 0);
+const gtaSelected = () => hasGtaOpt() && S.cat === S.schema.length;
+const gtaEntries = () => [
+    { key: 'gta.info', row: { type: 'info', text: { tr: STR.tr.gta_text, en: STR.en.gta_text } } },
+    { key: 'gta.open', row: { type: 'gta', label: { tr: STR.tr.gta_row, en: STR.en.gta_row } } },
+];
 
 const KEYNAMES = {
     LSHIFT: 'Shift', RSHIFT: 'Shift', SHIFT: 'Shift', LCONTROL: 'Ctrl', RCONTROL: 'Ctrl', CONTROL: 'Ctrl', LMENU: 'Alt', RMENU: 'Alt', MENU: 'Alt',
@@ -354,6 +366,7 @@ const prettyKey = (token) => {
 const entryVisible = (r) => !(r.type === 'key' && r.command && !S.keys['m:' + r.command]) && !(r.cap && !S.caps[r.cap]);
 
 const buildEntries = () => {
+    if (!S.query && gtaSelected()) return gtaEntries();
     const out = [];
     if (S.query) {
         const needle = norm(S.query);
@@ -435,29 +448,12 @@ const runAction = (r) => {
 
 const openNative = (target) => post('native', { target: target || 'settings' });
 
-// GTA'nın güncel değeri (salt okunur; yalnızca Lua okuyabildiyse gelir). Değiştirmek için satır yerleşik ekranı açar.
-const LANG_NAMES = ['English', 'Français', 'Deutsch', 'Italiano', 'Español', 'Português (BR)', 'Polski', 'Русский', '한국어', '繁體中文', '日本語', 'Español (MX)', '简体中文'];
-const nativeValue = (r) => {
-    if (!r.read) return null;
-    const v = S.native[r.read];
-    if (v === undefined || v === null) return null;
-    switch (r.read) {
-        case 'subtitles': return v ? t('on') : t('off');
-        case 'metric': return v ? t('metric') : t('imperial');
-        case 'safezone': return typeof v === 'number' ? v + '%' : null;
-        case 'resolution': return typeof v === 'string' ? v : null;
-        case 'language': return LANG_NAMES[v] || null;
-        default: return null;
-    }
-};
-
 const activateRow = (e) => {
     const r = e.row;
     if (r.type === 'toggle') setValue(r, !S.values[r.id]);
     else if (r.type === 'select') stepSelect(r, 1);
     else if (r.type === 'action') runAction(r);
-    else if (r.type === 'native') openNative(r.target);
-    else if (r.type === 'key') openNative('keybinds');
+    else if (r.type === 'gta') openNative('settings');
 };
 
 const adjustRow = (e, dir, shift) => {
@@ -477,7 +473,7 @@ const setNote = (r) => {
     let txt = '';
     if (r) {
         txt = L(r.desc);
-        if (!txt && r.type === 'native') txt = t('native_note');
+        if (!txt && r.type === 'gta') txt = t('gta_text');
         if (!txt && r.type === 'key') txt = t('readonly');
     }
     $('#gsNote').textContent = txt;
@@ -533,11 +529,9 @@ const buildRow = (e, i) => {
                 h('button', { class: 'gs-btn sm', type: 'button' }, L(r.button))));
     }
 
-    if (r.type === 'native') {
-        const cur = nativeValue(r);
-        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); openNative(r.target); } }, label,
-            h('div', { class: 'gc end' }, cur ? h('span', { class: 'ro-val' }, cur) : null,
-                h('span', { class: 'tag' }, t('native_tag')), ico('chevronR')));
+    if (r.type === 'gta') {
+        return h('div', { class: base, onmouseenter: hover, onclick: () => { mark(); openNative('settings'); } }, label,
+            h('div', { class: 'gc end' }, h('button', { class: 'gs-btn sm', type: 'button' }, t('gta_btn')), ico('chevronR')));
     }
     return h('div', { class: base }, label);
 };
@@ -579,19 +573,24 @@ const buildSlider = (e, base, label, mark, hover, arrow) => {
         h('div', { class: 'gc sl' }, arrow('‹', () => stepSlider(r, -1)), track, out, arrow('›', () => stepSlider(r, 1))));
 };
 
-// OPTIONS sütunu: kategoriler (Game Settings) ya da arayüz ayar sayfaları (UI Settings)
+// OPTIONS sütunu: kategoriler (Game Settings) ya da arayüz ayar sayfaları (UI Settings); Game Settings'te en sonda "GTA Settings"
 const renderOpts = () => {
     $('#optTitle').textContent = t('opts_title');
-    $('#optList').replaceChildren(...S.schema.map((c, i) => h('button', {
-        class: 'gs-opt' + (!S.query && i === S.cat ? ' cur' : ''), type: 'button',
-        onclick: () => { S.cat = i; S.zone = 'cats'; S.query = ''; q.value = ''; refreshSettings(true); },
-    }, h('i', { class: 'd' }), h('span', {}, L(c.label)))));
+    const pick = (i) => () => { S.cat = i; S.zone = 'cats'; S.query = ''; q.value = ''; refreshSettings(true); };
+    const items = S.schema.map((c, i) => h('button', {
+        class: 'gs-opt' + (!S.query && i === S.cat ? ' cur' : ''), type: 'button', onclick: pick(i),
+    }, h('i', { class: 'd' }), h('span', {}, L(c.label))));
+    if (hasGtaOpt()) {
+        items.push(h('button', { class: 'gs-opt ext' + (!S.query && gtaSelected() ? ' cur' : ''), type: 'button', onclick: pick(S.schema.length) },
+            h('i', { class: 'd' }), h('span', {}, t('gta_settings')), ico('chevronR')));
+    }
+    $('#optList').replaceChildren(...items);
 };
 
 // Başlık: GAMESETTINGS // GRAPHICS (ilk sözcük kalın, kalanı ince)
 const renderTitle = () => {
     const [a, b] = pair(S.scope === 'ui' ? 'ui' : 'game');
-    const page = S.query ? t('search_title') : (curCat() ? L(curCat().label) : '');
+    const page = S.query ? t('search_title') : (gtaSelected() ? t('gta_settings') : (curCat() ? L(curCat().label) : ''));
     const [p1, p2] = splitTwo(page);
     setKids($('#sTitle'), h('b', {}, a), b ? h('i', {}, b) : null, h('span', { class: 'sl' }, '//'), h('b', {}, p1), p2 ? h('i', {}, p2) : null);
 };
@@ -785,9 +784,11 @@ const onKey = (ev) => {
 
     if (S.zone === 'cats') {
         if (k === 'ArrowUp' || k === 'ArrowDown') {
-            S.cat = (S.cat + (k === 'ArrowDown' ? 1 : -1) + S.schema.length) % S.schema.length;
+            const n = optCount();
+            S.cat = (S.cat + (k === 'ArrowDown' ? 1 : -1) + n) % n;
             refreshSettings(true);
-        } else if (k === 'ArrowRight' || k === 'Enter') enterRows();
+        } else if (k === 'Enter' && gtaSelected()) openNative('settings');
+        else if (k === 'ArrowRight' || k === 'Enter') enterRows();
         else if (k === 'ArrowLeft') goBack();
         else return;
     } else {
@@ -837,7 +838,6 @@ const onInit = (d) => {
 const onOpen = (d) => {
     S.values = d.values || {};
     S.keys = d.keys || {};
-    S.native = d.native || {};
     S.caps = d.caps || {};
     S.menu = (Array.isArray(d.menu) && d.menu.length) ? d.menu : DEFAULT_MENU;
     S.stats = d.stats || null;

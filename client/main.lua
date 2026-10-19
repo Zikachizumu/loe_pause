@@ -117,33 +117,6 @@ local function buildStats()
     return out
 end
 
---- GTA'nın GÜNCEL ayar değerleri (yalnızca OKUNUR; GTA bu ayarların yazılmasına script'ten izin vermez).
---- Anahtarlar schema.lua'daki native satırların `read` alanıyla eşleşir. Okunamayan anahtar hiç gönderilmez → satırda değer görünmez.
-local function buildNativeValues()
-    local out = {}
-    local function read(key, fn)
-        local ok, v = pcall(fn)
-        if ok and v ~= nil then out[key] = v end
-    end
-    read('subtitles', function() return IsSubtitlePreferenceSwitchedOn() == true end)
-    read('metric', function() return ShouldUseMetricMeasurements() == true end)
-    read('safezone', function()
-        local z = GetSafeZoneSize()
-        if type(z) == 'number' and z > 0 and z <= 1.001 then return math.floor(z * 100 + 0.5) end
-    end)
-    read('resolution', function()
-        local w, h = GetActualScreenResolution()
-        if type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then
-            return ('%dx%d'):format(math.floor(w), math.floor(h))
-        end
-    end)
-    read('language', function()
-        local l = GetCurrentLanguage()
-        if type(l) == 'number' and l >= 0 and l <= 12 then return math.floor(l) end
-    end)
-    return out
-end
-
 --- Yerleşik GTA menüsüne ESC ile geçiş yalnızca config izin veriyorsa VE oyuncu seçtiyse geçerlidir.
 local function nativeMenuWanted()
     return Config.Hijack.allowNativeMenu == true and Prefs.get('menu.native') == true
@@ -291,7 +264,6 @@ local function open(anim)
         menu   = buildMenu(),
         stats  = buildStats(),
         health = healthPayload(),
-        native = buildNativeValues(),
         caps   = capsPayload(),
     })
     refreshHealth()
@@ -392,8 +364,6 @@ end
 CreateThread(function()
     while true do
         Wait(0)
-        if LoeProbe and LoeProbe.active then goto continue end   -- GEÇİCİ: gfxprobe GTA ayar menüsünü kendisi yönetiyor
-
         local now = GetGameTimer()
         local paused = IsPauseMenuActive()
 
@@ -454,7 +424,6 @@ CreateThread(function()
                 end
             end
         end
-        ::continue::
     end
 end)
 
