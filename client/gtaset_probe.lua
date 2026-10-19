@@ -1,12 +1,11 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden DEĞİŞTİREBİLİR miyiz? (v2)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v3)
 --
---   /loe_gtaset : otomatik test (~45 sn). GTA ayar menüsü görünür açılır:
---     1) Audio'ya iner, satır listesine girer; ilk satırların ayar kimliklerini okur (menuUniqueID).
---     2) Yazma yolu A (kök metod, oyunun tuş işleyişinin kullandığı): SET_COLUMN_INPUT_EVENT(1, sol) → satır 0 (SFX).
---     3) Yazma yolu B (girdi): aşağı + sol tuşu → satır 1 (Music).
---     4) Menüyü kapatır, profil farkını ölçer (GetProfileSetting anlık mı, kapanınca mı güncelleniyor?).
---     5) Değişiklik olduysa menüyü yeniden açıp iki adımı aynı yollarla tersine çevirir (sağ), yine ölçer.
---     6) Graphics satırlarının ayar kimliklerini okur (yalnızca vurgu, değer değiştirmez).
+-- v2 sonucu: yazma çalışıyor (kök SET_COLUMN_INPUT_EVENT ve sol/sağ tuşu); GetProfileSetting yalnızca menü kapanınca
+-- güncelleniyor; satır kimliği menuUniqueID'den okunuyor (yalnızca tuşla gezinince değişir).
+--
+--   /loe_gtaset : (~2 dk, GTA menüsü GİZLİ açılır)
+--     1) v2'nin Music seviyesinde bıraktığı +1 farkı geri alır (değer hâlâ 1 ise).
+--     2) Tüm kategorilere girip yalnızca aşağı tuşuyla satır kimliklerini toplar (değer değiştirmez).
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -22,13 +21,11 @@ local SETTINGS_MENU = (Config.Native and Config.Native.settings and Config.Nativ
 
 -- Kontrol kimlikleri (INPUT_FRONTEND_*), girdi grubu 2 (önceki testte menüyü hareket ettiren grup)
 local G = 2
-local C_DOWN, C_LEFT, C_RIGHT, C_ACCEPT, C_BACK = 187, 189, 190, 201, 202
--- com.rockstargames.ui.game.GamePadConstants
-local DPAD_LEFT, DPAD_RIGHT = 10, 11
+local C_DOWN, C_LEFT, C_ACCEPT, C_BACK = 187, 189, 201, 202
 
--- Ayar sütunu (columnList.1) `state` değeri kategoriye özel grafiği gösterir: 2 = Audio, 5 = Graphics
+-- Ayar sütunu (columnList.1) `state` değeri kategoriye özel grafiği gösterir: 2 = Audio
 local SET = 'currentPage.columnList.1'
-local STATE_AUDIO, STATE_GFX = '2', '5'
+local STATE_AUDIO = '2'
 
 local log, t0, busy = {}, 0, false
 
@@ -62,7 +59,8 @@ local function sleep(ms)
     repeat Wait(0) until GetGameTimer() - s >= ms
 end
 
--- Tuşa basmayı taklit eder: değer 2 kare boyunca 1.0
+-- Tuşa basmayı taklit eder: değer 2 kare boyunca 1.0, ardından 2 kare bırakılır (art arda basışlar tek basılı
+-- tutma sayılmasın)
 local function press(control)
     add('press', { control = control })
     for _ = 1, 2 do
@@ -70,6 +68,8 @@ local function press(control)
         if not ok then add('err', { what = 'press', e = tostring(e) }) end
         Wait(0)
     end
+    Wait(0)
+    Wait(0)
 end
 
 -- ---------------------------------------------------------------- profil ayarları (GET_PROFILE_SETTING)
@@ -137,18 +137,6 @@ local function val(path, args)
     return i
 end
 
--- Dönüş değeri beklenmeyen çağrı (metodu çalıştırır)
-local function sfDo(path, args)
-    local okB, started = pcall(BeginScaleformMovieMethodOnFrontend, path)
-    local ran = okB and started and true or false
-    if ran then
-        addParams(args)
-        pcall(EndScaleformMovieMethod)
-    end
-    add('sfdo', { p = path, args = args, ran = ran, ret = tostring(started) })
-    return ran
-end
-
 -- Menünün o anki durumu
 local function look(tag)
     local d = { tag = tag, active = IsPauseMenuActive(), fe = GetPauseMenuState() }
@@ -201,22 +189,8 @@ local function openAudio(tag)
     return gotoState(STATE_AUDIO, 8, tag)
 end
 
--- Satır listesindeyken i. satırı vurgula (kök metod) ve kimliğini oku. scriptSetUnqID=true → menuUniqueID = satır kimliği
-local function rowIds(tag, n)
-    local ids = {}
-    for i = 0, n - 1 do
-        sfDo('SET_COLUMN_HIGHLIGHT', { 1, i, true, false })
-        sleep(120)
-        ids[#ids + 1] = val('menuUniqueID.toString')
-    end
-    add('rowIds', { tag = tag, ids = ids })
-    sfDo('SET_COLUMN_HIGHLIGHT', { 1, 0, true, false })
-    sleep(300)
-    return ids
-end
-
 local function send(extra)
-    local payload = { kind = 'write2', log = log }
+    local payload = { kind = 'walk3', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -225,6 +199,22 @@ local function send(extra)
     end
     TriggerLatentServerEvent('loe_pause:server:gfxprobe', 200000, data)
     say(('Result sent to the server (%d events, %d KB).'):format(#log, math.ceil(#data / 1024)))
+end
+
+-- Gizli mod: menü açık ve girdi alıyor ama ekrana çizilmiyor (SuppressFrontendRenderingThisFrame her karede)
+local hidden = false
+local function hide(on)
+    if on and not hidden then
+        hidden = true
+        CreateThread(function()
+            while hidden do
+                SuppressFrontendRenderingThisFrame()
+                Wait(0)
+            end
+        end)
+    elseif not on then
+        hidden = false
+    end
 end
 
 local function begin()
@@ -242,103 +232,113 @@ local function begin()
 end
 
 local function finish()
+    hidden = false
     closeMenu()
     SetTimeout(1000, function() LoeProbe.active = false; busy = false end)
 end
 
--- ---------------------------------------------------------------- /loe_gtaset
+-- ---------------------------------------------------------------- /loe_gtaset (v3)
+local MUSIC_PROFILE, MUSIC_ROW_UID = 301, '9'   -- v2: Audio satır 1 (kimlik 9) ↔ profil 301; test onu 0 → 1 yaptı
+
+-- 1) v2'nin bıraktığı Music farkını geri al (yalnızca değer hâlâ 1 ise)
+local function fixMusic()
+    phase('fix-music')
+    local before = GetProfileSetting(MUSIC_PROFILE)
+    add('music', { before = before })
+    if before ~= 1 then return 'skip' end
+    if not openAudio('fnav') then closeMenu() return 'no-audio' end
+    press(C_ACCEPT)
+    sleep(900)
+    look('fix-entered')
+    press(C_DOWN)
+    sleep(600)
+    local row = look('fix-down').uid
+    local done = false
+    if row == MUSIC_ROW_UID then
+        press(C_LEFT)
+        sleep(800)
+        done = true
+    end
+    press(C_BACK)
+    sleep(800)
+    closeMenu()
+    sleep(2000)
+    local after = GetProfileSetting(MUSIC_PROFILE)
+    add('music', { row = row, pressed = done, after = after })
+    return done and (after == 0 and 'fixed' or 'not-saved') or 'row-mismatch'
+end
+
+-- 2) Tüm kategorilerde satır kimliklerini topla (yalnızca aşağı tuşu; değer değişmez)
+local KEYMAP_UID = '148'   -- Key Bindings: Enter ayrı tuş atama ekranını açar → girilmez
+
+local function walkRows(first)
+    local ids, times = { first }, {}
+    for _ = 1, 40 do
+        local t = GetGameTimer()
+        press(C_DOWN)
+        local u
+        repeat
+            Wait(0)
+            u = val('menuUniqueID.toString')
+        until u ~= ids[#ids] or GetGameTimer() - t > 700
+        times[#times + 1] = GetGameTimer() - t
+        if u == first or u == ids[#ids] then break end   -- başa döndü / ilerlemedi
+        ids[#ids + 1] = u
+    end
+    return ids, times
+end
+
+local function walk()
+    phase('walk')
+    if not openSettings() then add('err', { what = 'walk-open' }) return 0 end
+    hide(true)
+    sleep(2500)
+    local seen, cats = {}, 0
+    for c = 0, 19 do
+        if not IsPauseMenuActive() then add('err', { what = 'closed', at = c }) break end
+        local cat = look('cat' .. c)
+        if seen[tostring(cat.uid)] then break end
+        seen[tostring(cat.uid)] = true
+        cats = cats + 1
+        local entry = { i = c, uid = cat.uid, state = cat.state, mstate = cat.mstate }
+        if tostring(cat.uid) ~= KEYMAP_UID then
+            press(C_ACCEPT)
+            sleep(800)
+            local e = look('in' .. c)
+            entry.level = e.level
+            if tostring(e.level) == '2' then
+                entry.rows, entry.ms = walkRows(e.uid)
+                press(C_BACK)
+                sleep(800)
+                entry.backLevel = look('out' .. c).level
+            end
+        end
+        add('cat', entry)
+        press(C_DOWN)
+        sleep(700)
+    end
+    hide(false)
+    closeMenu()
+    return cats
+end
+
 local function run()
     begin()
     base = snap()
     add('profileStart', { list = list(base) })
-
-    phase('open')
-    local audio = openAudio('nav')
-    add('audio', { found = audio })
-    if not audio then
-        say('Audio category not found, writes skipped.')
-        finish()
-        send({ audio = false })
-        return
-    end
-
-    phase('enter')
-    press(C_ACCEPT)
-    sleep(900)
-    look('entered')
-    rowIds('audio', 12)
-
-    -- A) kök metod: oyunun kendi tuş işleyişi bu yolu kullanır → sütun SET_INPUT_EVENT → satır stepVal → setPref
-    phase('write-as')
-    sfDo('SET_COLUMN_INPUT_EVENT', { 1, DPAD_LEFT })
+    hide(true)
+    local fix = fixMusic()
+    hide(false)
+    add('fix', { result = fix })
     sleep(1000)
-    look('as')
-    check('as-live')
-
-    -- B) girdi: bir satır aşağı (Music), sol
-    phase('write-input')
-    press(C_DOWN)
-    sleep(700)
-    look('down')
-    press(C_LEFT)
-    sleep(1000)
-    look('input')
-    check('input-live')
-
-    phase('back')
-    press(C_BACK)
-    sleep(1000)
-    look('back')
-    check('back')
-
-    phase('close')
-    closeMenu()
-    sleep(2000)
-    local closed = check('closed')
-    local changed = #diff(base, closed) > 0
-    add('changed', { any = changed })
-
-    -- Geri al: aynı iki adım ters yönde (çalışmayan yolun tersi de etkisizdir)
-    phase('restore')
-    sleep(1000)
-    if openAudio('nav2') then
-        press(C_ACCEPT)
-        sleep(900)
-        look('entered2')
-        -- Profil yalnızca oyundan çıkınca güncelleniyor olabilir → değişiklik görünmese de her zaman geri al
-        sfDo('SET_COLUMN_HIGHLIGHT', { 1, 0, true, false })
-        sleep(300)
-        sfDo('SET_COLUMN_INPUT_EVENT', { 1, DPAD_RIGHT })
-        sleep(800)
-        press(C_DOWN)
-        sleep(700)
-        press(C_RIGHT)
-        sleep(900)
-        look('restored')
-        press(C_BACK)
-        sleep(1000)
-
-        -- Graphics satır kimlikleri (yalnızca vurgu)
-        phase('gfx-ids')
-        if IsPauseMenuActive() and gotoState(STATE_GFX, 5, 'gnav') then
-            press(C_ACCEPT)
-            sleep(900)
-            look('gfx-entered')
-            rowIds('graphics', 24)
-            press(C_BACK)
-            sleep(900)
-        end
-    else
-        add('err', { what = 'reopen' })
-    end
-
-    phase('close2')
+    local cats = walk()
+    hide(false)
     finish()
     sleep(2500)
     check('final')
     beep()
-    say('Settings write test finished.')
-    send({ audio = true, changed = changed })
+    say(('Settings walk finished: %d categories, music fix: %s'):format(cats, fix))
+    send({ cats = cats, fix = fix })
 end
 
 -- ---------------------------------------------------------------- komut (sunucu yetkiyi onaylayınca başlar)
