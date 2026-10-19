@@ -209,21 +209,32 @@ end
 -- adım değiştirip menüyü kapatır, profil farkından satırın profil kimliğini ve adım ölçeğini çıkarır, sonra geri alır.
 -- Değişmeyen satır (en uçta ya da profile bağlı değil) ters yönle bir kez daha denenir.
 local DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT = 9, 10, 11
-local GAP = 60
 local MAP_CATS = { ['0'] = true, ['1'] = true, ['3'] = true, ['4'] = true, ['5'] = true }
 
+-- Zamanlama (v7 çalıştı, v8 ilk iki deneme çalışmadı): menü her işlemden sonra kısa süre meşgul; o sırada gelen çağrı
+-- YUTULUR. Art arda gezinme 60 ms aralıkla yeterli; giriş/çıkış ve değer adımı önceki işlemden en az 250 ms sonra;
+-- giriş/çıkıştan sonra 400 ms beklenir.
+local NAV_GAP, ACT_GAP, DEPTH_SETTLE = 60, 250, 400
+local lastAct = 0
+local function pace(ms)
+    local w = lastAct + ms - GetGameTimer()
+    if w > 0 then sleep(w) end
+end
+
 local function uid() return val('menuUniqueID.toString') end
+local function level() return tostring(val('menuLevel.toString')) end
 local function opposite(dir) return dir == DPAD_RIGHT and DPAD_LEFT or DPAD_RIGHT end
 
--- Kök gezinme: çağır, menuUniqueID değişene kadar bekle. Menü meşgulken (ör. satırlara girip çıktıktan hemen sonra)
--- çağrı yutulabiliyor (v8 ilk deneme) → en çok 3 deneme. Yalnızca başarısızlık kaydedilir.
+-- Kök gezinme: çağır, menuUniqueID değişene kadar bekle; yutulursa en çok 3 deneme. Yalnızca sorunlar kaydedilir.
 local function nav(dir, tag)
     local before = uid()
     for try = 1, 3 do
+        pace(try == 1 and NAV_GAP or ACT_GAP)
         local t = GetGameTimer()
         pcall(BeginScaleformMovieMethodOnFrontend, 'SET_INPUT_EVENT')
         pcall(ScaleformMovieMethodAddParamInt, dir)
         pcall(EndScaleformMovieMethod)
+        lastAct = GetGameTimer()
         local u
         repeat
             Wait(0)
@@ -233,23 +244,36 @@ local function nav(dir, tag)
             if try > 1 then add('navRetry', { tag = tag, tries = try }) end
             return true
         end
-        sleep(150)
     end
     add('navFail', { tag = tag, dir = dir, at = before })
     return false
 end
 
-local function level() return tostring(val('menuLevel.toString')) end
-
--- Satırlara gir (+1) / çık (-1). Seviye değiştikten sonra menü kısa süre gezinmeyi yutuyor → 400 ms bekle (v7'de 500 ms
--- beklemeyle sorun yoktu)
+-- Satırlara gir (+1) / çık (-1); seviye değişmezse en çok 3 deneme
 local function depth(dir)
-    sfDo('MENU_SHIFT_DEPTH', { dir, false, false })
     local want = dir > 0 and '2' or '1'
-    local t = GetGameTimer()
-    repeat Wait(0) until level() == want or GetGameTimer() - t > 800
-    sleep(400)
-    return level() == want
+    for try = 1, 3 do
+        pace(ACT_GAP)
+        sfDo('MENU_SHIFT_DEPTH', { dir, false, false })
+        lastAct = GetGameTimer()
+        local t = GetGameTimer()
+        repeat Wait(0) until level() == want or GetGameTimer() - t > 600
+        if level() == want then
+            if try > 1 then add('depthRetry', { dir = dir, tries = try }) end
+            sleep(DEPTH_SETTLE)
+            lastAct = GetGameTimer()
+            return true
+        end
+    end
+    add('depthFail', { dir = dir, uid = uid(), level = level() })
+    return false
+end
+
+-- Değer adımı (sol/sağ): önceki işlemden en az 250 ms sonra
+local function step(dir)
+    pace(ACT_GAP)
+    sfDo('SET_INPUT_EVENT', { dir })
+    lastAct = GetGameTimer()
 end
 
 local function openHidden()
@@ -259,6 +283,7 @@ local function openHidden()
     while GetGameTimer() < deadline do
         if IsPauseMenuActive() and select(3, sfRead('menuUniqueID.toString')) == 'ok' then
             sleep(300)
+            lastAct = GetGameTimer()
             return true
         end
         Wait(0)
@@ -268,25 +293,27 @@ end
 
 -- Önce kapat, SONRA gizlemeyi bırak (menü bir kare bile görünmesin)
 local function shut()
+    pace(ACT_GAP)
     closeMenu()
     hide(false)
 end
 
--- Açılışta Controls seçili; kategori listesinde aşağı inerek `cat`'e git
+-- Açılışta Controls seçili; kategori listesinde (seviye 1) aşağı inerek `cat`'e git.
+-- Kategori ve satır kimlikleri çakışabiliyor (Camera = 4, Controls'taki bir satır da 4) → seviye de denetlenir.
 local function gotoCat(cat)
+    if level() ~= '1' then return false end
     for _ = 0, 14 do
         if uid() == cat then return true end
-        nav(DPAD_DOWN, 'cat')
-        sleep(GAP)
+        if not nav(DPAD_DOWN, 'cat') then return false end
     end
     return uid() == cat
 end
 
 local function gotoRow(row)
+    if level() ~= '2' then return false end
     for _ = 0, 45 do
         if uid() == row then return true end
-        nav(DPAD_DOWN, 'row')
-        sleep(GAP)
+        if not nav(DPAD_DOWN, 'row') then return false end
     end
     return uid() == row
 end
@@ -296,14 +323,9 @@ local function session(cat, steps)
     local ok = openHidden() and gotoCat(cat) and depth(1)
     if ok then
         for _, s in ipairs(steps) do
-            if gotoRow(s.row) then
-                sfDo('SET_INPUT_EVENT', { s.dir })
-                sleep(150)
-            else
-                ok = false
-            end
+            if gotoRow(s.row) then step(s.dir) else ok = false end
         end
-        depth(-1)
+        if not depth(-1) then ok = false end
     end
     if not ok then add('sessionFail', { cat = cat, look = look('fail') }) end
     shut()
@@ -322,32 +344,32 @@ local function settle()
     end
 end
 
--- Satır listelerini topla (tek gizli oturum, yalnızca aşağı)
+-- Satır listelerini topla (tek gizli oturum, yalnızca aşağı). Çıkış başarısızsa dur (yanlış listede kalmamak için).
 local function collectRows()
     phase('rows')
     local cats = {}
     if not openHidden() then shut() return cats end
     local seen = {}
     for _ = 0, 14 do
+        if level() ~= '1' then add('err', { what = 'collect-level', level = level() }) break end
         local c = uid()
         if seen[c] then break end
         seen[c] = true
-        if MAP_CATS[c] and depth(1) then
+        if MAP_CATS[c] then
+            if not depth(1) then break end
             local first = uid()
             local rows = { first }
             for _ = 1, 45 do
                 if not nav(DPAD_DOWN, 'collect') then break end
-                sleep(GAP)
                 local u = uid()
                 if u == first then break end
                 rows[#rows + 1] = u
             end
-            depth(-1)
             cats[#cats + 1] = { cat = c, rows = rows }
             add('rows', { cat = c, rows = rows })
+            if not depth(-1) then break end
         end
-        nav(DPAD_DOWN, 'next-cat')
-        sleep(GAP)
+        if not nav(DPAD_DOWN, 'next-cat') then break end
     end
     shut()
     return cats

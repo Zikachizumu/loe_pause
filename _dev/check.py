@@ -702,7 +702,7 @@ check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or
 -- sahte oyun (yalnızca kök metodlar): SET_INPUT_EVENT 9 kategori ya da satır gezer (40 ms içinde gelen ikinci gezinme
 -- yutulur), 10/11 satırın profil değerini bir adım değiştirir (liste başa döner, kaydırıcı uçta durur; oyun gibi menü
 -- KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar, sonra 300 ms gezinme yutulur; çıkınca kimlik
--- bir gezinmeye kadar -1 olur. Graphics (6) eşleştirilmez.
+-- bir gezinmeye kadar -1 olur; giriş/çıkış ve değer adımı önceki işlemden 150 ms geçmeden gelirse yutulur. Graphics (6) eşleştirilmez.
 local CATS = {
     { uid = '0', rows = { { u = '48' }, { u = '4', p = 0, max = 3, wrap = true } } },
     { uid = '1', rows = { { u = '123', p = 750, max = 2, wrap = true }, { u = '128', p = 754, max = 100 } } },
@@ -733,6 +733,11 @@ ScaleformMovieMethodAddParamBool = function(v) fk.cur.a[#fk.cur.a + 1] = v end
 EndScaleformMovieMethod = function()
     if not sim.pause then return end
     local c, a = CATS[fk.cat], fk.cur.a
+    local gap = sim.now - (fk.lastAny or -1000)      -- oyun meşgulken (önceki işlemden hemen sonra) gelen çağrıyı yutar
+    if fk.cur.p == 'MENU_SHIFT_DEPTH' or a[1] == 10 or a[1] == 11 then
+        if gap < 150 then return end                     -- giriş/çıkış ve değer adımı: önceki işlemden 150 ms sonra
+    end
+    fk.lastAny = sim.now
     if fk.cur.p == 'SET_INPUT_EVENT' then
         if a[1] == 9 then
             if sim.now - (fk.lastNav or -1000) < 40 or sim.now < (fk.lockUntil or 0) then return end
