@@ -34,13 +34,13 @@ Config.Hijack = {
 -- ================================================================ ANA MENÜ
 -- Sıra = ekrandaki sıra; 'quit' (DISCONNECT) listenin son satırıdır. enabled = false → gizlenir.
 -- resume / map / game (Oyun Ayarları) / ui (Arayüz Ayarları) / quit yerleşiktir. soon = true → "Yakında" etiketli, tıklanınca bilgi sayfası açar.
--- battlepass / shop: resource çalışıyorsa export'u açar; çalışmıyorsa otomatik "Yakında" etiketli görünür. stats varsayılan kapalıdır.
+-- battlepass / shop: resource çalışıyorsa export'u açar; çalışmıyorsa otomatik "Yakında" etiketli görünür.
 Config.Menu = {
     { id = 'resume' },
     { id = 'map',        enabled = false },   -- büyük harita yalnızca M tuşuyla açılır (Config.MapKey); true → menüde de görünür
     { id = 'game' },
     { id = 'ui' },
-    { id = 'stats',      enabled = false },   -- yerleşik karakter / sağlık özeti sayfası
+    { id = 'stats' },                         -- CHARACTER STATS: yerleşik karakter / para / sağlık sayfası (zamanla doldurulacak)
     { id = 'battlepass', resource = 'loe_battlepass', export = 'Open' },
     { id = 'shop',       resource = 'loe_shop',       export = 'Open' },
     { id = 'quit' },
@@ -90,7 +90,7 @@ Config.Native = {
 -- false yapılan özellik arayüzden tamamen kalkar ve uygulanmaz.
 Config.Features = {
     gtaSettings = true,    -- GTA'nın kendi ayarları (ses seviyeleri, hassasiyet, kamera, ekran...) bu menüde okunur ve değiştirilir (client/gtaset.lua)
-    allGtaSettings = true, -- GTA'nın kendi ayar ekranına giriş: Game Settings → OPTIONS'ın sonundaki "GTA Settings" + ana ekranın sağ altındaki "All GTA settings"
+    allGtaSettings = true, -- GTA'nın kendi ayar ekranına giriş: Game Settings → OPTIONS'ın sonundaki "GTA Settings"
     recording = true,    -- Rockstar Editor: kayıt başlat / kaydet / iptal
     lodScale  = true,    -- Gelişmiş Grafikler: mesafe ayrıntısı ölçeği (OverrideLodscaleThisFrame, performansı etkiler)
     voice     = true,    -- Sesli Sohbet: pma-voice seviyeleri (pma-voice yoksa satırlar çalışmaz)

@@ -165,7 +165,7 @@ menu_ids = list(menu_ids.values()) if isinstance(menu_ids, dict) else list(menu_
 for mid in menu_ids:
     check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
 check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
-check(all(x in menu_ids for x in ('resume', 'game', 'ui', 'battlepass', 'shop', 'quit')) and 'position' not in menu_ids,
+check(all(x in menu_ids for x in ('resume', 'game', 'ui', 'stats', 'battlepass', 'shop', 'quit')) and 'position' not in menu_ids,
       'Config.Menu: ana maddeler eksik ya da KONUM MODU hâlâ listede')
 check(lua.eval("(function() for _, m in ipairs(Config.Menu) do if m.id == 'map' then return m.enabled end end end)()") is False, 'Config.Menu: MAP varsayılan kapalı olmalı (harita yalnızca M)')
 # İngilizce varsayılan: arayüz metinlerinde TR/EN anahtar seti aynı olmalı, İngilizce metinlerde Türkçe harf olmamalı
@@ -706,12 +706,12 @@ check(isOpen() == true and op.stats.id == 7 and op.stats.name == 'Mark Smith' an
     and op.stats.grade == 'Lieutenant' and op.stats.cash == 0 and op.stats.bank == 27640295, 'S12: oyuncu kartı verisi (kimlik/ad/meslek/para) iletilmeli')
 local ids, soons = {}, {}
 for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soons[#soons + 1] = m.id end end
-check(table.concat(ids, ',') == 'resume,game,ui,battlepass,shop,quit', 'S12: ana menü sırası (MAP yok, KONUM MODU yok, DISCONNECT son): ' .. table.concat(ids, ','))
+check(table.concat(ids, ',') == 'resume,game,ui,stats,battlepass,shop,quit', 'S12: ana menü sırası (MAP yok, KONUM MODU yok, DISCONNECT son): ' .. table.concat(ids, ','))
 check(sim.nui('menu', { id = 'map' }).ok == false, 'S12: MAP menüden kaldırıldı, menu callback reddetmeli')
 check(sim.nui('menu', { id = 'position' }).ok == false, 'S12: KONUM MODU kaldırıldı, menu callback reddetmeli')
 check(table.concat(soons, ',') == 'battlepass,shop', 'S12: resource çalışmayan Battlepass/Shop "yakında" olarak işaretlenmeli: ' .. table.concat(soons, ','))
 check(sim.nui('menu', { id = 'battlepass' }).page == 'soon', 'S12: resource yokken Battlepass "yakında" sayfası döndürmeli')
-check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok == false, 'S12: kapalı menü maddesi (stats) reddedilmeli')
+check(sim.nui('menu', { id = 'stats' }).page == 'stats', 'S12: CHARACTER STATS yerleşik istatistik sayfasını döndürmeli')
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 -- S12b: meslek / rütbe loe_jobcore'dan okunur (qbx_core job'u "unemployed / Freelancer" kalır)
 local jc = { ready = true, state = { primaryJob = 'lspd', onDuty = false, jobs = { lspd = { name = 'lspd', label = 'LSPD', gradeLabel = 'Lieutenant' } } } }
