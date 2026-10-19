@@ -11,6 +11,7 @@ ui_page 'html/index.html'
 
 shared_scripts {
     'config.lua',
+    'shared/gtaset_data.lua',
     'shared/schema.lua'
 }
 
