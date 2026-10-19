@@ -933,6 +933,26 @@ check(same and (sim.calls.Activate or 0) == actJ and GtaSet.busy == false and si
 StatSetProfileSettingValue = nil
 json.encode, print = realEncode, realPrint
 
+-- K) GEÇİCİ /loe_gtaduck: aynı değer adımı dizisi farklı ses koşullarında; SFX menüden 0 yapılıp geri alınır
+sim.profile[300] = 3                                   -- SFX 3 (0'a inmesi ve geri çıkması gerekir)
+START[300] = 3
+sim.latent, sim.encoded, sim.msgs = nil, nil, {}
+json.encode = function(x) sim.encoded = x; return 'X' end
+print = function() end
+local duckSfx, duckSub = sim.profile[300], sim.profile[203] or 0
+sim.commands['loe_gtaduck']()
+sim.frames(100)
+sim.fire('loe_pause:client:gfxprobeGo', 'duck', true)
+sim.frames(400000)
+local duckLabels = {}
+for _, m in ipairs(sim.msgs) do if m.action == 'lab' and m.text ~= '' then duckLabels[#duckLabels + 1] = m.text:sub(1, 2) end end
+check(sim.encoded and sim.encoded.error == nil and sim.encoded.sfx == duckSfx and sim.encoded.sub == duckSub,
+    'S15: gtaduck sonunda SFX ve altyazı eski değerinde olmalı (sfx=' .. tostring(sim.encoded and sim.encoded.sfx) .. ', hata=' .. tostring(sim.encoded and sim.encoded.error) .. ')')
+check(table.concat(duckLabels, ',') == 'DU,se,B0,B1,B2,B3,B4,B5,Q ,Q:,Q ', 'S15: gtaduck aşamaları: ' .. table.concat(duckLabels, ','))
+check(sim.pause == false and GtaSet.busy == false and sim.profile[300] == duckSfx and (sim.profile[203] or 0) == duckSub and fk.visibleRead == false,
+    'S15: gtaduck sonunda menü kapanmalı, değerler korunmalı, menü görünmemeli')
+json.encode, print = realEncode, realPrint
+
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
 BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, ScaleformMovieMethodAddParamBool, EndScaleformMovieMethod = nil, nil, nil, nil
