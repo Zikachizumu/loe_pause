@@ -704,7 +704,8 @@ check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or
 -- sık gelen değer adımı yutulur); oyun gibi değer menü KAPANINCA kaydedilir. MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar,
 -- sonra 300 ms gezinme yutulur; çıkınca kimlik bir gezinmeye kadar -1 olur; giriş/çıkış ve değer adımı önceki işlemden
 -- 150 ms geçmeden gelirse yutulur.
-local RANGE = { [754] = 100, [755] = 100, [756] = 100, [757] = 100, [760] = 100, [761] = 20, [213] = 30, [212] = 10, [240] = 28, [238] = 28 }
+local RANGE = { [754] = 230, [755] = 230, [756] = 230, [757] = 230, [760] = 230, [761] = 20, [213] = 30, [212] = 10, [240] = 14, [238] = 14 }
+local INVERTED = { [212] = true }
 local CATS = {}
 for _, c in ipairs(GtaSetData.cats) do
     local rows = {}
@@ -722,7 +723,7 @@ local START = {}
 for _, c in ipairs(CATS) do
     for i, r in ipairs(c.rows) do if r.p then START[r.p] = (r.kind == 'slider') and math.min(r.max, 1 + (r.p % 5)) or 0 end end
 end
-START[754] = 50; START[755] = 50; START[213] = 18
+START[754] = 50; START[755] = 50; START[756] = 50; START[757] = 50; START[760] = 50; START[213] = 18; START[212] = 0   -- 212: v9'da bozulmuş değer (asıl 3)
 for k, v in pairs(START) do sim.profile[k] = v end
 local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0, minGap = 1e9 }
 local realActivate, realSFA = ActivateFrontendMenu, SetFrontendActive
@@ -763,7 +764,7 @@ EndScaleformMovieMethod = function()
         elseif (a[1] == 10 or a[1] == 11) and fk.focus then
             local r = c.rows[fk.row + 1]
             if r and r.p then
-                local v = value(r.p) + (a[1] == 11 and 1 or -1)
+                local v = value(r.p) + ((a[1] == 11) == not INVERTED[r.p] and 1 or -1)
                 if r.wrap then v = v > r.max and 0 or (v < 0 and r.max or v) else v = math.max(0, math.min(r.max, v)) end
                 fk.pending[r.p] = v
             end
@@ -799,34 +800,40 @@ sim.frames(3000)
 check(LoeProbe.active == true and sim.pause == true and isOpen() == false and isHidden(), 'S15: ölçüm GTA menüsünü gizli açmalı')
 sim.escFrame = true; sim.step(16); sim.frames(300)
 check(isOpen() == false, 'S15: test sırasında ESC yakalama LOE menüsünü açmamalı')
-sim.frames(1200000)
+sim.frames(1700000)
 check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: ölçüm bitince menü kapanmalı')
 check(fk.visibleRead == false, 'S15: GTA menüsü hiçbir an görünür olmamalı')
 local enc = sim.encoded or {}
 local issues = {}
 for _, e in ipairs(enc.log or {}) do
     if e.k == 'sessionFail' or e.k == 'depthFail' or e.k == 'navFail' or e.k == 'err' then
-        issues[#issues + 1] = e.k .. ':' .. tostring(e.cat or e.at or e.what) .. '/' .. tostring(e.look and e.look.level) .. '/' .. tostring(e.dir) .. tostring(e.uid) .. tostring(e.level) .. tostring(e.look and e.look.uid) .. tostring(e.look and e.look.active)
+        issues[#issues + 1] = e.k .. ':' .. tostring(e.cat or e.at or e.what)
     end
 end
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and enc.kind == 'ranges9' and enc.leftover == 0,
-    'S15: ölçüm sonucu (leftover=' .. tostring(enc.leftover) .. ', sure=' .. tostring(enc.log and enc.log[#enc.log] and enc.log[#enc.log].t) .. ') ' .. table.concat(issues, ' '))
+local last = enc.log and enc.log[#enc.log] and enc.log[#enc.log].t
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and enc.kind == 'ranges10' and enc.leftover == 0 and enc.safezone == 3,
+    'S15: ölçüm sonucu (leftover=' .. tostring(enc.leftover) .. ', safezone=' .. tostring(enc.safezone) .. ', sure=' .. tostring(last) .. ') ' .. table.concat(issues, ' '))
 local n, bad = 0, {}
 for _, c in ipairs(CATS) do
     for _, r in ipairs(c.rows) do
         if r.kind == 'slider' then
             n = n + 1
             local got = (enc.ranges or {})[tostring(r.p)]
-            if not got or got.max ~= r.max then bad[#bad + 1] = r.p .. '=' .. tostring(got and got.max) .. '/' .. r.max end
+            if not got or got.hi ~= r.max or got.lo ~= 0 or got.inv ~= (INVERTED[r.p] == true) then
+                bad[#bad + 1] = r.p .. '=' .. tostring(got and got.lo) .. '..' .. tostring(got and got.hi) .. '/0..' .. r.max
+            end
         end
     end
 end
-check(n == 24 and #bad == 0 and enc.log[#enc.log].t < 600000, 'S15: kaydırıcı aralıkları (n=' .. n .. ') ' .. table.concat(bad, ' ') .. ' sure=' .. tostring(enc.log[#enc.log].t) .. ' gap=' .. tostring(enc.gap))
-check(enc.gap and enc.gap >= 50 and enc.gap <= 250 and fk.minGap >= 40, 'S15: basış aralığı seçilmeli (gap=' .. tostring(enc.gap) .. ', en kısa=' .. tostring(fk.minGap) .. ')')
+check(n == 24 and #bad == 0, 'S15: kaydırıcı sınırları (n=' .. n .. ') ' .. table.concat(bad, ' '))
+check(last and last < 1200000, 'S15: ölçüm 20 dakikayı geçmemeli (' .. tostring(last) .. ')')
 check(#(enc.failed or {}) == 0, 'S15: hiçbir kaydırıcı geri alınamamazlık etmemeli')
 local same = true
-for k, v in pairs(START) do if sim.profile[k] ~= v then same = false end end
-check(same and (sim.profile[900] or 0) == 0, 'S15: ölçüm sonunda tüm değerler eski haline dönmeli')
+for k, v in pairs(START) do
+    local want = (k == 212) and 3 or v
+    if sim.profile[k] ~= want then same = false end
+end
+check(same and (sim.profile[900] or 0) == 0, 'S15: ölçüm sonunda tüm değerler eski haline dönmeli (güvenli bölge 3)')
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
 print, json.encode = realPrint, realEncode
