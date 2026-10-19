@@ -134,18 +134,11 @@ html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 .pm-link .ic { font-size: .9rem; }
 .pm-link:hover { color: rgba(255, 255, 255, .92); }
 
-.pm-gta {
-    position: absolute; right: 12rem; bottom: 4.1rem; height: 2.25rem; padding: 0 .9rem; border-radius: .15rem;
-    font-size: .72rem; font-weight: 500; letter-spacing: .01em; text-transform: uppercase; color: rgba(255, 255, 255, .55);
-    background: rgba(255, 255, 255, .06); transition: background .2s, color .2s;
-}
-.pm-gta:hover { background: rgba(255, 255, 255, .13); color: #fff; }
-
 /* açılış animasyonu: başlık → maddeler sırayla → kart / ipuçları / bağlantılar */
 #app.anim-open .pm-head, #app.anim-return .pm-head { animation: pmSlide .42s cubic-bezier(.2, .8, .2, 1) both; }
 #app.anim-open .pm-item, #app.anim-return .pm-item { animation: pmSlide .42s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--n, 0) * 55ms + 90ms); }
-#app.anim-open .pm-card, #app.anim-open .pm-links, #app.anim-open .pm-gta, #app.anim-open .hints-main,
-#app.anim-return .pm-card, #app.anim-return .pm-links, #app.anim-return .pm-gta, #app.anim-return .hints-main { animation: pmFade .5s ease both; animation-delay: .42s; }
+#app.anim-open .pm-card, #app.anim-open .pm-links, #app.anim-open .hints-main,
+#app.anim-return .pm-card, #app.anim-return .pm-links, #app.anim-return .hints-main { animation: pmFade .5s ease both; animation-delay: .42s; }
 @keyframes pmSlide { from { opacity: 0; transform: translateX(-1.4rem); } to { opacity: 1; transform: none; } }
 @keyframes pmFade { from { opacity: 0; } to { opacity: 1; } }
 
@@ -337,14 +330,13 @@ html[lang="tr"] .pm-title #pmTitleB { margin-left: .18em; }
 html.portrait .pm-head, html.portrait .pm-list, html.portrait .hints-main { left: 3rem; }
 html.portrait .pm-card { left: 7.34rem; }
 html.portrait .pm-links { right: 3rem; }
-html.portrait .pm-gta { right: 3rem; }
 html.portrait .page-panel { left: 1.4rem; right: 1.4rem; width: auto; max-width: none; top: 1.4rem; bottom: 1.4rem; }
 html.portrait .gs-opts { left: 3rem; top: 24rem; }
 html.portrait .gs-panel { left: 3rem; right: 3rem; top: 38rem; width: auto; }
 html.portrait .cards { grid-template-columns: minmax(0, 1fr); }
 
 @media (prefers-reduced-motion: reduce) {
-    #app.anim-open .panel, #app.anim-return .panel, .modal-box, #app .pm-head, #app .pm-item, #app .pm-card, #app .pm-links, #app .pm-gta, #app .hints-main { animation: none !important; }
+    #app.anim-open .panel, #app.anim-return .panel, .modal-box, #app .pm-head, #app .pm-item, #app .pm-card, #app .pm-links, #app .hints-main { animation: none !important; }
     * { transition: none !important; }
 }
 

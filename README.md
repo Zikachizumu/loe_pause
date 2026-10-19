@@ -2,7 +2,7 @@
 
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
-- Ana menü (tasarım: `PMenü.mp4` referans videosu): **RESUME · MAP · GAME SETTINGS · UI SETTINGS · BATTLEPASS · SHOP · DISCONNECT** (DISCONNECT listenin son satırıdır); başlıkta seçili maddenin adı "karıştırma" efektiyle yazılır, sol altta oyuncu kartı (ad [id], meslek, nakit / banka), sağ üstte bağlantılar, sağ altta "ALL GTA SETTINGS"
+- Ana menü (tasarım: `PMenü.mp4` referans videosu): **RESUME · MAP · GAME SETTINGS · UI SETTINGS · CHARACTER STATS · BATTLEPASS · SHOP · DISCONNECT** (DISCONNECT listenin son satırıdır); başlıkta seçili maddenin adı "karıştırma" efektiyle yazılır, sol altta oyuncu kartı (ad [id], meslek, nakit / banka), sağ üstte bağlantılar
 - Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, **İngilizce (varsayılan)** / Türkçe (Arayüz Ayarları → Language). Yeni metinler önce İngilizce yazılır (`Config.Defaults['pref.lang']`)
 - Bağımlılık yok: `qbx_core`, `pma-voice`, `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez.
 
@@ -94,10 +94,9 @@ Referans videodaki yerleşim 1280x720 ölçülerinden birebir alınmıştır (so
 | UI SETTINGS (ARAYÜZ AYARLARI) | Aynı ekran; OPTIONS sütununda "Tercihler" grupları (Appearance, Menu behaviour): vurgu rengi (varsayılan **Crimson**), koyu mod, portre modu, dil, GTA ekranlarından menüye dönüş, görünümü sıfırla |
 | BATTLEPASS / SHOP | `loe_battlepass` / `loe_shop` resource'u çalışıyorsa menüyü kapatıp `Open` export'unu çağırır; çalışmıyorsa "Yakında" etiketli görünür ve tıklayınca "Yakında" sayfası açılır (resource sonradan başlarsa etiket kendiliğinden kalkar; adlar `Config.Menu`'de) |
 | DISCONNECT (AYRIL) | Onay penceresi → "Sunucudan ayrıl" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar. `ExecuteCommand('disconnect')` script'ten çalışmadığı için kullanılmaz) / "Vazgeç". Oyunu tamamen kapatan seçenek yoktur |
-| ALL GTA SETTINGS | Sağ alt düğme: yerleşik GTA ayar ekranını açar (`Config.Native.settings`); `Config.Features.allGtaSettings = false` ile gizlenir |
 | Oyuncu kartı | Sol altta ad [sunucu kimliği], meslek + rütbe, nakit ve banka. Ad/para `qbx_core` GetPlayerData'dan; **meslek ve rütbe `loe_jobcore`'dan** (`GetPlayerState`: mesaideki meslek, yoksa birincil meslek; rütbe = `gradeLabel`), çünkü qbx_core'daki job alanı güncel tutulmaz (hep "Freelancer"). Mesleği olmayan oyuncuda jobcore'un "Unemployed" etiketi; jobcore çalışmıyorsa qbx_core'a düşer (`Config.JobSystem`). Veri yoksa kart gizlenir |
 | YOUTUBE / STORE / DISCORD | Sağ üstte; `Config.Links` içinde `https://` adresi **doldurulan** bağlantılar görünür (varsayılan: boş → hiçbiri görünmez). Yalnızca config'teki adresler açılır |
-| İstatistikler | Varsayılan **kapalı** (`Config.Menu` → `enabled = false`). Açılırsa aynı listede görünür ve yerleşik karakter / sağlık özeti sayfasını açar. İstatistik sayfasındaki Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
+| CHARACTER STATS (KARAKTER İSTATİSTİKLERİ) | Ana listede UI SETTINGS'ten sonra; yerleşik sayfa kartları: **Character** (ad, vatandaş no, meslek / rütbe), **Finance** (nakit, banka), **Health**. Zamanla doldurulacak: yeni kart `renderPage` içindeki `stats` dalına (`app.js`), veri `buildStats` (`client/main.lua`) ile eklenir. `Config.Menu`'de `enabled = false` yapılırsa listeden kalkar. Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
 
 Arka plan: oyun görüntüsü + koyu katman; `Config.Hijack.blurGame = true` iken oyun ekranı `TriggerScreenblurFadeIn` ile bulanıklaşır (videodaki derinlik). Bulanıklık fazla gelirse `false` yap.
 

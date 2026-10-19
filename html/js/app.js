@@ -35,9 +35,9 @@ const STR = {
         // Ana menü etiketleri [kalın kısım, ince kısım]; başlıkta ve maddelerde boşluksuz birleşik yazılır (tasarım gereği)
         pm_title: ['DURAKLATMA', 'MENÜSÜ'],
         menu_resume: ['DEVAM', 'ET'], menu_map: ['HARİTA', ''], menu_game: ['OYUN', 'AYARLARI'], menu_ui: ['ARAYÜZ', 'AYARLARI'],
-        menu_stats: ['İSTATİSTİKLER', ''], menu_battlepass: ['BATTLE', 'PASS'],
+        menu_stats: ['KARAKTER', 'İSTATİSTİKLERİ'], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['AYRIL', ''],
-        all_gta: 'Tüm GTA ayarları', game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
+        game_title: 'Oyun Ayarları', ui_title: 'Arayüz Ayarları',
         opts_title: 'SEÇENEKLER', search_title: 'Arama', restore: ['SAYFAYI', 'SIFIRLA'], restore_title: 'Varsayılana dön?',
         restore_text: 'Bu sayfadaki ayarlar varsayılan değerlerine döner. Diğer sayfalar etkilenmez.', restore_yes: 'Evet, sıfırla',
         msg_restored: 'Varsayılanlar geri yüklendi',
@@ -53,7 +53,7 @@ const STR = {
         soon_pill: 'Yakında', soon_title: 'Yakında', soon_text: 'Bu özellik henüz sunucuda aktif değil. Çok yakında burada olacak.',
         quit_title: 'Oyundan çık?', quit_text: 'Sunucudan ayrılıp FiveM ana menüsüne dönersin.',
         quit_disconnect: 'Sunucudan ayrıl', cancel: 'Vazgeç',
-        stats_title: 'İstatistikler', st_character: 'Karakter', st_name: 'Ad Soyad', st_cid: 'Vatandaş No', st_job: 'Meslek',
+        stats_title: 'Karakter İstatistikleri', st_character: 'Karakter', st_name: 'Ad Soyad', st_cid: 'Vatandaş No', st_job: 'Meslek',
         st_finance: 'Finans', st_cash: 'Nakit', st_bank: 'Banka',
         st_health: 'Sağlık', health_none: 'Hastalığın yok. Sağlıklısın.', health_unknown: 'Sağlık bilgisi alınıyor…',
         health_active: 'Aktif', health_quiet: 'İlaç etkisinde — belirtiler sessiz', health_bandaged: 'Sargılı',
@@ -63,9 +63,9 @@ const STR = {
     en: {
         pm_title: ['PAUSE', 'MENU'],
         menu_resume: ['RESUME', ''], menu_map: ['MAP', ''], menu_game: ['GAME', 'SETTINGS'], menu_ui: ['UI', 'SETTINGS'],
-        menu_stats: ['STATISTICS', ''], menu_battlepass: ['BATTLE', 'PASS'],
+        menu_stats: ['CHARACTER', 'STATS'], menu_battlepass: ['BATTLE', 'PASS'],
         menu_shop: ['SHOP', ''], menu_quit: ['DISCONNECT', ''],
-        all_gta: 'All GTA settings', game_title: 'Game Settings', ui_title: 'UI Settings',
+        game_title: 'Game Settings', ui_title: 'UI Settings',
         opts_title: 'OPTIONS', search_title: 'Search', restore: ['RESTORE', 'DEFAULTS'], restore_title: 'Restore defaults?',
         restore_text: 'The settings on this page return to their defaults. Other pages are not affected.', restore_yes: 'Yes, restore',
         msg_restored: 'Defaults restored',
@@ -81,7 +81,7 @@ const STR = {
         soon_pill: 'Soon', soon_title: 'Coming soon', soon_text: 'This feature is not active on the server yet. It will be here soon.',
         quit_title: 'Disconnect?', quit_text: 'You will leave the server and return to the FiveM main menu.',
         quit_disconnect: 'Leave server', cancel: 'Cancel',
-        stats_title: 'Statistics', st_character: 'Character', st_name: 'Name', st_cid: 'Citizen ID', st_job: 'Job',
+        stats_title: 'Character Stats', st_character: 'Character', st_name: 'Name', st_cid: 'Citizen ID', st_job: 'Job',
         st_finance: 'Finances', st_cash: 'Cash', st_bank: 'Bank',
         st_health: 'Health', health_none: 'No illness. You are healthy.', health_unknown: 'Loading health info…',
         health_active: 'Active', health_quiet: 'Medicated — symptoms quiet', health_bandaged: 'Bandaged',
@@ -90,7 +90,7 @@ const STR = {
     },
 };
 
-const DEFAULT_MENU = ['resume', 'map', 'game', 'ui', 'battlepass', 'shop', 'quit'].map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop' }));
+const DEFAULT_MENU = ['resume', 'map', 'game', 'ui', 'stats', 'battlepass', 'shop', 'quit'].map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop' }));
 const LINK_ICONS = { youtube: 'youtube', store: 'globe', discord: 'discord' };
 // Yalnızca bu ana makineden gelen (Lua yapılandırmasından) https adresleri açılır; arayüzden adres alınmaz.
 const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
@@ -243,9 +243,6 @@ const renderStatic = () => {
     q.placeholder = t('search');
     const bg = $('#bg');
     bg.style.backgroundImage = (S.bg && S.bg.mode !== 'game' && S.bg.image) ? `url("${S.bg.image}")` : 'none';
-    const gta = $('#pmGta');
-    gta.textContent = t('all_gta');
-    gta.classList.toggle('hidden', !S.gta);
     renderLinks();
     renderCard();
     renderHints();
