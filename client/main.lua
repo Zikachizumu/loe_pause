@@ -364,6 +364,8 @@ end
 CreateThread(function()
     while true do
         Wait(0)
+        if LoeProbe and LoeProbe.active then goto continue end   -- GEÇİCİ: gtaset_probe GTA ayar menüsünü kendisi yönetiyor
+
         local now = GetGameTimer()
         local paused = IsPauseMenuActive()
 
@@ -424,6 +426,7 @@ CreateThread(function()
                 end
             end
         end
+        ::continue::
     end
 end)
 

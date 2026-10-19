@@ -17,7 +17,8 @@ shared_scripts {
 client_scripts {
     'client/prefs.lua',
     'client/apply.lua',
-    'client/main.lua'
+    'client/main.lua',
+    'client/gtaset_probe.lua'  -- GEÇİCİ araştırma aracı (/loe_gtaset)
 }
 
 server_scripts {
