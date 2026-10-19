@@ -610,8 +610,34 @@ local function runPath()
     info('opened')
 
     phase('discover')
-    local views = findViews()
-    add('views', { found = views })
+    local CHAIN = 'CONTENT.contentMC.pageContainerMC.pageMC.c2MC'
+    local HYP = {
+        -- H1: sonu rakamlı klip adı (c2MC) ada göre çözülüyor mu?
+        { 'CONTENT.toString' }, { 'CONTENT.contentMC.toString' }, { 'CONTENT.contentMC.pageContainerMC.toString' },
+        { 'CONTENT.contentMC.pageContainerMC.pageMC.toString' }, { CHAIN .. '.toString' }, { CHAIN .. '.menuMC.toString' },
+        -- H2: mutlak yollar
+        { '_root.CONTENT.toString' }, { '_level0.CONTENT.toString' }, { '_root.TIMELINE.menuLevel.toString' },
+        -- H4: sayı indeksi — düz değerli diziler ve klip dizisi
+        { 'menuGFXList.join', '|' }, { 'menuGFXList.0.toString' }, { 'menuList.0.toString' },
+        { 'currentPage.columnList.0.toString' }, { SETCOL .. '.model.viewList.0.toString' },
+        -- diğer adlı alt klipler
+        { SETCOL .. '.CONTENT.scrollBase.toString' }, { SETCOL .. '.customMC.toString' }, { SETCOL .. '.CONTENT.customMC.toString' },
+    }
+    for _, d in ipairs(HYP) do
+        local str, int, st = sfRead(d[1], d[2], d[3])
+        add('path', { p = d[1], s = str, i = int, st = st })
+    end
+    -- H3: derinlik taraması (iki yoldan), bulunanlar kaydedilir
+    local found = {}
+    for dep = 0, 60 do
+        local a = sfRead(SETCOL .. '.menuContainer.dataViewMC' .. dep .. '.toString')
+        local b = (a == nil) and sfRead(CHAIN .. '.menuMC.dataViewMC' .. dep .. '.toString') or nil
+        if a or b then found[#found + 1] = { dep = dep, a = a, b = b } end
+        if #found >= 3 then break end
+    end
+    add('views', { found = found })
+    local views = {}
+    for _, f in ipairs(found) do views[#views + 1] = f.dep end
     for _, d in ipairs(views) do
         for _, f in ipairs(FIELD_TESTS) do
             local p = viewPath(d) .. '.settingsListItem0MC' .. f[1]
@@ -623,7 +649,7 @@ local function runPath()
     -- Kategori listesinde aşağı in (yalnızca vurgu). Değer değişmez.
     phase('walk')
     local okSteps = 0
-    for step = 0, 12 do
+    for step = 0, 1 do
         if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed' }) break end
         if step > 0 then press(2, C_DOWN); sleep(800) end
         local vs = findViews()
@@ -635,7 +661,7 @@ local function runPath()
     info('end')
     phase('end')
     finish()
-    say(('Path test finished. Steps with data: %d / 13'):format(okSteps))
+    say(('Path test finished. Steps with data: %d / 2'):format(okSteps))
     send('path', { stepsWithData = okSteps })
 end
 
