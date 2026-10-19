@@ -701,7 +701,8 @@ check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or
 
 -- sahte oyun (yalnızca kök metodlar): SET_INPUT_EVENT 9 kategori ya da satır gezer (40 ms içinde gelen ikinci gezinme
 -- yutulur), 10/11 satırın profil değerini bir adım değiştirir (liste başa döner, kaydırıcı uçta durur; oyun gibi menü
--- KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar. Graphics (6) eşleştirilmez.
+-- KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar, sonra 300 ms gezinme yutulur; çıkınca kimlik
+-- bir gezinmeye kadar -1 olur. Graphics (6) eşleştirilmez.
 local CATS = {
     { uid = '0', rows = { { u = '48' }, { u = '4', p = 0, max = 3, wrap = true } } },
     { uid = '1', rows = { { u = '123', p = 750, max = 2, wrap = true }, { u = '128', p = 754, max = 100 } } },
@@ -716,7 +717,7 @@ for k, v in pairs(START) do sim.profile[k] = v end
 local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0 }
 local realActivate, realSFA = ActivateFrontendMenu, SetFrontendActive
 ActivateFrontendMenu = function(...)
-    fk.cat, fk.row, fk.focus, fk.pending, fk.sessions = 1, 0, false, {}, fk.sessions + 1
+    fk.cat, fk.row, fk.focus, fk.pending, fk.sessions, fk.left = 1, 0, false, {}, fk.sessions + 1, false
     return realActivate(...)
 end
 SetFrontendActive = function(v)
@@ -734,9 +735,11 @@ EndScaleformMovieMethod = function()
     local c, a = CATS[fk.cat], fk.cur.a
     if fk.cur.p == 'SET_INPUT_EVENT' then
         if a[1] == 9 then
-            if sim.now - (fk.lastNav or -1000) < 40 then return end
+            if sim.now - (fk.lastNav or -1000) < 40 or sim.now < (fk.lockUntil or 0) then return end
             fk.lastNav = sim.now
-            if fk.focus then fk.row = (fk.row + 1) % #c.rows else fk.cat = fk.cat % #CATS + 1 end
+            if fk.focus then fk.row = (fk.row + 1) % #c.rows
+            elseif fk.left then fk.left = false; fk.cat = fk.cat % #CATS + 1
+            else fk.cat = fk.cat % #CATS + 1 end
         elseif (a[1] == 10 or a[1] == 11) and fk.focus then
             local r = c.rows[fk.row + 1]
             if r and r.p then
@@ -746,7 +749,9 @@ EndScaleformMovieMethod = function()
             end
         end
     elseif fk.cur.p == 'MENU_SHIFT_DEPTH' then
-        if a[1] == 1 and #c.rows > 0 then fk.focus, fk.row = true, 0 elseif a[1] == -1 then fk.focus = false end
+        fk.lockUntil = sim.now + 300                     -- oyun gibi: seviye değişince kısa süre gezinme yutulur
+        if a[1] == 1 and #c.rows > 0 then fk.focus, fk.row, fk.left = true, 0, false
+        elseif a[1] == -1 and fk.focus then fk.focus, fk.left = false, true end
     end
 end
 EndScaleformMovieMethodReturnValue = function()
@@ -754,7 +759,7 @@ EndScaleformMovieMethodReturnValue = function()
     local p, c, r = fk.cur.p, CATS[fk.cat], nil
     if sim.pause then
         if not isHidden() then fk.visibleRead = true end
-        if p == 'menuUniqueID.toString' then r = fk.focus and c.rows[fk.row + 1].u or c.uid
+        if p == 'menuUniqueID.toString' then r = fk.focus and c.rows[fk.row + 1].u or (fk.left and '-1' or c.uid)
         elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1'
         elseif p == 'currentPage.columnList.1.state.toString' then r = '0'
         elseif p == 'currentPage.columnList.1.columnIsFocused.toString' then r = tostring(fk.focus)
