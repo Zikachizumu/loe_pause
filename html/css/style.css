@@ -348,3 +348,17 @@ html.portrait .cards { grid-template-columns: minmax(0, 1fr); }
     #app.anim-open .panel, #app.anim-return .panel, .modal-box, #app .pm-head, #app .pm-item, #app .pm-card, #app .pm-links, #app .pm-gta, #app .hints-main { animation: none !important; }
     * { transition: none !important; }
 }
+
+/* GTA ayarları uygulanırken arkadaki GTA menüsünü örten tam ekran katman (#app dışında: menü kapalıyken de görünür) */
+.gta-cover {
+    position: fixed; inset: 0; z-index: 9999; background: #09090b;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font); color: #f4f4f6;
+}
+.gtc-box { display: flex; align-items: center; gap: .9rem; font-size: 1.05rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.gtc-spin {
+    width: 1.3rem; height: 1.3rem; border-radius: 50%;
+    border: .18rem solid rgba(255, 255, 255, .15); border-top-color: var(--accent);
+    animation: gtc-spin .8s linear infinite;
+}
+@keyframes gtc-spin { to { transform: rotate(360deg); } }

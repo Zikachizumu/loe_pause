@@ -874,6 +874,12 @@ window.addEventListener('message', (ev) => {
         S.caps = d.caps || {};
         if (S.screen === 'settings') refreshSettings(false);
     }
+    else if (d.action === 'cover') {
+        // GTA ayarları uygulanırken GTA'nın kendi menüsü arkada açık kalır; bu tam ekran katman onu örter
+        const c = document.getElementById('gtaCover');
+        if (d.text) document.getElementById('gtaCoverText').textContent = String(d.text);
+        c.classList.toggle('hidden', !d.on);
+    }
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();
