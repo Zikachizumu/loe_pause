@@ -66,10 +66,8 @@
 
     const send = (d) => window.postMessage(d, '*');
     const caps = params.get('admin') === '1' ? { admin: true } : {};   // ?admin=1 → "Yönetici paneli" satırı görünür
-    const cards = params.get('cards') === '1' ? { level: { level: 24, xp: 128, xpMax: 2500 }, battlepass: { season: 3, level: 32, maxLevel: 100 } } : {};
-    const open = (anim) => {
-        send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps, gta: { ...gta }, gtaLabels, server: 'LOE RP', cards });
-        setTimeout(() => send({ action: 'summary', homes: params.get('homes') === '1' ? 1 : 0, vehicles: 2 }), 300);   // sunucu sayımı sonradan gelir
+        const open = (anim) => {
+        send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps, gta: { ...gta }, gtaLabels });
     };
 
     const handlers = {

@@ -93,32 +93,6 @@ local function buildMenu()
     return out
 end
 
---- Ana ekranın sağ kartları (seviye / battlepass): Config.Cards'taki export'lar yalnızca resource çalışıyorsa çağrılır;
---- dönen değerlerden yalnızca bilinen sayısal alanlar alınır.
-local CARD_FIELDS = {
-    level      = { 'level', 'xp', 'xpMax' },
-    battlepass = { 'season', 'level', 'maxLevel' },
-}
-
-local function buildCards()
-    local out = {}
-    for id, fields in pairs(CARD_FIELDS) do
-        local c = (Config.Cards or {})[id]
-        if type(c) == 'table' and resourceStarted(c.resource) then
-            local ok, res = callExport(c.resource, c.export)
-            if ok and type(res) == 'table' then
-                local card = {}
-                for _, f in ipairs(fields) do
-                    local n = tonumber(res[f])
-                    if n then card[f] = n end
-                end
-                if next(card) then out[id] = card end
-            end
-        end
-    end
-    return out
-end
-
 --- Sağ üst bağlantılar: yalnızca https:// ile başlayan, boşluk/tırnak içermeyen adresler NUI'ye gider (en çok 4).
 local function buildLinks()
     local out = {}
@@ -271,12 +245,6 @@ local function refreshHealth()
     TriggerServerEvent(HEALTH.helloEvent or 'loe_jobcreator:server:healthHello')
 end
 
--- Home / Vehicles kartları (sunucu sayar): yalnızca menü açıksa arayüze iletilir; yalnızca sayısal alanlar geçer.
-RegisterNetEvent('loe_pause:client:summary', function(s)
-    if not isOpen or type(s) ~= 'table' then return end
-    SendNUIMessage({ action = 'summary', homes = tonumber(s.homes), vehicles = tonumber(s.vehicles) })
-end)
-
 -- ================================================================ AÇ / KAPAT
 local function restoreRadar()
     -- Oyuncu radarı kapattıysa kapalı kalsın; başka bir script açılıştan ÖNCE gizlemişse onun durumuna dön.
@@ -325,8 +293,6 @@ local function open(anim)
         keys   = buildKeys(),
         menu   = buildMenu(),
         stats  = buildStats(),
-        server = Config.ServerName or 'LOE RP',
-        cards  = buildCards(),
         health = healthPayload(),
         caps   = capsPayload(),
         gta    = GtaSet.values(),
@@ -334,7 +300,6 @@ local function open(anim)
     })
     refreshHealth()
     refreshCaps()
-    TriggerServerEvent('loe_pause:server:summary')
 end
 
 Apply.menuOpen = function() return isOpen end

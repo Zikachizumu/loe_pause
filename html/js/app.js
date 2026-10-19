@@ -36,11 +36,7 @@ const STR = {
         pm_title: ['DURAKLATMA', 'MENÜSÜ'],
         menu_resume: ['DEVAM', 'ET'], menu_map: ['HARİTA', ''], menu_stats: ['KARAKTER', ''], menu_inventory: ['ENVANTER', ''],
         menu_battlepass: ['BATTLEPASS', ''], menu_shop: ['SHOP', ''], menu_settings: ['AYARLAR', ''], menu_support: ['DESTEK', ''], menu_quit: ['AYRIL', ''],
-        new_pill: 'Yeni', info_player: 'Oyuncu ID', info_server: 'Sunucu',
-        welcome_a: 'Tekrar hoş geldin,', welcome_b: "{server}'de keyifli oyunlar!", lvl: 'Seviye',
-        c_cash: 'Para', c_bank: 'Banka', c_home: 'Ev', c_vehicles: 'Araç', c_none: 'Yok', c_property_one: '{n} Mülk', c_property_many: '{n} Mülk',
-        c_vehicle_one: '{n} Araç', c_vehicle_many: '{n} Araç',
-        bp_season: 'Sezon {s} - {l}. Seviye', bp_soon: 'Çok yakında', shop_sub: 'Özel içerikler ve sınırlı süreli ürünler',
+        new_pill: 'Yeni',
         opts_title: 'SEÇENEKLER', search_title: 'Arama', restore: ['SAYFAYI', 'SIFIRLA'], restore_title: 'Varsayılana dön?',
         restore_text: 'Bu sayfadaki ayarlar varsayılan değerlerine döner. Diğer sayfalar etkilenmez.', restore_yes: 'Evet, sıfırla',
         msg_restored: 'Varsayılanlar geri yüklendi',
@@ -67,11 +63,7 @@ const STR = {
         pm_title: ['PAUSE', 'MENU'],
         menu_resume: ['CONTINUE', ''], menu_map: ['MAP', ''], menu_stats: ['CHARACTER', ''], menu_inventory: ['INVENTORY', ''],
         menu_battlepass: ['BATTLEPASS', ''], menu_shop: ['SHOP', ''], menu_settings: ['SETTINGS', ''], menu_support: ['SUPPORT', ''], menu_quit: ['DISCONNECT', ''],
-        new_pill: 'New', info_player: 'Player ID', info_server: 'Server',
-        welcome_a: 'Welcome back,', welcome_b: 'Have fun on {server}!', lvl: 'Level',
-        c_cash: 'Cash', c_bank: 'Bank', c_home: 'Home', c_vehicles: 'Vehicles', c_none: 'None', c_property_one: '{n} Property', c_property_many: '{n} Properties',
-        c_vehicle_one: '{n} Vehicle', c_vehicle_many: '{n} Vehicles',
-        bp_season: 'Season {s} - Level {l}', bp_soon: 'Coming soon', shop_sub: 'Exclusive content and limited-time items',
+        new_pill: 'New',
         opts_title: 'OPTIONS', search_title: 'Search', restore: ['RESTORE', 'DEFAULTS'], restore_title: 'Restore defaults?',
         restore_text: 'The settings on this page return to their defaults. Other pages are not affected.', restore_yes: 'Yes, restore',
         msg_restored: 'Defaults restored',
@@ -106,7 +98,7 @@ const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
 /* ============================================================ DURUM */
 const S = {
     open: false, lang: 'en',
-    allSchema: [], schema: [], scope: 'settings', links: [], server: 'LOE RP', cards: {}, summary: { homes: null, vehicles: null }, gta: true, bg: { mode: 'game' }, subSent: false,
+    allSchema: [], schema: [], scope: 'settings', links: [], gta: true, bg: { mode: 'game' }, subSent: false,
     values: {}, keys: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
@@ -164,7 +156,6 @@ const screens = { main: $('#screenMain'), settings: $('#screenSettings'), page: 
 const showScreen = (name) => {
     S.screen = name;
     screens.main.classList.toggle('hidden', name === 'page');
-    $('#homeRight').classList.toggle('hidden', name !== 'main');
     screens.settings.classList.toggle('hidden', name !== 'settings');
     screens.page.classList.toggle('hidden', name !== 'page');
     $('#hintsMain').classList.toggle('hidden', name === 'page');
@@ -222,7 +213,6 @@ const renderStatic = () => {
     const bg = $('#bg');
     bg.style.backgroundImage = (S.bg && S.bg.mode !== 'game' && S.bg.image) ? `url("${S.bg.image}")` : 'none';
     renderLinks();
-    renderHome();
     renderHints();
 };
 
@@ -237,64 +227,6 @@ const renderMenu = () => {
         onmouseenter: () => { if (S.screen === 'main') setMainIdx(i); },
         onclick: () => { if (S.screen === 'main') setMainIdx(i); activateMenu(item.id); },
     }, h('span', { class: 'h-ico' }, ico(MENU_ICONS[item.id] || 'menu')), h('span', { class: 'h-name' }, lblText(item.id)), itemBadge(item))));
-};
-
-/* ============================================================ ANA EKRAN: üst bilgi + sağ kartlar */
-const pad2 = (n) => String(n).padStart(2, '0');
-const fill = (s, vars) => String(s).replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : ''));
-const plural = (one, many, n) => fill(t(n === 1 ? one : many), { n });
-const dollars = (v) => (typeof v === 'number' && isFinite(v) ? '$ ' + Math.trunc(v).toLocaleString('en-US') : '—');
-
-const renderInfo = () => {
-    const st = S.stats || {};
-    const now = new Date();
-    setKids($('#pmInfo'),
-        st.id != null ? h('div', { class: 'h-cell' }, h('span', { class: 'h-person' }, ico('person')),
-            h('div', {}, h('div', { class: 'h-lbl' }, t('info_player')), h('div', { class: 'h-val' }, '#' + st.id))) : null,
-        h('div', { class: 'h-cell' }, h('div', {}, h('div', { class: 'h-lbl' }, t('info_server'), h('span', { class: 'h-dot' })), h('div', { class: 'h-val h-accent' }, S.server))),
-        h('div', { class: 'h-cell' }, h('div', {}, h('div', { class: 'h-clock' }, `${pad2(now.getHours())}:${pad2(now.getMinutes())}`),
-            h('div', { class: 'h-date' }, `${pad2(now.getDate())}.${pad2(now.getMonth() + 1)}.${now.getFullYear()}`))));
-};
-
-const statCard = (icon, label, value, plain) => h('div', { class: 'h-panel h-stat' }, h('span', { class: 'h-ico' }, ico(icon)),
-    h('div', {}, h('div', { class: 'h-lbl' }, label), h('div', { class: 'h-num' + (plain ? ' plain' : '') }, value)));
-
-const linkCard = (id, icon, sub, prog) => {
-    const item = S.menu.find(m => m.id === id);
-    if (!item) return null;
-    return h('button', { class: 'h-panel h-link' + (prog ? ' has-prog' : ''), type: 'button', onclick: () => { const i = S.menu.indexOf(item); if (i >= 0) setMainIdx(i); activateMenu(id); } },
-        h('div', { class: 'h-tile' }, h('span', { class: 'h-ico' }, ico(icon))),
-        h('div', { class: 'h-body' }, h('div', { class: 'h-head' }, lblText(id), itemBadge(item)), h('div', { class: 'h-sub' }, sub),
-            prog ? h('div', { class: 'h-prog' }, h('div', { class: 'h-bar' }, h('i', { style: `width: ${prog.pct}%` })), h('span', {}, prog.text)) : null),
-        h('span', { class: 'h-chev' }, ico('chevronR')));
-};
-
-const renderHome = () => {
-    renderInfo();
-    const st = S.stats || {};
-    const lv = S.cards.level;
-    const welcome = $('#hWelcome');
-    setKids(welcome,
-        h('div', { html: window.homeArt ? window.homeArt() : '' }),
-        h('div', { class: 'fade' }),
-        lv && lv.xpMax > 0 ? h('div', { class: 'h-lvl' }, h('div', { class: 'row' }, `${t('lvl')} ${lv.level}`, h('em', {}, `${Math.trunc(lv.xp || 0).toLocaleString('en-US')} / ${Math.trunc(lv.xpMax).toLocaleString('en-US')} XP`)),
-            h('div', { class: 'h-bar' }, h('i', { style: `width: ${clamp(((lv.xp || 0) / lv.xpMax) * 100, 0, 100)}%` }))) : null,
-        h('div', { class: 'h-hello' }, t('welcome_a'), h('b', {}, fill(t('welcome_b'), { server: S.server }))),
-        h('div', { class: 'h-mark h-logo' }, h('span', { class: 'h-bars' }, h('i'), h('i'), h('i')), h('b', {}, 'LOE')));
-
-    const sm = S.summary;
-    const homes = sm.homes == null ? '—' : (sm.homes === 0 ? t('c_none') : plural('c_property_one', 'c_property_many', sm.homes));
-    const cars = sm.vehicles == null ? '—' : (sm.vehicles === 0 ? t('c_none') : plural('c_vehicle_one', 'c_vehicle_many', sm.vehicles));
-    setKids($('#hStats'),
-        statCard('wallet', t('c_cash'), dollars(st.cash)), statCard('bank', t('c_bank'), dollars(st.bank)),
-        statCard('home', t('c_home'), homes, true), statCard('car', t('c_vehicles'), cars, true));
-
-    const bp = S.cards.battlepass, bpItem = S.menu.find(m => m.id === 'battlepass');
-    const bpLive = bp && bpItem && !bpItem.soon;
-    setKids($('#hLinks'),
-        linkCard('battlepass', 'star', bpLive ? fill(t('bp_season'), { s: bp.season !== undefined ? bp.season : '-', l: bp.level !== undefined ? bp.level : '-' }) : t('bp_soon'),
-            bpLive && bp.maxLevel > 0 ? { pct: clamp(((bp.level || 0) / bp.maxLevel) * 100, 0, 100), text: `${bp.level || 0} / ${bp.maxLevel}` } : null),
-        linkCard('shop', 'cart', t('shop_sub')));
 };
 
 const setMainIdx = (i) => {
@@ -990,10 +922,6 @@ const onInit = (d) => {
     renderAll();
 };
 
-let clockTimer = null;
-const startClock = () => { stopClock(); clockTimer = setInterval(() => { if (S.open && S.screen === 'main') renderInfo(); }, 15000); };
-const stopClock = () => { if (clockTimer) { clearInterval(clockTimer); clockTimer = null; } };
-
 const onOpen = (d) => {
     S.values = d.values || {};
     S.keys = d.keys || {};
@@ -1006,14 +934,10 @@ const onOpen = (d) => {
     S.mainIdx = 0; S.cat = 0; S.grp = 0; S.row = 0; S.zone = 'cats'; S.query = ''; q.value = '';
     S.scope = 'settings'; S.schema = scopeSchema('settings');
     S.subSent = false;
-    S.server = (typeof d.server === 'string' && d.server) ? d.server : S.server;
-    S.cards = d.cards || {};
-    S.summary = { homes: null, vehicles: null };
     closeModal();
     applyPrefs();
     showScreen('main');
     renderAll();
-    startClock();
 
     app.classList.remove('hidden', 'anim-open', 'anim-return', 'on');
     void app.offsetWidth;
@@ -1024,7 +948,6 @@ const onOpen = (d) => {
 
 const onClose = () => {
     S.open = false;
-    stopClock();
     app.classList.remove('on');
     setTimeout(() => { if (!S.open) app.classList.add('hidden'); }, 240);
 };
@@ -1040,10 +963,6 @@ window.addEventListener('message', (ev) => {
         if (S.screen === 'settings') refreshSettings(false);
     }
     else if (d.action === 'gtaDone') onGtaDone(d);
-    else if (d.action === 'summary') {
-        S.summary = { homes: Number.isFinite(d.homes) ? d.homes : null, vehicles: Number.isFinite(d.vehicles) ? d.vehicles : null };
-        if (S.screen === 'main') renderHome();
-    }
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();

@@ -2,9 +2,9 @@
 
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
-- Ana menü (konsept: `_work/design/loe_pause_concept`, renk ve tarz `loe_illegalmarket`'ten: koyu mor paneller, pembe vurgu): solda panel menü **CONTINUE · MAP · CHARACTER · INVENTORY · BATTLEPASS · SHOP · SETTINGS · SUPPORT · DISCONNECT**; üstte LOE logosu + `PAUSE MENU` + sağda oyuncu kimliği / sunucu / saat; sağda karşılama kartı, Cash · Bank · Home · Vehicles kartları ve Battlepass / Shop kartları; arka plan bulanık, karartılmış oyun görüntüsü
+- Ana menü (konsept: `_work/design/loe_pause_concept`, renk ve tarz `loe_illegalmarket`'ten: koyu mor paneller, pembe vurgu): solda panel menü **CONTINUE · MAP · CHARACTER · INVENTORY · BATTLEPASS · SHOP · SETTINGS · SUPPORT · DISCONNECT**; üstte LOE logosu + `PAUSE MENU`; sağ taraf boştur (karta / bilgi şeridine yer verilmedi); arka plan bulanık, karartılmış oyun görüntüsü
 - Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, **İngilizce (varsayılan)** / Türkçe (Arayüz Ayarları → Language). Yeni metinler önce İngilizce yazılır (`Config.Defaults['pref.lang']`)
-- Zorunlu bağımlılık yok: `qbx_core`, `pma-voice`, `loe_jobcore`, `ox_inventory`, `loe_hud` ve `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez. `oxmysql` yalnızca Home / Vehicles sayıları için kullanılır (sorgu başarısızsa kartlar "—" gösterir).
+- Zorunlu bağımlılık yok: `qbx_core`, `pma-voice`, `loe_jobcore`, `ox_inventory`, `loe_hud` ve `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez. 
 
 ## Kurulum
 
@@ -84,7 +84,7 @@ Game Settings sayfalarında (Controls, Keyboard / Mouse, Audio, Camera, Display)
 
 ### Ana menü
 
-Ana ekranın ölçüleri 1672x941'lik konsepttendir (CSS'te `--u` = 1 konsept pikseli; 1672 px = 120 rem, yani 1920x1080'de 1 rem = 16 px). Ayarlar ekranı `PSettings.mp4` yerleşimini korur, renkleri `loe_illegalmarket` paletine çevrilmiştir (vurgu varsayılanı **Pink**).
+Ana ekranın ölçüleri 1672x941'lik konsepttendir (sağdaki kartlar ve üstteki ID / sunucu / saat şeridi kullanıcı isteğiyle kaldırıldı; git geçmişinde `e613700`'de duruyor) (CSS'te `--u` = 1 konsept pikseli; 1672 px = 120 rem, yani 1920x1080'de 1 rem = 16 px). Ayarlar ekranı `PSettings.mp4` yerleşimini korur, renkleri `loe_illegalmarket` paletine çevrilmiştir (vurgu varsayılanı **Pink**).
 
 | Madde | Davranış |
 |---|---|
@@ -92,14 +92,10 @@ Ana ekranın ölçüleri 1672x941'lik konsepttendir (CSS'te `--u` = 1 konsept pi
 | MAP | GTA'nın büyük haritasını açar (menü kapanır; kapanınca `pref.mapReturn` açıksa menüye döner). **M tuşu** bu menüden bağımsızdır: `loe_hud/client/bigmap.lua` (komut `loe_bigmap`) açar; harita açıkken ESC yakalama ona dokunmaz (`exports.loe_hud:IsBigMapOpen`) |
 | CHARACTER | Yerleşik sayfa: **Character** (ad, vatandaş no, meslek / rütbe), **Finance** (nakit, banka), **Health**. Zamanla doldurulacak: yeni kart `renderPage` içindeki `stats` dalına (`app.js`), veri `buildStats` (`client/main.lua`) ile eklenir. Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
 | INVENTORY | Menü kapanır, `ox_inventory` çalışıyorsa `exports.ox_inventory:openInventory()` (oyuncunun kendi çantası) çağrılır; çalışmıyorsa "SOON" |
-| BATTLEPASS / SHOP | `loe_battlepass` / `loe_shop` resource'u çalışıyorsa menüyü kapatıp `Open` export'unu çağırır; çalışmıyorsa **SOON** etiketli görünür ve tıklayınca "Coming soon" sayfası açılır (resource başlarsa etiket kendiliğinden **NEW**'e döner). Sağdaki kartlar aynı maddeleri açar; Battlepass kartı `Config.Cards.battlepass` export'u (`{ season, level, maxLevel }`) varsa seviye çubuğunu gösterir, yoksa "Coming soon" yazar — uydurma veri gösterilmez |
+| BATTLEPASS / SHOP | `loe_battlepass` / `loe_shop` resource'u çalışıyorsa menüyü kapatıp `Open` export'unu çağırır; çalışmıyorsa **SOON** etiketli görünür ve tıklayınca "Coming soon" sayfası açılır (resource başlarsa etiket kendiliğinden **NEW**'e döner). |
 | SETTINGS | Ayar ekranı: ana menü solda kalır, yanında **OPTIONS** sütunu (GTA ayar kategorileri + Appearance / Menu behaviour arayüz tercihleri), sağda ayar paneli (`SETTINGS // GRAPHICS`). Satır türleri: `‹ değer ›` seçici, `OFF \| ON` anahtar, `‹ ▬▬ ›` kaydırıcı, tuş etiketi. OPTIONS'ın son maddesi **GTA SETTINGS**: Enter doğrudan GTA'nın ayar ekranını açar. **RESTORE DEFAULTS** yalnızca o sayfayı varsayılana döndürür; **APPLY CHANGES** GTA ayarlarını uygular (aşağıya bak). Arama kutusu `/`. **ESC = bir adım geri** (satırlar → OPTIONS → ana liste → menüyü kapatır) |
 | SUPPORT | `Config.Links` içindeki `discord` adresi doluysa onu açar; boşsa "SOON" sayfası |
 | DISCONNECT | Listenin son satırı. Onay penceresi → "Leave server" (sunucuya `loe_pause:server:leave` gönderir → `DropPlayer` ile oyuncu FiveM ana menüsüne düşer; 3 sn içinde düşürülmezse yedek olarak `RestartGame()` oyunu kapatıp FiveM'i yeniden açar) / "Cancel". Oyunu tamamen kapatan seçenek yoktur |
-| Üst şerit | Oyuncu kimliği (`#<sunucu id>`), sunucu adı (`Config.ServerName`, yeşil nokta) ve gerçek saat / tarih (`GG.AA.YYYY`) |
-| Karşılama kartı | Los Santos silüeti + karşılama metni. **SEVİYE / XP çubuğu yalnızca `Config.Cards.level` export'u varsa görünür** (`{ level, xp, xpMax }`); şu an sunucuda böyle bir sistem yoktur, çubuk gösterilmez |
-| Cash · Bank | `qbx_core` GetPlayerData |
-| Home · Vehicles | Menü açılınca sunucu (`loe_pause:server:summary`, 2 sn sınırlı, yalnızca isteyen oyuncunun kendi kayıtları) sayar: araçlar = `player_vehicles`, ev = `loe_properties` (sahip ya da süresi dolmamış kiracı) + `loe_hotel_rooms` (süresi dolmamış). Tablo yoksa / yanıt gelmediyse "—" görünür. `oxmysql` gerekir |
 | Meslek / rütbe | CHARACTER sayfasında ve oyuncu verisinde: **`loe_jobcore`'dan** (`GetPlayerState`: mesaideki meslek, yoksa birincil meslek; rütbe = `gradeLabel`), çünkü qbx_core'daki job alanı güncel tutulmaz (hep "Freelancer"). Mesleği olmayan oyuncuda jobcore'un "Unemployed" etiketi; jobcore çalışmıyorsa qbx_core'a düşer (`Config.JobSystem`) |
 | YOUTUBE / STORE / DISCORD | Sağ altta; `Config.Links` içinde `https://` adresi **doldurulan** bağlantılar görünür (varsayılan: boş → hiçbiri görünmez). Yalnızca config'teki adresler açılır |
 

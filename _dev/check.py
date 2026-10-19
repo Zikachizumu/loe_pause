@@ -713,15 +713,6 @@ check(table.concat(soons, ',') == 'battlepass,shop', 'S12: resource çalışmaya
 check(sim.nui('menu', { id = 'battlepass' }).page == 'soon', 'S12: resource yokken Battlepass "yakında" sayfası döndürmeli')
 check(sim.nui('menu', { id = 'stats' }).page == 'stats', 'S12: CHARACTER STATS yerleşik istatistik sayfasını döndürmeli')
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
-check(op.server == 'LOE RP' and type(op.cards) == 'table' and next(op.cards) == nil, 'S12: sunucu adı gitmeli, çalışan kaynak yokken kart verisi uydurulmamalı')
--- S12a: özet (Home / Vehicles) menü açıkken arayüze iletilir; yalnızca sayılar
-sim.msgs = {}
-sim.fire('loe_pause:client:summary', { homes = 1, vehicles = 2, evil = 'x' })
-local sm; for _, m in ipairs(sim.msgs) do if m.action == 'summary' then sm = m end end
-check(sm and sm.homes == 1 and sm.vehicles == 2 and sm.evil == nil, 'S12a: özet arayüze iletilmeli (yalnızca sayısal alanlar)')
-local askedSummary = false
-for _, e in ipairs(sim.serverEvents) do if e == 'loe_pause:server:summary' then askedSummary = true end end
-check(askedSummary, 'S12a: açılışta sunucudan özet istenmeli')
 -- S12c: envanter maddesi: menü kapanır, ox_inventory export'u çağrılır
 local invCalls = 0
 rawset(exports, 'ox_inventory', { openInventory = function() invCalls = invCalls + 1 end })
@@ -729,19 +720,6 @@ check(sim.nui('menu', { id = 'inventory' }).ok == true, 'S12c: envanter maddesi 
 sim.frames(600)
 check(invCalls == 1 and isOpen() == false, 'S12c: menü kapanmalı ve ox_inventory açılmalı (çağrı=' .. invCalls .. ')')
 rawset(exports, 'ox_inventory', nil)
-sim.pause = true; sim.frames(64)
--- S12d: Battlepass export'u çalışıyorsa kart verisi (yalnızca bilinen sayısal alanlar) gelir ve madde "yakında" olmaz
-sim.exported.Close(); sim.frames(700)
-sim.started.loe_battlepass = true
-rawset(exports, 'loe_battlepass', { GetProgress = function() return { season = 3, level = 32, maxLevel = 100, evil = 'x' } end })
-sim.pause = true; sim.frames(64)
-local opB = sim.lastOpen()
-local bpSoon; for _, m in ipairs(opB.menu) do if m.id == 'battlepass' then bpSoon = m.soon end end
-check(opB.cards.battlepass and opB.cards.battlepass.level == 32 and opB.cards.battlepass.maxLevel == 100 and opB.cards.battlepass.evil == nil and bpSoon == false,
-    'S12d: Battlepass kartı export verisiyle gelmeli (uydurma alan yok, "yakında" değil)')
-sim.started.loe_battlepass = nil
-rawset(exports, 'loe_battlepass', nil)
-sim.exported.Close(); sim.frames(700)
 -- S12e: loe_hud büyük haritası (M) açıkken LOE menüsü yerleşik menüyü ele geçirmez; harita kapanınca ESC yine LOE menüsünü açar
 sim.started.loe_hud = true
 rawset(exports, 'loe_hud', { IsBigMapOpen = function() return true end })
@@ -1040,40 +1018,6 @@ check(list(lua_to_py(sv.eval('sent[#sent].list'))) == ['admin'], 'sunucu: admin 
 check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
 sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
-
-# Home / Vehicles özeti: yalnızca isteyen oyuncunun kendi sayıları; tablo yoksa o alan gönderilmez
-sv.execute(r'''
-players = { [11] = { PlayerData = { citizenid = 'CID11' } } }
-exports = { qbx_core = { GetPlayer = function(_, s) return players[s] end } }
-queries = {}
-dbCounts = { player_vehicles = 3, loe_properties = 1, loe_hotel_rooms = 'ERR' }
-MySQL = { scalar = { await = function(q, p)
-    queries[#queries + 1] = { q = q, p = p }
-    for name, v in pairs(dbCounts) do
-        if q:find(name, 1, true) then
-            if v == 'ERR' then error('no such table') end
-            return v
-        end
-    end
-end } }
-''')
-SUM = sv.eval('''function(src, adv)
-    source = src; now = now + (adv or 0)
-    handlers['loe_pause:server:summary']()
-    return #sent
-end''')
-n1 = int(sv.eval('#sent'))
-check(SUM(11, 5000) == n1 + 1, 'sunucu: özet isteği yanıtlanmalı')
-sm = lua_to_py(sv.eval('sent[#sent]'))
-check(sm['n'] == 'loe_pause:client:summary' and sm['t'] == 11, 'sunucu: özet yalnızca isteyen oyuncuya gitmeli')
-check(int(sv.eval('sent[#sent].list.vehicles')) == 3 and int(sv.eval('sent[#sent].list.homes')) == 1, 'sunucu: araç ve ev sayısı doğru olmalı (otel tablosu yoksa yok sayılır)')
-check(sv.eval("(function() for _, q in ipairs(queries) do for _, v in ipairs(q.p) do if v ~= 'CID11' then return false end end end return #queries > 0 end)()") is True,
-      'sunucu: sorgular yalnızca isteyen oyuncunun citizenid değeriyle çalışmalı')
-check(SUM(11, 100) == n1 + 1, 'sunucu: özet istekleri 2 sn sınırlanmalı')
-check(SUM(99, 5000) == n1 + 1, 'sunucu: karakteri olmayan oyuncuya yanıt gitmemeli')
-sv.execute("dbCounts.loe_properties = nil; dbCounts.player_vehicles = nil")
-SUM(11, 5000)
-check(sv.eval('sent[#sent].list.homes') is None and sv.eval('sent[#sent].list.vehicles') is None, 'sunucu: tablolar yoksa alanlar gönderilmemeli')
 
 # ------------------------------------------------------------------ 6) GEÇİCİ: scaleform araçları
 print('[6] Scaleform araçları (_dev/gfx)')
