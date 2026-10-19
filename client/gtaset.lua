@@ -363,9 +363,3 @@ function GtaSet.apply(changes, cb)
     end)
     return true
 end
-
--- GEÇİCİ: deney aracı (client/gtalab.lua) için iç yardımcılar
-GtaSet._t = {
-    sfRead = sfRead, uid = uid, level = level, call = call, sleep = sleep, nav = nav, depth = depth, hide = hide,
-    openHidden = openHidden, shut = shut, gotoCat = gotoCat, gotoRow = gotoRow, pace = pace, stepN = stepN,
-}

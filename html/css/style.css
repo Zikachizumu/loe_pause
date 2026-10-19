@@ -363,5 +363,3 @@ html.portrait .cards { grid-template-columns: minmax(0, 1fr); }
 .gs-row.chg .sl-val { color: var(--accent); }
 #app.gbusy .gs-panel .gs-rows, #app.gbusy .gs-opts, #app.gbusy .gs-search { pointer-events: none; opacity: .5; transition: opacity .2s; }
 
-/* GEÇİCİ: /loe_gtalab deney başlığı */
-.lab-banner { position: fixed; left: 50%; top: 8%; transform: translateX(-50%); z-index: 9999; padding: .8rem 1.6rem; font: 700 1.5rem var(--font); color: #fff; background: rgba(0, 0, 0, .85); border: .15rem solid var(--accent); }

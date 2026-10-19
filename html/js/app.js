@@ -1011,7 +1011,6 @@ window.addEventListener('message', (ev) => {
         if (S.screen === 'settings') refreshSettings(false);
     }
     else if (d.action === 'gtaDone') onGtaDone(d);
-    else if (d.action === 'lab') { const b = document.getElementById('labBanner'); b.textContent = String(d.text || ''); b.classList.toggle('hidden', !d.text); }
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();
