@@ -699,26 +699,33 @@ sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
 sim.frames(2000)
 check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
 
--- sahte oyun (yalnızca kök metodlar): SET_INPUT_EVENT 8/9 kategori ya da satır gezer, 10/11 Audio satır 0'da profil 300'ü
--- değiştirir (oyun gibi: menü KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar (noDepth: yok sayılır).
--- Oyun gibi: önceki gezinmeden 100 ms geçmeden gelen gezinme yutulur.
+-- sahte oyun (yalnızca kök metodlar): SET_INPUT_EVENT 9 kategori ya da satır gezer (40 ms içinde gelen ikinci gezinme
+-- yutulur), 10/11 satırın profil değerini bir adım değiştirir (liste başa döner, kaydırıcı uçta durur; oyun gibi menü
+-- KAPANINCA kaydedilir); MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar. Graphics (6) eşleştirilmez.
 local CATS = {
-    { uid = '0', state = '1', rows = { '48', '4' } },
-    { uid = '1', state = '0', rows = { '123', '128' } },
-    { uid = '148', state = '0', rows = {} },
-    { uid = '3', state = '2', rows = { '8', '9', '43' } },
-    { uid = '4', state = '0', rows = { '132' } },
+    { uid = '0', rows = { { u = '48' }, { u = '4', p = 0, max = 3, wrap = true } } },
+    { uid = '1', rows = { { u = '123', p = 750, max = 2, wrap = true }, { u = '128', p = 754, max = 100 } } },
+    { uid = '148', rows = {} },
+    { uid = '3', rows = { { u = '8', p = 300, max = 10 }, { u = '9', p = 301, max = 10 }, { u = '180' } } },
+    { uid = '4', rows = { { u = '132', p = 231, max = 10 } } },
+    { uid = '5', rows = { { u = '29', p = 204, max = 2, wrap = true } } },
+    { uid = '6', rows = { { u = '103', p = 900, max = 2, wrap = true } } },
 }
-local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, suppressAt = -1000, suppressN = 0, pending = 0, visibleRead = false }
-sim.profile[300] = 1
+local START = { [0] = 3, [750] = 0, [754] = 50, [300] = 1, [301] = 10, [231] = 5, [204] = 1, [900] = 1 }
+for k, v in pairs(START) do sim.profile[k] = v end
+local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0 }
 local realActivate, realSFA = ActivateFrontendMenu, SetFrontendActive
-ActivateFrontendMenu = function(...) fk.cat, fk.row, fk.focus, fk.pending = 1, 0, false, 0; return realActivate(...) end
+ActivateFrontendMenu = function(...)
+    fk.cat, fk.row, fk.focus, fk.pending, fk.sessions = 1, 0, false, {}, fk.sessions + 1
+    return realActivate(...)
+end
 SetFrontendActive = function(v)
-    if not v and sim.pause then sim.profile[300] = sim.profile[300] + fk.pending; fk.pending = 0 end
+    if not v and sim.pause then for k, x in pairs(fk.pending) do sim.profile[k] = x end fk.pending = {} end
     return realSFA(v)
 end
-SuppressFrontendRenderingThisFrame = function() fk.suppressAt = sim.now; fk.suppressN = fk.suppressN + 1 end
+SuppressFrontendRenderingThisFrame = function() fk.suppressAt = sim.now end
 local function isHidden() return sim.now - fk.suppressAt <= 32 end
+local function value(pid) local v = fk.pending[pid]; if v == nil then v = sim.profile[pid] or 0 end return v end
 BeginScaleformMovieMethodOnFrontend = function(path) fk.cur = { p = path, a = {} }; return 1 end
 ScaleformMovieMethodAddParamInt = function(v) fk.cur.a[#fk.cur.a + 1] = v end
 ScaleformMovieMethodAddParamBool = function(v) fk.cur.a[#fk.cur.a + 1] = v end
@@ -726,16 +733,19 @@ EndScaleformMovieMethod = function()
     if not sim.pause then return end
     local c, a = CATS[fk.cat], fk.cur.a
     if fk.cur.p == 'SET_INPUT_EVENT' then
-        if (a[1] == 9 or a[1] == 8) and sim.now - (fk.lastNav or -1000) < 100 then return end   -- oyun art arda gezinmeyi yutar
-        if a[1] == 9 or a[1] == 8 then
+        if a[1] == 9 then
+            if sim.now - (fk.lastNav or -1000) < 40 then return end
             fk.lastNav = sim.now
-            local d = a[1] == 9 and 1 or -1
-            if fk.focus then fk.row = (fk.row + d) % #c.rows else fk.cat = (fk.cat - 1 + d) % #CATS + 1 end
-        elseif (a[1] == 10 or a[1] == 11) and fk.focus and c.uid == '3' and fk.row == 0 then
-            local v = sim.profile[300] + fk.pending + (a[1] == 11 and 1 or -1)
-            if v >= 0 then fk.pending = v - sim.profile[300] end
+            if fk.focus then fk.row = (fk.row + 1) % #c.rows else fk.cat = fk.cat % #CATS + 1 end
+        elseif (a[1] == 10 or a[1] == 11) and fk.focus then
+            local r = c.rows[fk.row + 1]
+            if r and r.p then
+                local v = value(r.p) + (a[1] == 11 and 1 or -1)
+                if r.wrap then v = v > r.max and 0 or (v < 0 and r.max or v) else v = math.max(0, math.min(r.max, v)) end
+                fk.pending[r.p] = v
+            end
         end
-    elseif fk.cur.p == 'MENU_SHIFT_DEPTH' and not fk.noDepth then
+    elseif fk.cur.p == 'MENU_SHIFT_DEPTH' then
         if a[1] == 1 and #c.rows > 0 then fk.focus, fk.row = true, 0 elseif a[1] == -1 then fk.focus = false end
     end
 end
@@ -744,10 +754,11 @@ EndScaleformMovieMethodReturnValue = function()
     local p, c, r = fk.cur.p, CATS[fk.cat], nil
     if sim.pause then
         if not isHidden() then fk.visibleRead = true end
-        if p == 'currentPage.columnList.1.state.toString' then r = c.state
+        if p == 'menuUniqueID.toString' then r = fk.focus and c.rows[fk.row + 1].u or c.uid
+        elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1'
+        elseif p == 'currentPage.columnList.1.state.toString' then r = '0'
         elseif p == 'currentPage.columnList.1.columnIsFocused.toString' then r = tostring(fk.focus)
-        elseif p == 'menuUniqueID.toString' then r = fk.focus and c.rows[fk.row + 1] or c.uid
-        elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1' end
+        elseif p == 'menuState.toString' then r = '1000' end
     end
     fk.hv[fk.hn] = r
     return fk.hn
@@ -755,53 +766,33 @@ end
 IsScaleformMovieMethodReturnValueReady = function(h) return fk.hv[h] ~= nil end
 GetScaleformMovieMethodReturnValueString = function(h) return fk.hv[h] end
 GetScaleformMovieMethodReturnValueInt = function(h) return tonumber(fk.hv[h]) or 0 end
-local function runProbe(ms)
-    sim.latent, sim.encoded = nil, nil
-    sim.frames(3000)
-    sim.commands['loe_gtaset']()
-    sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
-    sim.frames(ms)
-end
-local function finalDiff()
-    for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'profile' and e.tag == 'final' then return e.diff end end
-end
 
--- A) gizli: Audio'ya in, gir, SFX bir adım azalt (kapanınca kaydedilir), geri al
 sim.latent, sim.encoded = nil, nil
 sim.commands['loe_gtaset']()
 sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
-sim.frames(2500)
-check(LoeProbe.active == true and sim.pause == true and isOpen() == false and isHidden(), 'S15: test GTA ayar menüsünü gizli açmalı')
+sim.frames(3000)
+check(LoeProbe.active == true and sim.pause == true and isOpen() == false and isHidden(), 'S15: eşleştirme GTA menüsünü gizli açmalı')
 sim.escFrame = true; sim.step(16); sim.frames(300)
-check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
-sim.frames(60000)
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
-local sup = fk.suppressN
-sim.frames(1000)
-check(fk.suppressN == sup, 'S15: test bitince gizleme durmalı')
+check(isOpen() == false, 'S15: test sırasında ESC yakalama LOE menüsünü açmamalı')
+sim.frames(400000)
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: eşleştirme bitince menü kapanmalı')
 check(fk.visibleRead == false, 'S15: GTA menüsü hiçbir an görünür olmamalı')
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'hidden7'
-    and sim.encoded.enter == 'true' and sim.encoded.saved == true and sim.encoded.restored == 'ok',
-    'S15: gizli yazma kaydedilmeli ve geri alınmalı (enter=' .. tostring(sim.encoded and sim.encoded.enter) .. ', saved=' .. tostring(sim.encoded and sim.encoded.saved) .. ', restored=' .. tostring(sim.encoded and sim.encoded.restored) .. ')')
-local fd = finalDiff()
-check(fd and #fd == 0 and sim.profile[300] == 1, 'S15: test sonunda SFX eski değerinde olmalı')
-local spd
-for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'speed' then spd = e.list end end
-check(spd and #spd == 4 and spd[1].gap == 50 and spd[4].gap == 250 and spd[4].ok == 3, 'S15: gezinme hızı ölçülmeli (250 ms aralık güvenli)')
-
--- B) satırlara girilemiyor: yazma denenmez
-fk.noDepth = true
-runProbe(60000)
-check(sim.encoded and sim.encoded.enter == 'enter' and sim.encoded.saved == false and sim.encoded.restored == 'not-needed' and sim.profile[300] == 1,
-    'S15: satırlara girilemezse yazma denenmemeli')
-check(LoeProbe.active == false and sim.pause == false, 'S15: B sonrası her şey kapanmalı')
-fk.noDepth = false
-
--- C) SFX zaten 0: yazma denenmez
-sim.profile[300] = 0
-runProbe(60000)
-check(sim.encoded and sim.encoded.enter == 'true' and sim.encoded.saved == false and sim.encoded.restored == 'not-needed' and sim.profile[300] == 0,
-    'S15: SFX 0 iken yazma denenmemeli')
+local enc = sim.encoded or {}
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and enc.kind == 'map8' and enc.aborted == false
+    and enc.items == 9 and enc.mapped == 7 and enc.leftover == 0,
+    'S15: eşleştirme sonucu (items=' .. tostring(enc.items) .. ', mapped=' .. tostring(enc.mapped) .. ', leftover=' .. tostring(enc.leftover) .. ')')
+local got = {}
+for _, r in ipairs(enc.results or {}) do
+    if #r.ids > 0 then got[r.row] = r.dir .. ':' .. r.ids[1][1] .. ':' .. r.ids[1][2] .. '>' .. r.ids[1][3] end
+end
+local want = { ['4'] = 'right:0:3>0', ['123'] = 'right:750:0>1', ['128'] = 'right:754:50>51', ['8'] = 'right:300:1>2',
+               ['9'] = 'left:301:10>9', ['132'] = 'right:231:5>6', ['29'] = 'right:204:1>2' }
+local bad = {}
+for k, v in pairs(want) do if got[k] ~= v then bad[#bad + 1] = k .. '=' .. tostring(got[k]) end end
+check(#bad == 0 and got['48'] == nil and got['180'] == nil and got['103'] == nil, 'S15: satır eşleşmeleri: ' .. table.concat(bad, ' '))
+local same = true
+for k, v in pairs(START) do if sim.profile[k] ~= v then same = false end end
+check(same, 'S15: eşleştirme sonunda tüm değerler eski haline dönmeli')
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
 print, json.encode = realPrint, realEncode

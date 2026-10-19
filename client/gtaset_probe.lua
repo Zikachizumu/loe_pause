@@ -1,12 +1,11 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v7)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v8: eşleştirme)
 --
--- Bulgular: yazma çalışıyor (kök SET_COLUMN_INPUT_EVENT ve sol/sağ tuşu); GetProfileSetting yalnızca menü kapanınca
--- güncelleniyor; satır kimliği menuUniqueID'den okunuyor. Gizli menü (SuppressFrontendRenderingThisFrame) tuş işlemiyor
--- ama kök SET_INPUT_EVENT ile geziniyor (v5). NUI odağı tuşları engelliyor, NUI örtüsü GTA menüsünün altında kalıyor (v4).
+-- Bulgular: GTA ayar menüsü gizliyken (SuppressFrontendRenderingThisFrame) tuş işlemiyor ama kök scaleform metodları
+-- çalışıyor: SET_INPUT_EVENT (8/9 gezinme, 10/11 değer) ve MENU_SHIFT_DEPTH(±1) (satırlara gir/çık). Değer menü kapanınca
+-- profile yazılıyor (GetProfileSetting); satır kimliği menuUniqueID'den okunuyor; çağrılar arası 50 ms yetiyor (v7).
 --
---   /loe_gtaset : (~25 sn) GTA menüsü hiç görünmeden: Audio'ya in, satırlara gir (MENU_SHIFT_DEPTH), çağrılar arası
---                 güvenli beklemeyi ölç, SFX'i bir adım azalt, çık, kapat, ölç; sonra aynı yolla geri al.
---                 v6: gizli gezinme ve giriş/çıkış çalışıyor; art arda (14 ms) gelen ikinci gezinme yutuluyor.
+--   /loe_gtaset : (~4-5 dk, GTA menüsü hiç görünmez) Controls, Keyboard/Mouse, Audio, Camera, Display satırlarını
+--                 tek tek bir adım değiştirip geri alır; her satırın profil kimliğini ve adım ölçeğini kaydeder.
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -17,7 +16,7 @@ local P = Config.GfxProbe or {}
 if P.enabled ~= true then return end
 
 local PROFILE_MAX = 1200
-local MAX_LOG = 4000
+local MAX_LOG = 6000
 local SETTINGS_MENU = (Config.Native and Config.Native.settings and Config.Native.settings.menu) or 'FE_MENU_VERSION_LANDING_MENU'
 
 
@@ -146,11 +145,6 @@ local function look(tag)
 end
 
 local base = {}
-local function check(tag)
-    local s = snap()
-    add('profile', { tag = tag, diff = diff(base, s) })
-    return s
-end
 
 -- ---------------------------------------------------------------- menü aç / kapat / gezin
 local function closeMenu()
@@ -162,7 +156,7 @@ local function closeMenu()
 end
 
 local function send(extra)
-    local payload = { kind = 'hidden7', log = log }
+    local payload = { kind = 'map8', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -192,10 +186,10 @@ end
 local function begin()
     log, t0 = {}, GetGameTimer()
     LoeProbe.active = true
-    -- Güvenlik: test ne olursa olsun 240 sn sonra ESC yakalama geri gelir
+    -- Güvenlik: test ne olursa olsun 10 dk sonra ESC yakalama geri gelir
     local token = {}
     LoeProbe.token = token
-    SetTimeout(240000, function()
+    SetTimeout(600000, function()
         if LoeProbe.token == token and LoeProbe.active then
             busy = false
             LoeProbe.active = false
@@ -209,33 +203,42 @@ local function finish()
     SetTimeout(1000, function() LoeProbe.active = false; busy = false end)
 end
 
--- ---------------------------------------------------------------- /loe_gtaset (v6)
--- v5: gizliyken tuş işlemiyor ama kök SET_INPUT_EVENT(aşağı) kategori değiştiriyor ve oyun yeni sayfayı yüklüyor.
--- v6: menü BAŞTAN SONA gizli; yalnızca kök metodlar: SET_INPUT_EVENT (8 yukarı, 9 aşağı, 10 sol, 11 sağ) ve
--- MENU_SHIFT_DEPTH(+1 / -1) (fareyle tıklama da bunu kullanır). Audio'da SFX bir adım sola, menü kapanınca ölçülür,
--- sonra aynı yolla geri alınır.
-local DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT = 8, 9, 10, 11
-local SFX_PROFILE = 300   -- v2: Audio satır 0 (kimlik 8) ↔ profil 300
-local STATE_AUDIO = '2'
+-- ---------------------------------------------------------------- /loe_gtaset (v8: satır ↔ profil eşleştirmesi)
+-- v7: gizli akış çalışıyor (kök SET_INPUT_EVENT + MENU_SHIFT_DEPTH), değer menü kapanınca profile yazılıyor,
+-- çağrılar arası 50 ms yetiyor. v8: Controls, Keyboard/Mouse, Audio, Camera, Display kategorilerinde her satırı bir
+-- adım değiştirip menüyü kapatır, profil farkından satırın profil kimliğini ve adım ölçeğini çıkarır, sonra geri alır.
+-- Değişmeyen satır (en uçta ya da profile bağlı değil) ters yönle bir kez daha denenir.
+local DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT = 9, 10, 11
+local GAP = 60
+local MAP_CATS = { ['0'] = true, ['1'] = true, ['3'] = true, ['4'] = true, ['5'] = true }
 
--- Kök gezinme: çağır, menuUniqueID değişene kadar (en çok 700 ms) bekle
+local function uid() return val('menuUniqueID.toString') end
+local function opposite(dir) return dir == DPAD_RIGHT and DPAD_LEFT or DPAD_RIGHT end
+
+-- Kök gezinme: çağır, menuUniqueID değişene kadar (en çok 700 ms) bekle. Yalnızca başarısızlık kaydedilir.
 local function nav(dir, tag)
-    local before = val('menuUniqueID.toString')
+    local before = uid()
     local t = GetGameTimer()
-    sfDo('SET_INPUT_EVENT', { dir })
+    pcall(BeginScaleformMovieMethodOnFrontend, 'SET_INPUT_EVENT')
+    pcall(ScaleformMovieMethodAddParamInt, dir)
+    pcall(EndScaleformMovieMethod)
     local u
     repeat
         Wait(0)
-        u = val('menuUniqueID.toString')
+        u = uid()
     until u ~= before or GetGameTimer() - t > 700
-    add('nav', { tag = tag, dir = dir, from = before, to = u, ms = GetGameTimer() - t })
+    if u == before then add('navFail', { tag = tag, dir = dir, at = before }) end
     return u ~= before
 end
 
-local function depth(dir, tag)
+local function level() return tostring(val('menuLevel.toString')) end
+
+local function depth(dir)
     sfDo('MENU_SHIFT_DEPTH', { dir, false, false })
-    sleep(500)
-    return look(tag)
+    local want = dir > 0 and '2' or '1'
+    local t = GetGameTimer()
+    repeat Wait(0) until level() == want or GetGameTimer() - t > 800
+    return level() == want
 end
 
 local function openHidden()
@@ -252,104 +255,182 @@ local function openHidden()
     return false
 end
 
--- Gizli açılıştan Audio satırlarına gir. Dönüş: true / hata adı
-local function enterAudio(tag)
-    if not openHidden() then return 'open' end
-    look(tag .. '-opened')
-    local found = false
-    for i = 0, 12 do
-        if look(tag .. '-c' .. i).state == STATE_AUDIO then found = true break end
-        nav(DPAD_DOWN, tag .. '-cat')
-        sleep(250)
+-- Önce kapat, SONRA gizlemeyi bırak (menü bir kare bile görünmesin)
+local function shut()
+    closeMenu()
+    hide(false)
+end
+
+-- Açılışta Controls seçili; kategori listesinde aşağı inerek `cat`'e git
+local function gotoCat(cat)
+    for _ = 0, 14 do
+        if uid() == cat then return true end
+        nav(DPAD_DOWN, 'cat')
+        sleep(GAP)
     end
-    if not found then return 'no-audio' end
-    local e = depth(1, tag .. '-enter')
-    if tostring(e.level) ~= '2' then return 'enter' end
+    return uid() == cat
+end
+
+local function gotoRow(row)
+    for _ = 0, 45 do
+        if uid() == row then return true end
+        nav(DPAD_DOWN, 'row')
+        sleep(GAP)
+    end
+    return uid() == row
+end
+
+-- Gizli oturum: aç, kategoriye gir, adımları uygula ({ row, dir }), çık, kapat
+local function session(cat, steps)
+    local ok = openHidden() and gotoCat(cat) and depth(1)
+    if ok then
+        for _, s in ipairs(steps) do
+            if gotoRow(s.row) then
+                sfDo('SET_INPUT_EVENT', { s.dir })
+                sleep(150)
+            else
+                ok = false
+            end
+        end
+        depth(-1)
+    end
+    if not ok then add('sessionFail', { cat = cat, look = look('fail') }) end
+    shut()
+    return ok
+end
+
+-- Menü kapanınca profil güncellenir: en az 600 ms bekle, iki ölçüm aynı olunca (en çok 2 sn) kabul et
+local function settle()
+    local t, prev = GetGameTimer(), nil
+    while true do
+        sleep(300)
+        local s = snap()
+        if prev and #diff(prev, s) == 0 and GetGameTimer() - t >= 600 then return s end
+        if GetGameTimer() - t > 2000 then return s end
+        prev = s
+    end
+end
+
+-- Satır listelerini topla (tek gizli oturum, yalnızca aşağı)
+local function collectRows()
+    phase('rows')
+    local cats = {}
+    if not openHidden() then shut() return cats end
+    local seen = {}
+    for _ = 0, 14 do
+        local c = uid()
+        if seen[c] then break end
+        seen[c] = true
+        if MAP_CATS[c] and depth(1) then
+            local first = uid()
+            local rows = { first }
+            for _ = 1, 45 do
+                if not nav(DPAD_DOWN, 'collect') then break end
+                sleep(GAP)
+                local u = uid()
+                if u == first then break end
+                rows[#rows + 1] = u
+            end
+            depth(-1)
+            cats[#cats + 1] = { cat = c, rows = rows }
+            add('rows', { cat = c, rows = rows })
+        end
+        nav(DPAD_DOWN, 'next-cat')
+        sleep(GAP)
+    end
+    shut()
+    return cats
+end
+
+local cur = {}          -- profil ayarlarının bilinen güncel durumu
+local pending           -- geri alınması gereken son değişiklik: { cat, row, dir, ids = { { id, eski, yeni } } }
+local fails = 0
+
+local function restoredOk(p)
+    for _, x in ipairs(p.ids) do
+        if (cur[x[1]] or 0) ~= x[2] then return false end
+    end
     return true
 end
 
-local function leave(tag)
-    local l = depth(-1, tag .. '-leave')
-    hide(false)
-    closeMenu()
-    return tostring(l.level) == '1'
+local function restoreAlone()
+    local p = pending
+    pending = nil
+    session(p.cat, { { row = p.row, dir = opposite(p.dir) } })
+    cur = settle()
+    add('restore', { cat = p.cat, row = p.row, ok = restoredOk(p) })
+end
+
+-- Satırı `dir` yönünde bir adım değiştir; aynı kategorideki önceki değişikliği aynı oturumda geri al
+local function probeRow(it, dir)
+    local steps, restoring = {}, nil
+    if pending and pending.cat == it.cat then
+        restoring, pending = pending, nil
+        steps[1] = { row = restoring.row, dir = opposite(restoring.dir) }
+    elseif pending then
+        restoreAlone()
+    end
+    steps[#steps + 1] = { row = it.row, dir = dir }
+    local before = cur
+    local ok = session(it.cat, steps)
+    cur = settle()
+    local own = {}
+    if restoring then for _, x in ipairs(restoring.ids) do own[x[1]] = true end end
+    local mine = {}
+    for _, x in ipairs(diff(before, cur)) do
+        if not own[x[1]] then mine[#mine + 1] = x end
+    end
+    if restoring then add('restore', { cat = restoring.cat, row = restoring.row, ok = restoredOk(restoring) }) end
+    fails = ok and 0 or fails + 1
+    return ok, mine
 end
 
 local function run()
     begin()
     base = snap()
+    cur = base
+    pending, fails = nil, 0
     add('profileStart', { list = list(base) })
 
-    -- 1) gir, satırlarda aşağı/yukarı, SFX sola, çık, kapat
-    phase('write')
-    local sfx0 = GetProfileSetting(SFX_PROFILE)
-    local r = enterAudio('w')
-    local res = { enter = r, sfx0 = sfx0 }
-    if r == true then
-        -- v6: aşağıdan hemen sonra (14 ms) gelen yukarı yutuldu → çağrılar arası en kısa güvenli bekleme ölçülür
-        local speeds = {}
-        for _, gap in ipairs({ 50, 100, 150, 250 }) do
-            local ok = 0
-            for _ = 1, 3 do
-                if nav(DPAD_DOWN, 'spd' .. gap) then ok = ok + 1 end
-                sleep(gap)
-            end
-            speeds[#speeds + 1] = { gap = gap, ok = ok }
-        end
-        add('speed', { list = speeds })
-        sleep(250)
-        res.rowUp = nav(DPAD_UP, 'row-up')
-        sleep(250)
-        -- SFX satırına (kimlik 8) yalnızca aşağı yönle, 250 ms aralıkla git (liste başa döner)
-        for _ = 1, 15 do
-            if val('menuUniqueID.toString') == '8' then break end
-            nav(DPAD_DOWN, 'to-sfx')
-            sleep(250)
-        end
-        res.row0 = val('menuUniqueID.toString')
-        res.wrote = sfx0 >= 1 and res.row0 == '8'
-        if res.wrote then
-            sfDo('SET_INPUT_EVENT', { DPAD_LEFT })
-            sleep(700)
-        end
-        res.left = leave('w')
-    else
-        hide(false)
-        closeMenu()
+    local cats = collectRows()
+    local items = {}
+    for _, c in ipairs(cats) do
+        for _, r in ipairs(c.rows) do items[#items + 1] = { cat = c.cat, row = r } end
     end
-    sleep(2000)
-    check('after-write')
-    res.sfx1 = GetProfileSetting(SFX_PROFILE)
-    add('write', res)
+    add('items', { n = #items })
 
-    -- 2) geri al (yalnızca gerçekten değiştiyse)
-    phase('restore')
-    local restored = 'not-needed'
-    if res.wrote == true and res.sfx1 == sfx0 - 1 then
-        sleep(1000)
-        local r2 = enterAudio('r')
-        if r2 == true and val('menuUniqueID.toString') == '8' then
-            sfDo('SET_INPUT_EVENT', { DPAD_RIGHT })
-            sleep(700)
-            leave('r')
-            sleep(2000)
-            restored = GetProfileSetting(SFX_PROFILE) == sfx0 and 'ok' or 'not-saved'
-        else
-            hide(false)
-            closeMenu()
-            restored = 'failed:' .. tostring(r2)
+    phase('map')
+    local results, retry, aborted = {}, {}, false
+    for _, it in ipairs(items) do
+        local ok, mine = probeRow(it, DPAD_RIGHT)
+        results[#results + 1] = { cat = it.cat, row = it.row, dir = 'right', ok = ok, ids = mine }
+        add('map', results[#results])
+        if #mine > 0 then pending = { cat = it.cat, row = it.row, dir = DPAD_RIGHT, ids = mine }
+        elseif ok then retry[#retry + 1] = it end
+        if fails >= 3 then aborted = true break end
+    end
+    if not aborted then
+        phase('map-left')
+        for _, it in ipairs(retry) do
+            local ok, mine = probeRow(it, DPAD_LEFT)
+            results[#results + 1] = { cat = it.cat, row = it.row, dir = 'left', ok = ok, ids = mine }
+            add('map', results[#results])
+            if #mine > 0 then pending = { cat = it.cat, row = it.row, dir = DPAD_LEFT, ids = mine } end
+            if fails >= 3 then aborted = true break end
         end
     end
-    add('restore', { result = restored })
+    if pending then restoreAlone() end
 
     phase('close')
     finish()
     sleep(2500)
-    check('final')
+    local leftover = diff(base, snap())
+    add('profile', { tag = 'final', diff = leftover })
     beep()
-    local saved = res.wrote == true and res.sfx1 == sfx0 - 1
-    say(('Hidden write test: enter=%s, saved=%s, restore=%s'):format(tostring(r), tostring(saved), restored))
-    send({ enter = tostring(r), saved = saved, restored = restored })
+    local mapped = 0
+    for _, r in ipairs(results) do if #r.ids > 0 then mapped = mapped + 1 end end
+    say(('Settings map finished: %d rows, %d mapped, leftover changes: %d%s'):format(#items, mapped, #leftover, aborted and ', ABORTED' or ''))
+    send({ cats = cats, results = results, items = #items, mapped = mapped, leftover = #leftover, aborted = aborted })
 end
 
 -- ---------------------------------------------------------------- komut (sunucu yetkiyi onaylayınca başlar)
