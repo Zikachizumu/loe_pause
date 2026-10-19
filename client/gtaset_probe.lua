@@ -1,12 +1,11 @@
--- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v5)
+-- GEÇİCİ ARAŞTIRMA ARACI — GTA'nın kendi ayarlarını LOE menüsünden yönetme (v6)
 --
 -- Bulgular: yazma çalışıyor (kök SET_COLUMN_INPUT_EVENT ve sol/sağ tuşu); GetProfileSetting yalnızca menü kapanınca
--- güncelleniyor; satır kimliği menuUniqueID'den okunuyor (tuşla gezinince değişir). Baştan gizlenen menü tuş işlemiyor
--- (v3); NUI odağı açıkken tuşlar menüye ulaşmıyor ve NUI örtüsü GTA menüsünün altında kalıyor (v4).
+-- güncelleniyor; satır kimliği menuUniqueID'den okunuyor. Gizli menü (SuppressFrontendRenderingThisFrame) tuş işlemiyor
+-- ama kök SET_INPUT_EVENT ile geziniyor (v5). NUI odağı tuşları engelliyor, NUI örtüsü GTA menüsünün altında kalıyor (v4).
 --
---   /loe_gtaset : (~1,5 dk) GTA menüsü görünür açılır, hazırlanınca gizlenir:
---     1) Gizliyken tuş ve kök SET_INPUT_EVENT menüyü hareket ettiriyor mu?
---     2) Tüm kategorilere girip yalnızca aşağı tuşuyla satır kimliklerini toplar (değer değiştirmez).
+--   /loe_gtaset : (~20 sn) GTA menüsü hiç görünmeden: Audio'ya in, satırlara gir (MENU_SHIFT_DEPTH), SFX'i bir adım
+--                 azalt, çık, kapat, ölç; sonra aynı yolla geri al.
 --
 -- Yalnızca Config.GfxProbe.ace yetkisi olanlar çalıştırabilir (sunucu doğrular). Sonuç sunucuda resource klasörüne
 -- gfxprobe_*.json olarak yazılır. Araştırma bitince bu dosya, server/main.lua'daki karşılığı ve Config.GfxProbe kaldırılır.
@@ -20,9 +19,6 @@ local PROFILE_MAX = 1200
 local MAX_LOG = 4000
 local SETTINGS_MENU = (Config.Native and Config.Native.settings and Config.Native.settings.menu) or 'FE_MENU_VERSION_LANDING_MENU'
 
--- Kontrol kimlikleri (INPUT_FRONTEND_*), girdi grubu 2 (önceki testte menüyü hareket ettiren grup)
-local G = 2
-local C_DOWN, C_ACCEPT, C_BACK = 187, 201, 202
 
 -- Ayar sütunu (columnList.1) `state` değeri kategoriye özel grafiği gösterir (2 = Audio, 5 = Graphics)
 local SET = 'currentPage.columnList.1'
@@ -57,19 +53,6 @@ end
 local function sleep(ms)
     local s = GetGameTimer()
     repeat Wait(0) until GetGameTimer() - s >= ms
-end
-
--- Tuşa basmayı taklit eder: değer 2 kare boyunca 1.0, ardından 2 kare bırakılır (art arda basışlar tek basılı
--- tutma sayılmasın)
-local function press(control)
-    add('press', { control = control })
-    for _ = 1, 2 do
-        local ok, e = pcall(SetControlValueNextFrame, G, control, 1.0)
-        if not ok then add('err', { what = 'press', e = tostring(e) }) end
-        Wait(0)
-    end
-    Wait(0)
-    Wait(0)
 end
 
 -- ---------------------------------------------------------------- profil ayarları (GET_PROFILE_SETTING)
@@ -169,13 +152,6 @@ local function check(tag)
 end
 
 -- ---------------------------------------------------------------- menü aç / kapat / gezin
-local function openSettings()
-    ActivateFrontendMenu(GetHashKey(SETTINGS_MENU), true, -1)
-    local deadline = GetGameTimer() + 3000
-    while not IsPauseMenuActive() and GetGameTimer() < deadline do Wait(0) end
-    return IsPauseMenuActive()
-end
-
 local function closeMenu()
     for _ = 1, 40 do
         if not IsPauseMenuActive() then break end
@@ -185,7 +161,7 @@ local function closeMenu()
 end
 
 local function send(extra)
-    local payload = { kind = 'walk5', log = log }
+    local payload = { kind = 'hidden6', log = log }
     for k, v in pairs(extra or {}) do payload[k] = v end
     local ok, data = pcall(json.encode, payload)
     if not ok or type(data) ~= 'string' then
@@ -232,86 +208,70 @@ local function finish()
     SetTimeout(1000, function() LoeProbe.active = false; busy = false end)
 end
 
--- ---------------------------------------------------------------- /loe_gtaset (v5)
--- v4: NUI odağı açıkken tuşlar GTA menüsüne ulaşmıyor; NUI örtüsü GTA menüsünün ALTINDA kalıyor.
--- v5: menü önce görünür açılıp hazırlanır, SONRA gizlenir → gizliyken (a) tuş, (b) kök SET_INPUT_EVENT çalışıyor mu?
-local KEYMAP_UID = '148'   -- Key Bindings: Enter ayrı tuş atama ekranını açar → girilmez
-local DPAD_DOWN = 9        -- com.rockstargames.ui.game.GamePadConstants.DPADDOWN
+-- ---------------------------------------------------------------- /loe_gtaset (v6)
+-- v5: gizliyken tuş işlemiyor ama kök SET_INPUT_EVENT(aşağı) kategori değiştiriyor ve oyun yeni sayfayı yüklüyor.
+-- v6: menü BAŞTAN SONA gizli; yalnızca kök metodlar: SET_INPUT_EVENT (8 yukarı, 9 aşağı, 10 sol, 11 sağ) ve
+-- MENU_SHIFT_DEPTH(+1 / -1) (fareyle tıklama da bunu kullanır). Audio'da SFX bir adım sola, menü kapanınca ölçülür,
+-- sonra aynı yolla geri alınır.
+local DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT = 8, 9, 10, 11
+local SFX_PROFILE = 300   -- v2: Audio satır 0 (kimlik 8) ↔ profil 300
+local STATE_AUDIO = '2'
 
--- Satır listesinden kategori listesine dön (Geri bazen işlenmiyor → en çok 3 deneme)
-local function backOut(tag)
-    for i = 1, 3 do
-        press(C_BACK)
-        sleep(700)
-        if tostring(look(tag .. i).level) == '1' then return true end
+-- Kök gezinme: çağır, menuUniqueID değişene kadar (en çok 700 ms) bekle
+local function nav(dir, tag)
+    local before = val('menuUniqueID.toString')
+    local t = GetGameTimer()
+    sfDo('SET_INPUT_EVENT', { dir })
+    local u
+    repeat
+        Wait(0)
+        u = val('menuUniqueID.toString')
+    until u ~= before or GetGameTimer() - t > 700
+    add('nav', { tag = tag, dir = dir, from = before, to = u, ms = GetGameTimer() - t })
+    return u ~= before
+end
+
+local function depth(dir, tag)
+    sfDo('MENU_SHIFT_DEPTH', { dir, false, false })
+    sleep(500)
+    return look(tag)
+end
+
+local function openHidden()
+    hide(true)
+    ActivateFrontendMenu(GetHashKey(SETTINGS_MENU), true, -1)
+    local deadline = GetGameTimer() + 6000
+    while GetGameTimer() < deadline do
+        if IsPauseMenuActive() and select(3, sfRead('menuUniqueID.toString')) == 'ok' then
+            sleep(300)
+            return true
+        end
+        Wait(0)
     end
     return false
 end
 
-local function hiddenTest()
-    phase('hidden-test')
-    hide(true)
-    sleep(500)
-    local a = look('h0').uid
-    press(C_DOWN)
-    sleep(800)
-    local b = look('h1').uid
-    sfDo('SET_INPUT_EVENT', { DPAD_DOWN })
-    sleep(800)
-    local c = look('h2').uid
+-- Gizli açılıştan Audio satırlarına gir. Dönüş: true / hata adı
+local function enterAudio(tag)
+    if not openHidden() then return 'open' end
+    look(tag .. '-opened')
+    local found = false
+    for i = 0, 12 do
+        if look(tag .. '-c' .. i).state == STATE_AUDIO then found = true break end
+        nav(DPAD_DOWN, tag .. '-cat')
+        sleep(250)
+    end
+    if not found then return 'no-audio' end
+    local e = depth(1, tag .. '-enter')
+    if tostring(e.level) ~= '2' then return 'enter' end
+    return true
+end
+
+local function leave(tag)
+    local l = depth(-1, tag .. '-leave')
     hide(false)
-    sleep(800)
-    local d = look('h3').uid
-    local res = { input = a ~= b, root = c ~= b, a = a, b = b, c = c, d = d }
-    add('hiddenTest', res)
-    return res
-end
-
--- Tüm kategorilerde satır kimliklerini topla (yalnızca aşağı tuşu; değer değişmez)
-local function walkRows(first)
-    local ids, times = { first }, {}
-    for _ = 1, 40 do
-        local t = GetGameTimer()
-        press(C_DOWN)
-        local u
-        repeat
-            Wait(0)
-            u = val('menuUniqueID.toString')
-        until u ~= ids[#ids] or GetGameTimer() - t > 700
-        times[#times + 1] = GetGameTimer() - t
-        if u == first or u == ids[#ids] then break end   -- başa döndü / ilerlemedi
-        ids[#ids + 1] = u
-    end
-    return ids, times
-end
-
-local function walk()
-    phase('walk')
-    if tostring(look('w0').level) ~= '1' and not backOut('wb') then add('err', { what = 'not-on-categories' }) return 0 end
-    local seen, cats = {}, 0
-    for c = 0, 19 do
-        if not IsPauseMenuActive() then add('err', { what = 'closed', at = c }) break end
-        local cat = look('cat' .. c)
-        if seen[tostring(cat.uid)] then break end
-        seen[tostring(cat.uid)] = true
-        cats = cats + 1
-        local entry = { i = c, uid = cat.uid, state = cat.state, mstate = cat.mstate }
-        if tostring(cat.uid) ~= KEYMAP_UID then
-            press(C_ACCEPT)
-            sleep(800)
-            local e = look('in' .. c)
-            entry.level = e.level
-            if tostring(e.level) == '2' then
-                entry.rows, entry.ms = walkRows(e.uid)
-                entry.back = backOut('out' .. c)
-                if not entry.back then add('cat', entry) add('err', { what = 'stuck-in-rows', at = c }) break end
-            end
-        end
-        add('cat', entry)
-        press(C_DOWN)
-        sleep(700)
-    end
-    return cats
+    closeMenu()
+    return tostring(l.level) == '1'
 end
 
 local function run()
@@ -319,26 +279,58 @@ local function run()
     base = snap()
     add('profileStart', { list = list(base) })
 
-    phase('open')
-    if not openSettings() then
-        say('Could not open the GTA settings menu.')
-        finish()
-        send({ failed = 'open' })
-        return
+    -- 1) gir, satırlarda aşağı/yukarı, SFX sola, çık, kapat
+    phase('write')
+    local sfx0 = GetProfileSetting(SFX_PROFILE)
+    local r = enterAudio('w')
+    local res = { enter = r, sfx0 = sfx0 }
+    if r == true then
+        res.rowDown = nav(DPAD_DOWN, 'row-down')
+        res.rowUp = nav(DPAD_UP, 'row-up')
+        res.row0 = val('menuUniqueID.toString')
+        res.wrote = sfx0 >= 1 and res.row0 == '8'
+        if res.wrote then
+            sfDo('SET_INPUT_EVENT', { DPAD_LEFT })
+            sleep(700)
+        end
+        res.left = leave('w')
+    else
+        hide(false)
+        closeMenu()
     end
-    sleep(2500)
-    local h = hiddenTest()
-    -- Gizliyken tuş çalışıyorsa gezinme de gizli yapılır (gerçek kullanımın provası)
-    if h.input then hide(true) end
-    local cats = walk()
-    hide(false)
+    sleep(2000)
+    check('after-write')
+    res.sfx1 = GetProfileSetting(SFX_PROFILE)
+    add('write', res)
+
+    -- 2) geri al (yalnızca gerçekten değiştiyse)
+    phase('restore')
+    local restored = 'not-needed'
+    if res.wrote == true and res.sfx1 == sfx0 - 1 then
+        sleep(1000)
+        local r2 = enterAudio('r')
+        if r2 == true and val('menuUniqueID.toString') == '8' then
+            sfDo('SET_INPUT_EVENT', { DPAD_RIGHT })
+            sleep(700)
+            leave('r')
+            sleep(2000)
+            restored = GetProfileSetting(SFX_PROFILE) == sfx0 and 'ok' or 'not-saved'
+        else
+            hide(false)
+            closeMenu()
+            restored = 'failed:' .. tostring(r2)
+        end
+    end
+    add('restore', { result = restored })
+
     phase('close')
     finish()
     sleep(2500)
     check('final')
     beep()
-    say(('Settings walk finished: %d categories, hidden input: %s, hidden root call: %s'):format(cats, tostring(h.input), tostring(h.root)))
-    send({ cats = cats, hiddenInput = h.input, hiddenRoot = h.root })
+    local saved = res.wrote == true and res.sfx1 == sfx0 - 1
+    say(('Hidden write test: enter=%s, saved=%s, restore=%s'):format(tostring(r), tostring(saved), restored))
+    send({ enter = tostring(r), saved = saved, restored = restored })
 end
 
 -- ---------------------------------------------------------------- komut (sunucu yetkiyi onaylayınca başlar)
