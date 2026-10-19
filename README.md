@@ -2,9 +2,9 @@
 
 Legends of Empire (LOE) için **Pause Menü + Ayarlar ekranı**. ESC / P ile açılan yerleşik GTA duraklatma menüsünün yerine geçen FiveM NUI menüsü (Qbox, `[loe]` kategorisi).
 
-- Ana menü (konsept: `_work/design/loe_pause_concept`, renk ve tarz `loe_illegalmarket`'ten: koyu mor paneller, pembe vurgu): solda panel menü **CONTINUE · MAP · CHARACTER · INVENTORY · BATTLEPASS · SHOP · SETTINGS · SUPPORT · DISCONNECT**; üstte LOE logosu + `PAUSE MENU`; sağ taraf boştur (karta / bilgi şeridine yer verilmedi); arka plan bulanık, karartılmış oyun görüntüsü
+- Ana menü (konsept: `_work/design/loe_pause_concept`, renk ve tarz `loe_illegalmarket`'ten: koyu mor paneller, pembe vurgu): solda panel menü **CHARACTER · ASSETS · BATTLEPASS · SHOP · SETTINGS · SUPPORT · DISCONNECT** (CONTINUE / MAP / INVENTORY kullanıcı isteğiyle menüden çıkarıldı: ESC zaten menüyü kapatır, M haritayı `loe_hud` açar, envanter kendi tuşuyla açılır; kod duruyor, `Config.Menu`'ye `{ id = 'resume' }`, `{ id = 'map' }` ya da `{ id = 'inventory', resource = 'ox_inventory', export = 'openInventory' }` eklenirse geri gelir); üstte LOE logosu + `PAUSE MENU`; sağ taraf boştur (karta / bilgi şeridine yer verilmedi); arka plan bulanık, karartılmış oyun görüntüsü
 - Ayarlar: 3 bölümlü ekran (kategoriler · alt kategoriler · arama + ayar satırları), klavye + fare, **İngilizce (varsayılan)** / Türkçe (Arayüz Ayarları → Language). Yeni metinler önce İngilizce yazılır (`Config.Defaults['pref.lang']`)
-- Zorunlu bağımlılık yok: `qbx_core`, `pma-voice`, `loe_jobcore`, `ox_inventory`, `loe_hud` ve `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez. 
+- Zorunlu bağımlılık yok: `qbx_core`, `pma-voice`, `loe_jobcore`, `loe_hud` ve `loe_3dmap` yalnızca **varsa** (pcall) kullanılır; `ox_lib` gerekmez. ASSETS sayfası için `oxmysql` (evler) ve `qbx_vehicles` (araçlar) kullanılır; yoksa ilgili kart "Unavailable" der. 
 
 ## Kurulum
 
@@ -88,10 +88,8 @@ Ana ekranın ölçüleri 1672x941'lik konsepttendir (sağdaki kartlar ve üsttek
 
 | Madde | Davranış |
 |---|---|
-| CONTINUE | Menüyü kapatır (ESC ile aynı) |
-| MAP | GTA'nın büyük haritasını açar (menü kapanır; kapanınca `pref.mapReturn` açıksa menüye döner). **M tuşu** bu menüden bağımsızdır: `loe_hud/client/bigmap.lua` (komut `loe_bigmap`) açar; harita açıkken ESC yakalama ona dokunmaz (`exports.loe_hud:IsBigMapOpen`) |
 | CHARACTER | Yerleşik sayfa: **Character** (ad, vatandaş no, meslek / rütbe), **Finance** (nakit, banka), **Health**. Zamanla doldurulacak: yeni kart `renderPage` içindeki `stats` dalına (`app.js`), veri `buildStats` (`client/main.lua`) ile eklenir. Sağlık kartı `loe_jobcreator`'ın `healthState` olayından beslenir (`Config.Health`) |
-| INVENTORY | Menü kapanır, `ox_inventory` çalışıyorsa `exports.ox_inventory:openInventory()` (oyuncunun kendi çantası) çağrılır; çalışmıyorsa "SOON" |
+| ASSETS (VARLIKLAR) | Sayfa kartları: **Homes** (ev / daire / otel odası; sahip olunan ya da süresi dolmamış kiralanan), **Businesses**, **Vehicles** (ad + plaka + durum: garajda / dışarıda / çekildi), **Bunker** (SOON: sistem henüz yok). Menü açılınca sunucu (`loe_pause:server:assets`, 2 sn sınırlı, yalnızca isteyen oyuncunun kendi kayıtları) hesaplar: araçlar `exports.qbx_vehicles:GetPlayerVehicles`, evler `loe_properties` + `loe_hotel_rooms` (etiket `exports.loe_apt:getPropertyInfo`). **Businesses**: loe_jobcore'da **yönetici (boss)** olunan işler (organizasyon adı + rütbe); sunucuda ayrı bir işyeri-sahipliği sistemi yoktur, çalışan olunan işler listelenmez. Veri gelmediyse "Loading…", kaynak yoksa "Unavailable right now." yazar ("hiç yok" denmez). En çok 50 kayıt. `oxmysql` gerekir |
 | BATTLEPASS / SHOP | `loe_battlepass` / `loe_shop` resource'u çalışıyorsa menüyü kapatıp `Open` export'unu çağırır; çalışmıyorsa **SOON** etiketli görünür ve tıklayınca "Coming soon" sayfası açılır (resource başlarsa etiket kendiliğinden **NEW**'e döner). |
 | SETTINGS | Ayar ekranı: ana menü solda kalır, yanında **OPTIONS** sütunu (GTA ayar kategorileri + Appearance / Menu behaviour arayüz tercihleri), sağda ayar paneli (`SETTINGS // GRAPHICS`). Satır türleri: `‹ değer ›` seçici, `OFF \| ON` anahtar, `‹ ▬▬ ›` kaydırıcı, tuş etiketi. OPTIONS'ın son maddesi **GTA SETTINGS**: Enter doğrudan GTA'nın ayar ekranını açar. **RESTORE DEFAULTS** yalnızca o sayfayı varsayılana döndürür; **APPLY CHANGES** GTA ayarlarını uygular (aşağıya bak). Arama kutusu `/`. **ESC = bir adım geri** (satırlar → OPTIONS → ana liste → menüyü kapatır) |
 | SUPPORT | `Config.Links` içindeki `discord` adresi doluysa onu açar; boşsa "SOON" sayfası |

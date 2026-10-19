@@ -34,9 +34,14 @@ const STR = {
     tr: {
         // Ana menü etiketleri [kalın kısım, ince kısım]; başlıkta ve maddelerde boşluksuz birleşik yazılır (tasarım gereği)
         pm_title: ['DURAKLATMA', 'MENÜSÜ'],
-        menu_resume: ['DEVAM', 'ET'], menu_map: ['HARİTA', ''], menu_stats: ['KARAKTER', ''], menu_inventory: ['ENVANTER', ''],
+        menu_resume: ['DEVAM', 'ET'], menu_map: ['HARİTA', ''], menu_stats: ['KARAKTER', ''], menu_assets: ['VARLIKLAR', ''], menu_inventory: ['ENVANTER', ''],
         menu_battlepass: ['BATTLEPASS', ''], menu_shop: ['SHOP', ''], menu_settings: ['AYARLAR', ''], menu_support: ['DESTEK', ''], menu_quit: ['AYRIL', ''],
         new_pill: 'Yeni',
+        assets_title: 'Varlıklar', as_homes: 'Evler', as_businesses: 'İşyerleri', as_vehicles: 'Araçlar', as_bunker: 'Bunker',
+        as_loading: 'Yükleniyor…', as_unavailable: 'Şu an alınamıyor.', as_none_homes: 'Sahip olduğun ya da kiraladığın bir yer yok.',
+        as_none_biz: 'Yönettiğin bir işyeri yok.', as_none_veh: 'Sahip olduğun bir araç yok.', as_bunker_text: 'Bunker sistemi çok yakında.',
+        as_kind_house: 'Ev', as_kind_apartment: 'Daire', as_kind_hotel: 'Otel odası', as_kind_other: 'Mülk', as_rented: 'Kiracı',
+        as_garaged: 'Garajda', as_out: 'Dışarıda', as_impounded: 'Çekildi',
         opts_title: 'SEÇENEKLER', search_title: 'Arama', restore: ['SAYFAYI', 'SIFIRLA'], restore_title: 'Varsayılana dön?',
         restore_text: 'Bu sayfadaki ayarlar varsayılan değerlerine döner. Diğer sayfalar etkilenmez.', restore_yes: 'Evet, sıfırla',
         msg_restored: 'Varsayılanlar geri yüklendi',
@@ -61,9 +66,14 @@ const STR = {
     },
     en: {
         pm_title: ['PAUSE', 'MENU'],
-        menu_resume: ['CONTINUE', ''], menu_map: ['MAP', ''], menu_stats: ['CHARACTER', ''], menu_inventory: ['INVENTORY', ''],
+        menu_resume: ['CONTINUE', ''], menu_map: ['MAP', ''], menu_stats: ['CHARACTER', ''], menu_assets: ['ASSETS', ''], menu_inventory: ['INVENTORY', ''],
         menu_battlepass: ['BATTLEPASS', ''], menu_shop: ['SHOP', ''], menu_settings: ['SETTINGS', ''], menu_support: ['SUPPORT', ''], menu_quit: ['DISCONNECT', ''],
         new_pill: 'New',
+        assets_title: 'Assets', as_homes: 'Homes', as_businesses: 'Businesses', as_vehicles: 'Vehicles', as_bunker: 'Bunker',
+        as_loading: 'Loading…', as_unavailable: 'Unavailable right now.', as_none_homes: 'You do not own or rent any property.',
+        as_none_biz: 'You do not run any business.', as_none_veh: 'You do not own any vehicle.', as_bunker_text: 'Bunkers are coming soon.',
+        as_kind_house: 'House', as_kind_apartment: 'Apartment', as_kind_hotel: 'Hotel room', as_kind_other: 'Property', as_rented: 'Rented',
+        as_garaged: 'Garaged', as_out: 'Out', as_impounded: 'Impounded',
         opts_title: 'OPTIONS', search_title: 'Search', restore: ['RESTORE', 'DEFAULTS'], restore_title: 'Restore defaults?',
         restore_text: 'The settings on this page return to their defaults. Other pages are not affected.', restore_yes: 'Yes, restore',
         msg_restored: 'Defaults restored',
@@ -88,9 +98,9 @@ const STR = {
     },
 };
 
-const DEFAULT_MENU = ['resume', 'map', 'stats', 'inventory', 'battlepass', 'shop', 'settings', 'support', 'quit']
+const DEFAULT_MENU = ['stats', 'assets', 'battlepass', 'shop', 'settings', 'support', 'quit']
     .map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop', new: id === 'battlepass' || id === 'shop' }));
-const MENU_ICONS = { resume: 'play', map: 'map', stats: 'user', inventory: 'bag', battlepass: 'star', shop: 'cart', settings: 'gear', support: 'help', quit: 'exit' };
+const MENU_ICONS = { resume: 'play', map: 'map', stats: 'user', assets: 'home', inventory: 'bag', battlepass: 'star', shop: 'cart', settings: 'gear', support: 'help', quit: 'exit' };
 const LINK_ICONS = { youtube: 'youtube', store: 'globe', discord: 'discord' };
 // Yalnızca bu ana makineden gelen (Lua yapılandırmasından) https adresleri açılır; arayüzden adres alınmaz.
 const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
@@ -98,7 +108,7 @@ const SAFE_URL = /^https:\/\/[^\s"'<>]+$/i;
 /* ============================================================ DURUM */
 const S = {
     open: false, lang: 'en',
-    allSchema: [], schema: [], scope: 'settings', links: [], gta: true, bg: { mode: 'game' }, subSent: false,
+    allSchema: [], schema: [], scope: 'settings', links: [], assets: null, gta: true, bg: { mode: 'game' }, subSent: false,
     values: {}, keys: {}, caps: {}, menu: DEFAULT_MENU, stats: null, health: { known: false, conditions: [] },
     screen: 'main', page: null,
     mainIdx: 0, cat: 0, grp: 0, row: 0, zone: 'cats', query: '', entries: [],
@@ -249,6 +259,10 @@ const activateMenu = async (id) => {
     const res = await post('menu', { id });
     if (!res || !res.ok) return;
     if (res.page === 'stats') showPage('stats', id);
+    else if (res.page === 'assets') {
+        S.assets = { biz: Array.isArray(res.businesses) ? res.businesses : [], homes: null, vehicles: null };
+        showPage('assets', id);
+    }
     else if (res.page === 'soon') showPage('soon', id);
 };
 
@@ -285,6 +299,30 @@ const healthRows = () => {
     });
 };
 
+/* ASSETS sayfası: evler, işyerleri, araçlar + bunker (yakında). Veriler gerçek kayıtlardır; gelmediyse "yükleniyor", alınamadıysa "alınamıyor" yazar. */
+const aChip = (text, cls) => h('span', { class: 'a-chip' + (cls ? ' ' + cls : '') }, text);
+const kindText = (k) => t(['house', 'apartment', 'hotel'].includes(k) ? 'as_kind_' + k : 'as_kind_other');
+const vehState = (s) => (s === 1 ? aChip(t('as_garaged'), 'ok') : (s === 0 ? aChip(t('as_out'), 'warn') : (s === 2 ? aChip(t('as_impounded'), 'warn') : null)));
+
+const assetCard = (icon, title, list, build, empty, wide) => h('div', { class: 'cardx' + (wide ? ' wide' : '') },
+    h('h4', {}, ico(icon), title, Array.isArray(list) ? h('span', { class: 'a-count' }, String(list.length)) : null),
+    list === null ? h('p', { class: 'health-note' }, t('as_loading'))
+        : (list === false ? h('p', { class: 'health-note' }, t('as_unavailable'))
+            : (list.length ? list.map(build) : h('p', { class: 'health-note' }, empty))));
+
+const renderAssets = (body) => {
+    const a = S.assets || { biz: [], homes: null, vehicles: null };
+    body.replaceChildren(h('div', { class: 'cards' },
+        assetCard('home', t('as_homes'), a.homes, (x) => h('div', { class: 'a-row' }, h('b', {}, x.label),
+            h('div', { class: 'a-tags' }, aChip(kindText(x.kind)), x.rented ? aChip(t('as_rented'), 'dim') : null)), t('as_none_homes')),
+        assetCard('bag', t('as_businesses'), a.biz, (x) => h('div', { class: 'a-row' }, h('b', {}, x.name),
+            h('div', { class: 'a-tags' }, x.role ? aChip(x.role, 'dim') : null)), t('as_none_biz')),
+        assetCard('car', t('as_vehicles'), a.vehicles, (v) => h('div', { class: 'a-row' },
+            h('div', {}, h('b', {}, v.name), v.garage ? h('small', {}, v.garage) : null),
+            h('div', { class: 'a-tags' }, v.plate ? h('span', { class: 'a-plate' }, v.plate) : null, vehState(v.state))), t('as_none_veh'), true),
+        h('div', { class: 'cardx' }, h('h4', {}, ico('pass'), t('as_bunker'), aChip(t('soon_pill'), 'dim')), h('p', { class: 'health-note' }, t('as_bunker_text')))));
+};
+
 const renderPage = () => {
     if (!S.page) return;
     const body = $('#pageBody');
@@ -298,6 +336,9 @@ const renderPage = () => {
             h('div', { class: 'cardx' }, h('h4', {}, ico('wallet'), t('st_finance')),
                 kv(t('st_cash'), fmtMoney(st.cash)), kv(t('st_bank'), fmtMoney(st.bank))),
             h('div', { class: 'cardx' }, h('h4', {}, ico('heart'), t('st_health')), ...healthRows())));
+    } else if (S.page.kind === 'assets') {
+        $('#pTitle').textContent = t('assets_title');
+        renderAssets(body);
     } else {
         $('#pTitle').textContent = lblText(S.page.id);
         body.replaceChildren(h('div', { class: 'soon' }, h('span', { class: 'big' }, ico('clock')), h('h3', {}, t('soon_title')), h('p', {}, t('soon_text'))));
@@ -963,6 +1004,13 @@ window.addEventListener('message', (ev) => {
         if (S.screen === 'settings') refreshSettings(false);
     }
     else if (d.action === 'gtaDone') onGtaDone(d);
+    else if (d.action === 'assets') {
+        // null → henüz gelmedi; false → sunucu bu veriyi veremedi ("alınamıyor"); dizi → liste
+        const a = S.assets || (S.assets = { biz: [], homes: null, vehicles: null });
+        a.homes = Array.isArray(d.homes) ? d.homes : false;
+        a.vehicles = Array.isArray(d.vehicles) ? d.vehicles : false;
+        if (S.screen === 'page' && S.page && S.page.kind === 'assets') renderPage();
+    }
     else if (d.action === 'health') {
         S.health = d.health || { known: false, conditions: [] };
         if (S.screen === 'page' && S.page && S.page.kind === 'stats') renderPage();
