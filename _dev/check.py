@@ -699,9 +699,9 @@ sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
 sim.frames(2000)
 check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
 
--- sahte oyun: kategoriler (aşağı = sonraki, sonda başa döner), Enter satırlara girer, Geri çıkar.
--- menuUniqueID: satırlardayken satır kimliği, değilse kategori kimliği. Audio satır 1'de sol → profil 301 bir azalır.
--- blockFocus: NUI odağı açıkken tuşlar işlemez; dead: tuşlar hiç işlemez.
+-- sahte oyun: kategoriler (aşağı = sonraki, sonda başa döner), Enter satırlara girer, Geri çıkar (backFail: her çıkışta ilk
+-- Geri yutulur). menuUniqueID: satırlardayken satır kimliği, değilse kategori kimliği. hiddenBlocks: gizliyken tuş işlemez.
+-- Kök SET_INPUT_EVENT(9) aşağı gezinir (gizliyken de).
 local CATS = {
     { uid = '0', state = '1', rows = { '20', '21', '22' } },
     { uid = '1', state = '0', rows = { '30', '31' } },
@@ -710,12 +710,18 @@ local CATS = {
     { uid = '4', state = '0', rows = { '40' } },
     { uid = '6', state = '5', rows = { '103', '104', '105' } },
 }
-local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, lastPress = {}, keymap = false }
-sim.profile[301] = 1
+local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, lastPress = {}, keymap = false, suppressAt = -1000, suppressN = 0, backEaten = false }
 local realActivate = ActivateFrontendMenu
 ActivateFrontendMenu = function(...) fk.cat, fk.row, fk.focus = 1, 0, false; return realActivate(...) end
+SuppressFrontendRenderingThisFrame = function() fk.suppressAt = sim.now; fk.suppressN = fk.suppressN + 1 end
+local function isHidden() return sim.now - fk.suppressAt <= 32 end
+local function down()
+    local c = CATS[fk.cat]
+    if fk.focus then fk.row = (fk.row + 1) % #c.rows else fk.cat = fk.cat % #CATS + 1 end
+end
 BeginScaleformMovieMethodOnFrontend = function(path) fk.cur = { p = path, a = {} }; return 1 end
 ScaleformMovieMethodAddParamInt = function(v) fk.cur.a[#fk.cur.a + 1] = v end
+EndScaleformMovieMethod = function() if fk.cur.p == 'SET_INPUT_EVENT' and fk.cur.a[1] == 9 and sim.pause then down() end end
 EndScaleformMovieMethodReturnValue = function()
     fk.hn = fk.hn + 1
     local p, c, r = fk.cur.p, CATS[fk.cat], nil
@@ -730,75 +736,73 @@ IsScaleformMovieMethodReturnValueReady = function(h) return fk.hv[h] ~= nil end
 GetScaleformMovieMethodReturnValueString = function(h) return fk.hv[h] end
 GetScaleformMovieMethodReturnValueInt = function(h) return tonumber(fk.hv[h]) or 0 end
 SetControlValueNextFrame = function(g, ctl)
-    if g ~= 2 or not sim.pause or fk.dead or (fk.blockFocus and sim.nuiFocus) then return end
+    if g ~= 2 or not sim.pause or (fk.hiddenBlocks and isHidden()) then return end
     if sim.now - (fk.lastPress[ctl] or -1000) <= 40 then fk.lastPress[ctl] = sim.now return end   -- basılı tutma tek basış
     fk.lastPress[ctl] = sim.now
     local c = CATS[fk.cat]
-    if ctl == 187 then
-        if fk.focus then fk.row = (fk.row + 1) % #c.rows else fk.cat = fk.cat % #CATS + 1 end
+    if ctl == 187 then down()
     elseif ctl == 201 then
-        if c.uid == '148' then fk.keymap = true else fk.focus, fk.row = true, 0 end
-    elseif ctl == 202 then fk.focus = false
-    elseif ctl == 189 and fk.focus and c.uid == '3' and fk.row == 1 then sim.profile[301] = math.max(0, sim.profile[301] - 1) end
-end
-local function covers()
-    local out = {}
-    for _, m in ipairs(sim.msgs) do if m.action == 'cover' then out[#out + 1] = m.on and 'on' or 'off' end end
-    return table.concat(out, ',')
+        if c.uid == '148' then fk.keymap = true else fk.focus, fk.row, fk.backEaten = true, 0, false end
+    elseif ctl == 202 then
+        if fk.backFail and not fk.backEaten then fk.backEaten = true else fk.focus = false end
+    end
 end
 local function runProbe(ms)
-    sim.msgs, sim.latent, sim.encoded = {}, nil, nil
+    sim.latent, sim.encoded = nil, nil
     sim.frames(3000)
     sim.commands['loe_gtaset']()
     sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
     sim.frames(ms)
 end
+local function collect()
+    local cats, final, ht, hiddenWalk = {}, nil, nil, nil
+    for _, e in ipairs((sim.encoded or {}).log or {}) do
+        if e.k == 'cat' then cats[e.uid] = e end
+        if e.k == 'profile' and e.tag == 'final' then final = e.diff end
+        if e.k == 'hiddenTest' then ht = e end
+    end
+    return cats, final, ht
+end
 
--- A) NUI odağı açıkken tuşlar çalışıyor: Music geri alınır, tüm kategoriler gezilir
-sim.msgs, sim.latent, sim.encoded = {}, nil, nil
+-- A) gizliyken tuş da kök çağrı da çalışıyor; Geri her çıkışta bir kez yutuluyor → tekrar denenir; gezinme gizli yapılır
+fk.backFail = true
+sim.latent, sim.encoded = nil, nil
 sim.commands['loe_gtaset']()
 sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
 sim.frames(5000)
-check(LoeProbe.active == true and sim.pause == true and isOpen() == false and sim.nuiFocus == true and covers() == 'on',
-    'S15: test GTA menüsünü örtü altında, NUI odağı açıkken açmalı')
+check(LoeProbe.active == true and sim.pause == true and isOpen() == false, 'S15: test GTA ayar menüsünü açmalı')
 sim.escFrame = true; sim.step(16); sim.frames(500)
 check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
+local supBefore = fk.suppressN
 sim.frames(200000)
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false and sim.nuiFocus == false and covers() == 'on,off',
-    'S15: test bitince menü kapanmalı, örtü ve NUI odağı kalkmalı (' .. covers() .. ')')
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'walk4'
-    and sim.encoded.fix == 'fixed' and sim.encoded.cats == 6 and sim.encoded.inputOk == true,
-    'S15: sonuç gönderilmeli (fix=' .. tostring(sim.encoded and sim.encoded.fix) .. ', cats=' .. tostring(sim.encoded and sim.encoded.cats) .. ')')
-local cats, final, ic = {}, nil, nil
-for _, e in ipairs((sim.encoded or {}).log or {}) do
-    if e.k == 'cat' then cats[e.uid] = e end
-    if e.k == 'profile' and e.tag == 'final' then final = e.diff end
-    if e.k == 'inputCheck' then ic = e end
-end
-check(ic and ic.ok == true and ic.focus == true, 'S15: NUI odağı açıkken giriş denetimi geçmeli')
-check(sim.profile[301] == 0 and final and #final == 1 and final[1][1] == 301 and final[1][2] == 1 and final[1][3] == 0, 'S15: Music farkı geri alınmalı, başka değer değişmemeli')
-check(cats['3'] and table.concat(cats['3'].rows or {}, ',') == '8,9,10', 'S15: Audio satır kimlikleri toplanmalı')
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
+local sup = fk.suppressN
+sim.frames(1000)
+check(fk.suppressN == sup and sup - supBefore > 1000, 'S15: gezinme gizli yapılmalı, test bitince gizleme durmalı')
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'walk5'
+    and sim.encoded.cats == 6 and sim.encoded.hiddenInput == true and sim.encoded.hiddenRoot == true,
+    'S15: sonuç gönderilmeli (cats=' .. tostring(sim.encoded and sim.encoded.cats) .. ')')
+local cats, final, ht = collect()
+check(ht and ht.input == true and ht.root == true, 'S15: gizli tuş ve kök çağrı denetimi kaydedilmeli')
+check(final and #final == 0, 'S15: hiçbir profil değeri değişmemeli')
+check(cats['3'] and table.concat(cats['3'].rows or {}, ',') == '8,9,10' and cats['3'].back == true, 'S15: Audio satır kimlikleri toplanmalı, Geri tekrarla çıkılmalı')
 check(cats['6'] and table.concat(cats['6'].rows or {}, ',') == '103,104,105' and cats['0'] and #cats['0'].rows == 3, 'S15: diğer kategorilerin satırları toplanmalı')
 check(cats['148'] and cats['148'].rows == nil and fk.keymap == false, 'S15: Key Bindings kategorisine girilmemeli')
 
--- B) NUI odağı tuşları engelliyor: odak kapatılıp devam edilir; Music zaten 0 → düzeltme atlanır
-fk.blockFocus = true
+-- B) gizliyken tuş işlemiyor: gezinme görünür yapılır, kök çağrı sonucu ayrıca kaydedilir
+fk.backFail, fk.hiddenBlocks = false, true
+local supB = fk.suppressN
 runProbe(200000)
-ic = nil
-for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'inputCheck' then ic = e end end
-check(ic and ic.ok == true and ic.focus == false and sim.encoded.fix == 'skip' and sim.encoded.cats == 6 and sim.profile[301] == 0,
-    'S15: odak tuşları engellerse odak kapatılıp gezinme sürmeli')
-check(LoeProbe.active == false and sim.pause == false and sim.nuiFocus == false and covers() == 'on,off', 'S15: B sonrası her şey kapanmalı')
-
--- C) tuşlar hiç çalışmıyor: hiçbir şey denenmez, her şey kapanır
-fk.blockFocus, fk.dead = false, true
-runProbe(60000)
-check(sim.encoded and sim.encoded.inputOk == false and sim.encoded.cats == 0 and sim.encoded.fix == 'not-run', 'S15: tuşlar çalışmazsa gezinme denenmemeli')
-check(LoeProbe.active == false and sim.pause == false and sim.nuiFocus == false and covers() == 'on,off', 'S15: C sonrası her şey kapanmalı')
-fk.dead = false
+cats, final, ht = collect()
+check(sim.encoded and sim.encoded.hiddenInput == false and sim.encoded.hiddenRoot == true and sim.encoded.cats == 6,
+    'S15: gizliyken tuş çalışmazsa gezinme görünür sürmeli')
+check(fk.suppressN - supB < 200, 'S15: gizli tuş çalışmazsa gezinme gizlenmemeli')
+check(LoeProbe.active == false and sim.pause == false, 'S15: B sonrası her şey kapanmalı')
+fk.hiddenBlocks = false
 ActivateFrontendMenu = realActivate
+SuppressFrontendRenderingThisFrame = nil
 print, json.encode = realPrint, realEncode
-BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt = nil, nil
+BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethod = nil, nil, nil
 EndScaleformMovieMethodReturnValue, IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString = nil, nil, nil
 GetScaleformMovieMethodReturnValueInt, SetControlValueNextFrame = nil, nil
 return R
