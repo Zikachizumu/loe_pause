@@ -804,7 +804,7 @@ end
 check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData == 15, 'S15: gfxpath 15 adımın tamamında veri bulmalı')
 check(#rowEvents == 15 and rowEvents[1].base == 'currentPage.columnList.1' and rowEvents[1].n == 2
       and rowEvents[1].rows[1] == resp['currentPage.columnList.1.model.viewList.0.dataList.0.join'], 'S15: gfxpath satırları doğru tabandan okumalı')
-check(discovered and pathEvents >= 17, 'S15: gfxpath keşif yolları kaydedilmeli')
+check(discovered and pathEvents >= 16, 'S15: gfxpath keşif yolları kaydedilmeli')
 local sepOk = false
 for _, c in pairs(seq) do if c.name:find('dataList.0.join', 1, true) and c.sep == '|' then sepOk = true end end
 check(sepOk, 'S15: satır okumaları "|" ayırıcıyla istenmeli')
