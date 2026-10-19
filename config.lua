@@ -49,19 +49,7 @@ Config.Menu = {
     { id = 'quit' },
 }
 
--- Üst şeritteki "Sunucu" adı ve karşılama kartı metni.
-Config.ServerName = 'LOE RP'
-
--- Ana ekrandaki sağ kartlar için isteğe bağlı veri kaynakları. Resource çalışıyorsa export çağrılır, dönen tablo kartta gösterilir;
--- çalışmıyorsa kart "coming soon" gösterir (uydurma veri gösterilmez).
---   level      → { level = 24, xp = 128, xpMax = 2500 }     (karşılama kartındaki SEVİYE / XP çubuğu)
---   battlepass → { season = 3, level = 32, maxLevel = 100 } (Battlepass kartı)
-Config.Cards = {
-    -- level      = { resource = 'loe_levels',     export = 'GetLevel' },
-    battlepass = { resource = 'loe_battlepass', export = 'GetProgress' },
-}
-
--- Sağ üstteki bağlantılar (videodaki YOUTUBE / STORE / DISCORD). Yalnızca url'si https:// ile başlayan dolu girdiler gösterilir.
+-- Sağ alttaki bağlantılar (videodaki YOUTUBE / STORE / DISCORD). Yalnızca url'si https:// ile başlayan dolu girdiler gösterilir.
 -- Adresi boş bırakılan bağlantı hiç görünmez. Tıklayınca oyuncunun tarayıcısında açılır.
 Config.Links = {
     { id = 'youtube', label = 'YouTube', url = '' },
