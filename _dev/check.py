@@ -792,7 +792,7 @@ sim.frames(800)
 sim.commands['loe_gfxpath']()
 check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: gfxpath önce sunucudan yetki istemeli')
 sim.fire('loe_pause:client:gfxprobeGo', 'path', true)
-sim.frames(90000)
+sim.frames(160000)
 local rowEvents, pathEvents, discovered = {}, 0, false
 for _, e in ipairs((sim.encoded or {}).log or {}) do
     if e.k == 'rows' then rowEvents[#rowEvents + 1] = e end
@@ -801,8 +801,8 @@ for _, e in ipairs((sim.encoded or {}).log or {}) do
         if e.p == 'currentPage.dbgID.toString' and e.s == 'PAUSE_MENU_PAGES_SETTINGS' then discovered = true end
     end
 end
-check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData == 15, 'S15: gfxpath 15 adımın tamamında veri bulmalı')
-check(#rowEvents == 15 and rowEvents[1].base == 'currentPage.columnList.1' and rowEvents[1].n == 2
+check(sim.encoded and sim.encoded.kind == 'path' and sim.encoded.stepsWithData == 13, 'S15: gfxpath 13 adımın tamamında veri bulmalı')
+check(#rowEvents == 26 and rowEvents[1].base == 'currentPage.columnList.1' and rowEvents[1].n == 2 and rowEvents[1].v and #rowEvents[1].v == 14
       and rowEvents[1].rows[1] == resp['currentPage.columnList.1.model.viewList.0.dataList.0.join'], 'S15: gfxpath satırları doğru tabandan okumalı')
 check(discovered and pathEvents >= 16, 'S15: gfxpath keşif yolları kaydedilmeli')
 local sepOk = false

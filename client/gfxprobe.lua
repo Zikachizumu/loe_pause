@@ -573,6 +573,48 @@ local function readRows(base)
     return rows
 end
 
+-- Yolun hangi parçasında takıldığını bulmak için varyantlar (her biri ayrı ayrı denenir)
+local SET = 'currentPage.columnList.1.model'
+local PATH_VARIANTS = {
+    SET .. '.viewList.length.toString',
+    SET .. '.viewList.0.toString',
+    SET .. '.viewList.0.viewIndex.toString',
+    SET .. '.viewList.0.dataList.length.toString',
+    SET .. '.viewList.0.dataList.toString',
+    SET .. '.viewList.0.itemList.length.toString',
+    SET .. '.viewList.0.dataList.0.toString',
+    SET .. '.viewList[0].dataList.join',
+    SET .. '.dataList.length.toString',
+    SET .. '.getCurrentSelection',
+    'currentPage.column2.model.viewList.0.dataList.join',
+    'currentPage.columnList.1.state.toString',
+    'currentPage.columnList.0.model.viewList.0.dataList.length.toString',
+    'currentPage.columnList.0.model.viewList.0.dataList.0.toString',
+}
+
+local C_ACCEPT, C_CANCEL = 201, 202
+
+local function readState(tag, step, variants)
+    local d = { tag = tag, step = step }
+    if variants then
+        d.v = {}
+        for _, p in ipairs(PATH_VARIANTS) do
+            local str, int, st = sfRead(p, nil)
+            d.v[#d.v + 1] = { p = p, s = str, i = int, st = st }
+        end
+    end
+    local base = findBase(PATH_BASES[2])
+    d.base = base
+    d.rows = base and readRows(base) or {}
+    d.n = #d.rows
+    local _, s0 = sfRead('GET_COLUMN_SELECTION', nil, { 0 })
+    local _, s1 = sfRead('GET_COLUMN_SELECTION', nil, { 1 })
+    d.sel0, d.sel1 = s0, s1
+    d.active = IsPauseMenuActive()
+    add('rows', d)
+    return #d.rows > 0
+end
+
 local function runPath()
     begin()
     info('start')
@@ -592,24 +634,24 @@ local function runPath()
         add('path', { p = p, s = str, i = int, st = st })
     end
 
+    -- Her kategori: vurgula (önizleme) → Enter ile gir → oku → Geri. Yalnızca gezinme; hiçbir değer değişmez.
     phase('walk')
-    local base
-    local okRows = 0
-    for step = 0, 14 do
-        if step > 0 then press(2, C_DOWN); sleep(900) end
-        base = findBase(base or PATH_BASES[2])
-        local rows = base and readRows(base) or {}
-        local cats = (base ~= PATH_BASES[1]) and readRows(PATH_BASES[1]) or {}
-        local _, sel0 = sfRead('GET_COLUMN_SELECTION', nil, { 0 })
-        local _, sel1 = sfRead('GET_COLUMN_SELECTION', nil, { 1 })
-        if #rows > 0 then okRows = okRows + 1 end
-        add('rows', { step = step, base = base, n = #rows, rows = rows, cats = cats, sel0 = sel0, sel1 = sel1 })
+    local okSteps = 0
+    for step = 0, 12 do
+        if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed' }) break end
+        if step > 0 then press(2, C_DOWN); sleep(700) end
+        local hl = readState('hl', step, step <= 1)
+        press(2, C_ACCEPT); sleep(900)
+        local inside = readState('in', step, step <= 1)
+        if hl or inside then okSteps = okSteps + 1 end
+        if not IsPauseMenuActive() then add('walkStop', { step = step, reason = 'menu closed after accept' }) break end
+        press(2, C_CANCEL); sleep(700)
     end
     info('end')
     phase('end')
     finish()
-    say(('Path test finished. Steps with data: %d / 15'):format(okRows))
-    send('path', { stepsWithData = okRows })
+    say(('Path test finished. Steps with data: %d / 13'):format(okSteps))
+    send('path', { stepsWithData = okSteps })
 end
 
 -- ---------------------------------------------------------------- komutlar (sunucu yetkiyi onaylayınca başlar)
