@@ -34,7 +34,7 @@
     const defaults = { 'pref.accent': 'pink', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'en', 'pref.mapReturn': true };
     const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
                    'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:loe_hud_photomode': 't_F11', 'm:aractuslari': 't_F7', 'm:loecik': 't_F6', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
-    const menu = ['resume', 'map', 'stats', 'inventory', 'battlepass', 'shop', 'settings', 'support', 'quit']
+    const menu = ['stats', 'assets', 'battlepass', 'shop', 'settings', 'support', 'quit']
         .map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop', new: id === 'battlepass' || id === 'shop' }));
     const stats = { id: 2487, name: 'Mark Smith', cid: 'LOE48213', job: 'LSPD', grade: 'Lieutenant', cash: 12480, bank: 245730 };
     // ?links=0 → bağlantı yok (adresler boş) ; varsayılan: üç örnek bağlantı
@@ -97,7 +97,14 @@
             return { ok: true };
         },
         native: (b) => { console.log('[mock] native menu →', b.target); return { ok: true }; },
-        menu: (b) => ({ ok: true, page: b.id === 'stats' ? 'stats' : (b.id === 'settings' ? 'settings' : (['battlepass', 'shop'].includes(b.id) ? 'soon' : undefined)) }),
+        menu: (b) => {
+            if (b.id === 'assets') {
+                setTimeout(() => send({ action: 'assets', homes: params.get('homes') === '0' ? [] : [{ label: 'South Apartments 3-2', kind: 'apartment', rented: false }, { label: 'Grove Street House', kind: 'house', rented: true }, { label: 'Pillbox Hotel #12', kind: 'hotel', rented: true }],
+                    vehicles: [{ name: 'Sultan RS', plate: 'LOE 482', state: 1, garage: 'Legion Square' }, { name: 'Bati 801', plate: 'KX19 TTR', state: 0 }, { name: 'Kuruma', plate: '77AB031', state: 2, garage: 'Impound Lot' }] }), 400);
+                return { ok: true, page: 'assets', businesses: [{ name: 'LS Customs', role: 'Owner' }] };
+            }
+            return { ok: true, page: b.id === 'stats' ? 'stats' : (b.id === 'settings' ? 'settings' : (['battlepass', 'shop'].includes(b.id) ? 'soon' : undefined)) };
+        },
         quit: (b) => { console.log('[mock] quit', b.mode); return { ok: true }; },
         sub: (b) => { console.log('[mock] sub', b.on); return { ok: true }; },
         restore: (b) => { console.log('[mock] restore', b.ids.join(',')); b.ids.forEach(id => { if (id in defaults) values[id] = defaults[id]; }); return { ok: true, values: { ...values } }; },

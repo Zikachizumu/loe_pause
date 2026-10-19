@@ -93,6 +93,28 @@ local function buildMenu()
     return out
 end
 
+--- ASSETS: yönetici (boss) olunan işyerleri. loe_jobcore'daki işler istemci önbelleğinden okunur; yalnızca isBoss olanlar
+--- listelenir (çalışan olunan iş bir varlık değildir).
+local MAX_ASSETS = 50
+
+local function buildBusinesses()
+    local out = {}
+    local res = (Config.JobSystem or {}).resource
+    if not resourceStarted(res) then return out end
+    local ok, jobs = callExport(res, 'GetPlayerJobs')
+    if not ok or type(jobs) ~= 'table' then return out end
+    for _, j in pairs(jobs) do
+        if type(j) == 'table' and j.isBoss == true and #out < MAX_ASSETS then
+            out[#out + 1] = {
+                name = tostring(j.organizationLabel or j.label or j.name or ''):sub(1, 60),
+                role = tostring(j.gradeLabel or ''):sub(1, 40),
+            }
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
 --- Sağ üst bağlantılar: yalnızca https:// ile başlayan, boşluk/tırnak içermeyen adresler NUI'ye gider (en çok 4).
 local function buildLinks()
     local out = {}
@@ -244,6 +266,38 @@ local function refreshHealth()
     lastHealthHello = now
     TriggerServerEvent(HEALTH.helloEvent or 'loe_jobcreator:server:healthHello')
 end
+
+-- ASSETS sayfası (sunucu hesaplar): yalnızca menü açıksa arayüze iletilir. Yalnızca beklenen alanlar ve türler geçer;
+-- araç adı oyuncunun GTA dilinde istemcide çözülür.
+RegisterNetEvent('loe_pause:client:assets', function(s)
+    if not isOpen or type(s) ~= 'table' then return end
+    local out = {}
+    if type(s.vehicles) == 'table' then
+        out.vehicles = {}
+        for _, v in ipairs(s.vehicles) do
+            if #out.vehicles >= MAX_ASSETS then break end
+            if type(v) == 'table' and type(v.model) == 'string' and v.model ~= '' then
+                local label = GetLabelText(GetDisplayNameFromVehicleModel(GetHashKey(v.model)))
+                out.vehicles[#out.vehicles + 1] = {
+                    name   = (type(label) == 'string' and label ~= 'NULL' and label ~= '') and label or v.model,
+                    plate  = tostring(v.plate or ''):sub(1, 8),
+                    state  = tonumber(v.state),
+                    garage = type(v.garage) == 'string' and v.garage:sub(1, 40) or nil,
+                }
+            end
+        end
+    end
+    if type(s.homes) == 'table' then
+        out.homes = {}
+        for _, p in ipairs(s.homes) do
+            if #out.homes >= MAX_ASSETS then break end
+            if type(p) == 'table' and type(p.label) == 'string' then
+                out.homes[#out.homes + 1] = { label = p.label:sub(1, 60), kind = tostring(p.kind or ''):sub(1, 16), rented = p.rented == true }
+            end
+        end
+    end
+    SendNUIMessage({ action = 'assets', homes = out.homes, vehicles = out.vehicles })
+end)
 
 -- ================================================================ AÇ / KAPAT
 local function restoreRadar()
@@ -553,6 +607,9 @@ RegisterNUICallback('menu', function(d, cb)
     if id == 'map' then
         cb({ ok = true })
         CreateThread(openMap)
+    elseif id == 'assets' then
+        cb({ ok = true, page = 'assets', businesses = buildBusinesses() })
+        TriggerServerEvent('loe_pause:server:assets')
     elseif id == 'stats' or id == 'battlepass' or id == 'shop' or id == 'inventory' then
         if item.resource and resourceStarted(item.resource) and item.export then
             cb({ ok = true })

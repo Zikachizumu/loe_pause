@@ -164,10 +164,9 @@ menu_ids = lua_to_py(lua.eval('(function() local t = {} for i, m in ipairs(Confi
 menu_ids = list(menu_ids.values()) if isinstance(menu_ids, dict) else list(menu_ids)
 for mid in menu_ids:
     check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
-check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
-check(all(x in menu_ids for x in ('resume', 'map', 'stats', 'inventory', 'battlepass', 'shop', 'settings', 'support', 'quit')) and 'position' not in menu_ids,
-      'Config.Menu: ana maddeler eksik ya da KONUM MODU hâlâ listede')
-check(lua.eval("(function() for _, m in ipairs(Config.Menu) do if m.id == 'map' then return m.enabled ~= false end end end)()") is True, 'Config.Menu: MAP menüde görünmeli (konsept)')
+check(menu_ids[-1] == 'quit', 'Config.Menu: DISCONNECT (quit) son olmalı')
+check(menu_ids == ['stats', 'assets', 'battlepass', 'shop', 'settings', 'support', 'quit'], f'Config.Menu: madde sırası beklenenden farklı: {menu_ids}')
+check(not any(x in menu_ids for x in ('resume', 'map', 'inventory', 'position')), 'Config.Menu: CONTINUE / MAP / INVENTORY / KONUM MODU listede olmamalı')
 check(lua.eval('Config.MapCommand') != 'loe_bigmap' and lua.eval('Config.MapKey') == '', 'Config: loe_hud ile aynı komut adı / M tuşu çakışmamalı (M tuşu loe_hud/bigmap.lua içinde)')
 # İngilizce varsayılan: arayüz metinlerinde TR/EN anahtar seti aynı olmalı, İngilizce metinlerde Türkçe harf olmamalı
 def str_keys(block):
@@ -293,6 +292,7 @@ function SetTimeout(ms, fn) sim.at(ms, fn) end
 function GetProfileSetting(id) return S.profile[id] or 0 end
 function TriggerLatentServerEvent(name, bps, data) S.latent = { name = name, data = data } end
 function GetLabelText(id) return 'T_' .. id end
+function GetDisplayNameFromVehicleModel(h) return 'DN' end
 
 LocalPlayer = { state = { isLoggedIn = true } }
 json = { encode = function() return '{}' end, decode = function() return {} end }
@@ -374,7 +374,10 @@ local isOpen = function() return sim.exported.IsOpen() end
 sim.frames(100)
 sim.nui('ready')
 check(isOpen() == false, 'başlangıçta menü kapalı olmalı')
-local function setMapItem(on) for _, it in ipairs(Config.Menu) do if it.id == 'map' then it.enabled = on end end end
+local function setMapItem(on)
+    for i = #Config.Menu, 1, -1 do if Config.Menu[i].id == 'map' then table.remove(Config.Menu, i) end end
+    if on then table.insert(Config.Menu, 1, { id = 'map' }) end
+end
 setMapItem(true)   -- S1b..S3b: menüden harita akışı (varsayılan kapalı; açılırsa hâlâ çalışmalı)
 
 -- S1: ESC → yerleşik menü söndürülür, LOE menüsü açılır
@@ -602,7 +605,7 @@ sim.pause = true; sim.frames(64)
 check(next(sim.lastOpen().caps) == nil, 'S10: oyuncu çıkınca yetki silinmeli')
 sim.exported.Close(); sim.frames(700)
 
-setMapItem(true)    -- varsayılan: MAP menüde görünür (M tuşu ayrıca loe_hud'da)
+setMapItem(false)   -- varsayılan: MAP menüde yok (M tuşu loe_hud'da)
 
 -- S14: Game/UI Settings alt ekranı — ESC menüyü KAPATMAZ (arayüz bir adım geri döner); "Restore defaults" yalnızca şemadaki id'leri sıfırlar
 sim.frames(700)
@@ -707,7 +710,7 @@ check(isOpen() == true and op.stats.id == 7 and op.stats.name == 'Mark Smith' an
     and op.stats.grade == 'Lieutenant' and op.stats.cash == 0 and op.stats.bank == 27640295, 'S12: oyuncu kartı verisi (kimlik/ad/meslek/para) iletilmeli')
 local ids, soons = {}, {}
 for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soons[#soons + 1] = m.id end end
-check(table.concat(ids, ',') == 'resume,map,stats,inventory,battlepass,shop,settings,support,quit', 'S12: ana menü sırası (konsept; DISCONNECT son): ' .. table.concat(ids, ','))
+check(table.concat(ids, ',') == 'stats,assets,battlepass,shop,settings,support,quit', 'S12: ana menü sırası (DISCONNECT son): ' .. table.concat(ids, ','))
 check(sim.nui('menu', { id = 'position' }).ok == false, 'S12: KONUM MODU kaldırıldı, menu callback reddetmeli')
 check(table.concat(soons, ',') == 'battlepass,shop', 'S12: resource çalışmayan Battlepass/Shop "yakında" olarak işaretlenmeli: ' .. table.concat(soons, ','))
 check(sim.nui('menu', { id = 'battlepass' }).page == 'soon', 'S12: resource yokken Battlepass "yakında" sayfası döndürmeli')
@@ -715,11 +718,13 @@ check(sim.nui('menu', { id = 'stats' }).page == 'stats', 'S12: CHARACTER STATS y
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 -- S12c: envanter maddesi: menü kapanır, ox_inventory export'u çağrılır
 local invCalls = 0
+table.insert(Config.Menu, { id = 'inventory', resource = 'ox_inventory', export = 'openInventory' })   -- varsayılan menüde yok; istenirse eklenebilir
 rawset(exports, 'ox_inventory', { openInventory = function() invCalls = invCalls + 1 end })
 check(sim.nui('menu', { id = 'inventory' }).ok == true, 'S12c: envanter maddesi kabul edilmeli')
 sim.frames(600)
 check(invCalls == 1 and isOpen() == false, 'S12c: menü kapanmalı ve ox_inventory açılmalı (çağrı=' .. invCalls .. ')')
 rawset(exports, 'ox_inventory', nil)
+for i = #Config.Menu, 1, -1 do if Config.Menu[i].id == 'inventory' then table.remove(Config.Menu, i) end end
 -- S12e: loe_hud büyük haritası (M) açıkken LOE menüsü yerleşik menüyü ele geçirmez; harita kapanınca ESC yine LOE menüsünü açar
 sim.started.loe_hud = true
 rawset(exports, 'loe_hud', { IsBigMapOpen = function() return true end })
@@ -729,6 +734,37 @@ rawset(exports, 'loe_hud', { IsBigMapOpen = function() return false end })
 sim.frames(700)
 check(isOpen() == true, 'S12e: büyük harita kapanınca yerleşik menü yeniden LOE menüsüne çevrilmeli')
 rawset(exports, 'loe_hud', nil); sim.started.loe_hud = nil
+-- S12f: ASSETS maddesi: işyerleri jobcore'daki yönetici rollerinden, evler / araçlar sunucudan; yalnızca beklenen alanlar geçer
+sim.exported.Close(); sim.frames(700)
+sim.started.loe_jobcore = true
+local jcJobs = { lspd = { label = 'LSPD', gradeLabel = 'Lieutenant', isBoss = false },
+                 shop = { label = 'Shop', organizationLabel = 'LS Customs', gradeLabel = 'Owner', isBoss = true } }
+rawset(exports, 'loe_jobcore', { GetPlayerJobs = function() return jcJobs end })
+sim.pause = true; sim.frames(64)
+local nAssets = sim.count(sim.serverEvents, 'loe_pause:server:assets')
+local ra = sim.nui('menu', { id = 'assets' })
+check(ra.ok == true and ra.page == 'assets' and #ra.businesses == 1 and ra.businesses[1].name == 'LS Customs' and ra.businesses[1].role == 'Owner',
+    'S12f: ASSETS sayfası açılmalı; işyerleri yalnızca yönetici olunan işlerden gelmeli')
+check(sim.count(sim.serverEvents, 'loe_pause:server:assets') == nAssets + 1, 'S12f: sunucudan ev / araç listesi istenmeli')
+sim.msgs = {}
+sim.fire('loe_pause:client:assets', { vehicles = { { model = 'sultan', plate = 'ABC123456', state = 1, garage = 'Legion', evil = 'x' }, { model = '' }, 'bad' },
+                                       homes = { { label = 'Apt 1', kind = 'apartment', rented = true }, { label = 5 } } })
+local am; for _, m in ipairs(sim.msgs) do if m.action == 'assets' then am = m end end
+check(am and #am.vehicles == 1 and am.vehicles[1].plate == 'ABC12345' and am.vehicles[1].state == 1 and am.vehicles[1].evil == nil and am.vehicles[1].name == 'T_DN',
+    'S12f: araçlar süzülmeli (geçersizler atılır, plaka 8 karakter, GTA dilinde ad, fazladan alan yok)')
+check(am and #am.homes == 1 and am.homes[1].kind == 'apartment' and am.homes[1].rented == true, 'S12f: evler süzülmeli')
+sim.msgs = {}
+sim.fire('loe_pause:client:assets', { homes = {} })
+local am2; for _, m in ipairs(sim.msgs) do if m.action == 'assets' then am2 = m end end
+check(am2 and am2.vehicles == nil and #am2.homes == 0, 'S12f: araç verisi gelmediyse alan gönderilmemeli (arayüz "alınamıyor" der)')
+jcJobs.shop.isBoss = false
+check(#sim.nui('menu', { id = 'assets' }).businesses == 0, 'S12f: yönetici olunan iş yoksa işyeri listesi boş olmalı')
+rawset(exports, 'loe_jobcore', nil); sim.started.loe_jobcore = nil
+sim.exported.Close(); sim.frames(700)
+sim.msgs = {}
+sim.fire('loe_pause:client:assets', { homes = {} })
+check(#sim.msgs == 0, 'S12f: menü kapalıyken gelen assets verisi arayüze iletilmemeli')
+sim.pause = true; sim.frames(64)
 -- S12b: meslek / rütbe loe_jobcore'dan okunur (qbx_core job'u "unemployed / Freelancer" kalır)
 local jc = { ready = true, state = { primaryJob = 'lspd', onDuty = false, jobs = { lspd = { name = 'lspd', label = 'LSPD', gradeLabel = 'Lieutenant' } } } }
 rawset(exports, 'qbx_core', { GetPlayerData = function() return {
@@ -1018,6 +1054,47 @@ check(list(lua_to_py(sv.eval('sent[#sent].list'))) == ['admin'], 'sunucu: admin 
 check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
 sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
+
+# ASSETS: yalnızca isteyen oyuncunun kendi kayıtları; kaynak yoksa alan gönderilmez
+sv.execute(r'''
+players = { [11] = { PlayerData = { citizenid = 'CID11' } } }
+vehList = { { modelName = 'sultan', props = { plate = 'ABC123' }, state = 1, garage = 'Legion' }, { modelName = 'bati', props = {}, state = 0 } }
+exports = {
+    qbx_core = { GetPlayer = function(_, s) return players[s] end },
+    qbx_vehicles = { GetPlayerVehicles = function(_, f) vehFilter = f; return vehList end },
+    loe_apt = { getPropertyInfo = function(_, ptype, id) return { label = 'Label of ' .. id } end },
+}
+queries = {}
+dbRows = { loe_properties = { { ptype = 'apartment', identifier = 'apt_south:3:2', owner = 'CID11' }, { ptype = 'house', identifier = 'house_grove_1', owner = 'OTHER' } },
+           loe_hotel_rooms = 'ERR' }
+MySQL = { query = { await = function(q, p)
+    queries[#queries + 1] = { q = q, p = p }
+    for name, v in pairs(dbRows) do
+        if q:find(name, 1, true) then
+            if v == 'ERR' then error('no such table') end
+            return v
+        end
+    end
+end } }
+''')
+ASSETS = sv.eval('''function(src, adv)
+    source = src; now = now + (adv or 0)
+    handlers['loe_pause:server:assets']()
+    return #sent
+end''')
+n1 = int(sv.eval('#sent'))
+check(ASSETS(11, 5000) == n1 + 1, 'sunucu: assets isteği yanıtlanmalı')
+check(lua_to_py(sv.eval('sent[#sent]'))['n'] == 'loe_pause:client:assets' and int(sv.eval('sent[#sent].t')) == 11, 'sunucu: assets yalnızca isteyen oyuncuya gitmeli')
+check(sv.eval('vehFilter.citizenid') == 'CID11', 'sunucu: araçlar yalnızca isteyen oyuncunun citizenid değeriyle sorgulanmalı')
+check(int(sv.eval('#sent[#sent].list.vehicles')) == 2 and sv.eval('sent[#sent].list.vehicles[1].plate') == 'ABC123' and sv.eval('sent[#sent].list.vehicles[1].model') == 'sultan', 'sunucu: araç listesi doğru olmalı')
+check(int(sv.eval('#sent[#sent].list.homes')) == 2 and sv.eval('sent[#sent].list.homes[1].label') == 'Label of apt_south:3:2' and sv.eval('sent[#sent].list.homes[1].rented') is False and sv.eval('sent[#sent].list.homes[2].rented') is True,
+      'sunucu: evler etiketiyle gelmeli; başkasına ait olan kiracı sayılır (otel tablosu yoksa yok sayılır)')
+check(sv.eval("(function() for _, q in ipairs(queries) do if q.p[1] ~= 'CID11' then return false end end return #queries > 0 end)()") is True, 'sunucu: sorgular yalnızca isteyen oyuncunun citizenid değeriyle çalışmalı')
+check(ASSETS(11, 100) == n1 + 1, 'sunucu: assets istekleri 2 sn sınırlanmalı')
+check(ASSETS(99, 5000) == n1 + 1, 'sunucu: karakteri olmayan oyuncuya yanıt gitmemeli')
+sv.execute("exports.qbx_vehicles = nil; dbRows.loe_properties = nil")
+ASSETS(11, 5000)
+check(sv.eval('sent[#sent].list.vehicles') is None and sv.eval('sent[#sent].list.homes') is None, 'sunucu: kaynaklar yoksa alanlar gönderilmemeli')
 
 # ------------------------------------------------------------------ 6) GEÇİCİ: scaleform araçları
 print('[6] Scaleform araçları (_dev/gfx)')

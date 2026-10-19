@@ -384,3 +384,15 @@ html.portrait .cards { grid-template-columns: minmax(0, 1fr); }
 #app[data-theme="dark"] .cardx { background: rgba(27, 19, 32, .7); border-color: rgba(var(--accent-rgb), .22); }
 #app[data-theme="dark"] .icon-btn { border-color: rgba(var(--accent-rgb), .3); }
 
+/* ASSETS sayfası */
+.cardx h4 .a-count { margin-left: auto; padding: .12rem .55rem; border-radius: 99px; font-size: .68rem; letter-spacing: 0; color: var(--txt); background: rgba(var(--accent-rgb), .2); border: 1px solid rgba(var(--accent-rgb), .45); }
+.a-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-top: 1px solid var(--line); font-size: .9rem; }
+.a-row:first-of-type { border-top: 0; padding-top: 0; }
+.a-row b { font-weight: 700; }
+.a-row small { display: block; margin-top: .15rem; font-size: .72rem; color: var(--dim); }
+.a-tags { display: flex; align-items: center; gap: .5rem; flex: none; }
+.a-plate { padding: .16rem .55rem; border-radius: .3rem; font-size: .72rem; font-weight: 700; letter-spacing: .08em; color: var(--txt); border: 1px solid var(--line-strong); background: var(--card); }
+.a-chip { padding: .24rem .6rem; border-radius: 99px; font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #fff; background: rgba(var(--accent-rgb), .22); border: 1px solid rgba(var(--accent-rgb), .6); white-space: nowrap; }
+.a-chip.dim { color: var(--mut); background: var(--card); border-color: var(--line-strong); }
+.a-chip.ok { color: #34d399; background: rgba(52, 211, 153, .12); border-color: rgba(52, 211, 153, .5); }
+.a-chip.warn { color: #fbbf24; background: rgba(251, 191, 36, .12); border-color: rgba(251, 191, 36, .5); }

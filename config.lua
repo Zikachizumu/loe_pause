@@ -33,15 +33,14 @@ Config.Hijack = {
 
 -- ================================================================ ANA MENÜ
 -- Sıra = ekrandaki sıra; 'quit' (DISCONNECT) listenin son satırıdır. enabled = false → gizlenir.
--- Yerleşik maddeler: resume (CONTINUE) / map / stats (CHARACTER) / inventory / settings (Game + UI ayarları) / support / quit.
+-- Menüdeki maddeler: stats (CHARACTER) / assets (ASSETS: evler, işyerleri, araçlar, bunker) / settings (Game + UI ayarları) / support / quit.
+-- İstenirse resume (CONTINUE), map ve inventory de eklenebilir (kod duruyor; ESC zaten menüyü kapatır, M haritayı loe_hud açar).
 -- soon = true → "SOON" etiketli, tıklanınca bilgi sayfası açar. new = true → "NEW" etiketi.
 -- resource + export: o resource çalışıyorsa menü kapanır ve export çağrılır; çalışmıyorsa madde otomatik "SOON" görünür
 -- (battlepass / shop henüz yok). support: Config.Links içindeki `discord` adresini açar; adres boşsa "SOON".
 Config.Menu = {
-    { id = 'resume' },
-    { id = 'map' },                           -- GTA'nın büyük haritası (M tuşu ayrıca loe_hud/client/bigmap.lua'dadır)
     { id = 'stats' },                         -- CHARACTER: yerleşik karakter / para / sağlık sayfası (zamanla doldurulacak)
-    { id = 'inventory',  resource = 'ox_inventory', export = 'openInventory' },
+    { id = 'assets' },                        -- ASSETS: oyuncunun evleri, işyerleri, araçları; bunker (yakında)
     { id = 'battlepass', resource = 'loe_battlepass', export = 'Open', new = true },
     { id = 'shop',       resource = 'loe_shop',       export = 'Open', new = true },
     { id = 'settings' },
