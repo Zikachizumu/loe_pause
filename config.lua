@@ -33,17 +33,32 @@ Config.Hijack = {
 
 -- ================================================================ ANA MENÜ
 -- Sıra = ekrandaki sıra; 'quit' (DISCONNECT) listenin son satırıdır. enabled = false → gizlenir.
--- resume / map / game (Oyun Ayarları) / ui (Arayüz Ayarları) / quit yerleşiktir. soon = true → "Yakında" etiketli, tıklanınca bilgi sayfası açar.
--- battlepass / shop: resource çalışıyorsa export'u açar; çalışmıyorsa otomatik "Yakında" etiketli görünür.
+-- Yerleşik maddeler: resume (CONTINUE) / map / stats (CHARACTER) / inventory / settings (Game + UI ayarları) / support / quit.
+-- soon = true → "SOON" etiketli, tıklanınca bilgi sayfası açar. new = true → "NEW" etiketi.
+-- resource + export: o resource çalışıyorsa menü kapanır ve export çağrılır; çalışmıyorsa madde otomatik "SOON" görünür
+-- (battlepass / shop henüz yok). support: Config.Links içindeki `discord` adresini açar; adres boşsa "SOON".
 Config.Menu = {
     { id = 'resume' },
-    { id = 'map',        enabled = false },   -- büyük harita yalnızca M tuşuyla açılır (Config.MapKey); true → menüde de görünür
-    { id = 'game' },
-    { id = 'ui' },
-    { id = 'stats' },                         -- CHARACTER STATS: yerleşik karakter / para / sağlık sayfası (zamanla doldurulacak)
-    { id = 'battlepass', resource = 'loe_battlepass', export = 'Open' },
-    { id = 'shop',       resource = 'loe_shop',       export = 'Open' },
+    { id = 'map' },                           -- GTA'nın büyük haritası (M tuşu ayrıca loe_hud/client/bigmap.lua'dadır)
+    { id = 'stats' },                         -- CHARACTER: yerleşik karakter / para / sağlık sayfası (zamanla doldurulacak)
+    { id = 'inventory',  resource = 'ox_inventory', export = 'openInventory' },
+    { id = 'battlepass', resource = 'loe_battlepass', export = 'Open', new = true },
+    { id = 'shop',       resource = 'loe_shop',       export = 'Open', new = true },
+    { id = 'settings' },
+    { id = 'support' },
     { id = 'quit' },
+}
+
+-- Üst şeritteki "Sunucu" adı ve karşılama kartı metni.
+Config.ServerName = 'LOE RP'
+
+-- Ana ekrandaki sağ kartlar için isteğe bağlı veri kaynakları. Resource çalışıyorsa export çağrılır, dönen tablo kartta gösterilir;
+-- çalışmıyorsa kart "coming soon" gösterir (uydurma veri gösterilmez).
+--   level      → { level = 24, xp = 128, xpMax = 2500 }     (karşılama kartındaki SEVİYE / XP çubuğu)
+--   battlepass → { season = 3, level = 32, maxLevel = 100 } (Battlepass kartı)
+Config.Cards = {
+    -- level      = { resource = 'loe_levels',     export = 'GetLevel' },
+    battlepass = { resource = 'loe_battlepass', export = 'GetProgress' },
 }
 
 -- Sağ üstteki bağlantılar (videodaki YOUTUBE / STORE / DISCORD). Yalnızca url'si https:// ile başlayan dolu girdiler gösterilir.
@@ -57,10 +72,10 @@ Config.Links = {
 -- Harita: loe_3dmap varsa onu açar, yoksa yerleşik GTA haritasına düşer.
 Config.MapResource = { resource = 'loe_3dmap', open = 'Open', isOpen = 'IsOpen' }
 
--- Büyük harita tuşu: bu tuşa basınca (menü açılmadan) doğrudan büyük harita açılır; harita açıkken aynı tuş ya da ESC kapatır.
--- Oyuncu tuşu FiveM tuş atamalarından değiştirebilir. Boş bırakırsan tuş kaydedilmez (komut yine çalışır).
-Config.MapCommand = 'loe_bigmap'
-Config.MapKey     = 'M'
+-- Büyük harita TUŞU (M) loe_hud/client/bigmap.lua'dadır (komut `loe_bigmap`): bu menüden bağımsız ve sabittir.
+-- Burada yalnızca menüdeki MAP maddesinin kendi komutu vardır; aynı komut adı iki resource'ta olmasın diye farklıdır ve tuş atanmaz.
+Config.MapCommand = 'loe_pause_map'
+Config.MapKey     = ''
 
 -- Oyuncu kartındaki ve İstatistik sayfasındaki meslek / rütbe: meslekleri loe_jobcore yönetir (qbx_core'daki PlayerData.job hep
 -- "unemployed / Freelancer" kalır). Menü yalnızca onun istemci export'unu okur (GetPlayerState); resource çalışmıyorsa qbx_core'a düşer.
@@ -102,7 +117,7 @@ Config.Features = {
 -- Görünüm tercihleri oyuncu bazında KVP'de saklanır; buradaki değerler yalnızca başlangıç değeridir.
 Config.Defaults = {
     ['pref.lang']      = 'en',        -- 'en' | 'tr' (menü varsayılan olarak İngilizce; oyuncu Arayüz Ayarları'ndan değiştirebilir)
-    ['pref.accent']    = 'crimson',   -- crimson | white | magenta | purple | blue | green | orange | red
+    ['pref.accent']    = 'pink',      -- pink | crimson | white | magenta | purple | blue | green | orange | red
     ['pref.dark']      = true,
     ['pref.portrait']  = false,
     ['pref.mapReturn'] = false,       -- true: harita / yerleşik menü kapanınca LOE menüsüne animasyonla dön (false: doğrudan oyuna)

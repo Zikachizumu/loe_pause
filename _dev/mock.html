@@ -28,14 +28,15 @@
         'aim.mode': 'game', 'cam.foot': 'game', 'cam.vehicle': 'game', 'cam.cinematic': true,
         'disp.radar': true, 'disp.reticle': true, 'disp.gps': true, 'audio.vehradio': true, 'gfx.lod': 1.0,
         'voice.radio': 60, 'voice.call': 60, 'voice.clicks': true, 'voice.click_on': 10, 'voice.click_off': 3,
-        'pref.accent': params.get('accent') || 'crimson', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
+        'pref.accent': params.get('accent') || 'pink', 'pref.dark': params.get('dark') !== '0', 'pref.portrait': params.get('portrait') === '1',
         'pref.lang': params.get('lang') || 'en', 'pref.mapReturn': true, 'menu.native': false,
     };
-    const defaults = { 'pref.accent': 'crimson', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'en', 'pref.mapReturn': true };
+    const defaults = { 'pref.accent': 'pink', 'pref.dark': true, 'pref.portrait': false, 'pref.lang': 'en', 'pref.mapReturn': true };
     const keys = { 'c:51': 't_E', 'c:32': 't_W', 'c:33': 't_S', 'c:34': 't_A', 'c:35': 't_D', 'c:21': 't_LSHIFT', 'c:22': 't_SPACE', 'c:24': 'b_100', 'c:25': 'b_101',
                    'c:14': 'b_116', 'm:3dmap': 't_M', 'm:imlec': 't_GRAVE', 'm:loe_hud_photomode': 't_F11', 'm:aractuslari': 't_F7', 'm:loecik': 't_F6', 'm:+inv': 't_TAB', 'm:+reloadweapon': 't_R', 'c:249': 't_N', 'c:245': 't_T' };
-    const menu = ['resume', 'game', 'ui', 'stats', 'battlepass', 'shop', 'quit'].map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop' }));
-    const stats = { id: 2, name: 'Mark Smith', cid: 'LOE48213', job: 'LSPD', grade: 'Lieutenant', cash: 0, bank: 27640295 };
+    const menu = ['resume', 'map', 'stats', 'inventory', 'battlepass', 'shop', 'settings', 'support', 'quit']
+        .map(id => ({ id, available: true, soon: id === 'battlepass' || id === 'shop', new: id === 'battlepass' || id === 'shop' }));
+    const stats = { id: 2487, name: 'Mark Smith', cid: 'LOE48213', job: 'LSPD', grade: 'Lieutenant', cash: 12480, bank: 245730 };
     // ?links=0 → bağlantı yok (adresler boş) ; varsayılan: üç örnek bağlantı
     const links = params.get('links') === '0' ? [] : [{ id: 'youtube', label: 'YouTube', url: 'https://example.com/yt' }, { id: 'store', label: 'Store', url: 'https://example.com/store' }, { id: 'discord', label: 'Discord', url: 'https://example.com/dc' }];
     // ?health=none → hastalık yok, ?health=quiet → ilaç etkisinde, varsayılan: aktif grip + sargılı kurşun yarası
@@ -65,7 +66,11 @@
 
     const send = (d) => window.postMessage(d, '*');
     const caps = params.get('admin') === '1' ? { admin: true } : {};   // ?admin=1 → "Yönetici paneli" satırı görünür
-    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps, gta: { ...gta }, gtaLabels });
+    const cards = params.get('cards') === '1' ? { level: { level: 24, xp: 128, xpMax: 2500 }, battlepass: { season: 3, level: 32, maxLevel: 100 } } : {};
+    const open = (anim) => {
+        send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps, gta: { ...gta }, gtaLabels, server: 'LOE RP', cards });
+        setTimeout(() => send({ action: 'summary', homes: params.get('homes') === '1' ? 1 : 0, vehicles: 2 }), 300);   // sunucu sayımı sonradan gelir
+    };
 
     const handlers = {
         ready: () => { setTimeout(() => { send({ action: 'init', schema, links, gta: true, bg: { mode: 'image', image: '/_dev/mock_bg.jpg' } }); open(); }, 50); return { ok: true }; },

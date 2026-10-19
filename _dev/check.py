@@ -165,9 +165,10 @@ menu_ids = list(menu_ids.values()) if isinstance(menu_ids, dict) else list(menu_
 for mid in menu_ids:
     check(len(re.findall(rf"menu_{mid}: \[", app_js)) == 2, f"app.js: menu_{mid} için TR ve EN etiket çifti olmalı")
 check(menu_ids[0] == 'resume' and menu_ids[-1] == 'quit', 'Config.Menu: RESUME ilk, DISCONNECT (quit) son olmalı')
-check(all(x in menu_ids for x in ('resume', 'game', 'ui', 'stats', 'battlepass', 'shop', 'quit')) and 'position' not in menu_ids,
+check(all(x in menu_ids for x in ('resume', 'map', 'stats', 'inventory', 'battlepass', 'shop', 'settings', 'support', 'quit')) and 'position' not in menu_ids,
       'Config.Menu: ana maddeler eksik ya da KONUM MODU hâlâ listede')
-check(lua.eval("(function() for _, m in ipairs(Config.Menu) do if m.id == 'map' then return m.enabled end end end)()") is False, 'Config.Menu: MAP varsayılan kapalı olmalı (harita yalnızca M)')
+check(lua.eval("(function() for _, m in ipairs(Config.Menu) do if m.id == 'map' then return m.enabled ~= false end end end)()") is True, 'Config.Menu: MAP menüde görünmeli (konsept)')
+check(lua.eval('Config.MapCommand') != 'loe_bigmap' and lua.eval('Config.MapKey') == '', 'Config: loe_hud ile aynı komut adı / M tuşu çakışmamalı (M tuşu loe_hud/bigmap.lua içinde)')
 # İngilizce varsayılan: arayüz metinlerinde TR/EN anahtar seti aynı olmalı, İngilizce metinlerde Türkçe harf olmamalı
 def str_keys(block):
     body = re.search(rf"\n    {block}: \{{(.*?)\n    \}},", app_js, re.S).group(1)
@@ -192,7 +193,6 @@ for name in ('Shortcuts', 'KeyMappings'):
 check(lua.eval("Config.Defaults['pref.lang']") == 'en', "Config.Defaults['pref.lang'] 'en' olmalı (menü İngilizce varsayılan)")
 check('lang="en"' in (ROOT / 'html/index.html').read_text(encoding='utf-8'), 'index.html lang="en" olmalı')
 check('invokeNative' in app_js and 'SAFE_URL' in app_js, 'app.js: bağlantılar yalnızca SAFE_URL ile invokeNative(openUrl) üzerinden açılmalı')
-check('onmouseenter' in app_js and "setSuffix" in app_js, 'app.js: başlık karıştırma efekti bağlı olmalı')
 
 # ------------------------------------------------------------------ 3) Prefs mantığı
 print('[3] Prefs doğrulama / kalıcılık')
@@ -259,7 +259,7 @@ check(lua_to_py(pl.eval('Prefs.values')) == {}, 'çözülemeyen KVP boş sonuç 
 kvp['loe_pause:prefs:v1'] = json.dumps({'pref.lang': 'tr', 'pref.accent': 'blue', 'pref.dark': False, 'pref.mapReturn': True, 'aim.mode': 'free'})
 kvp.pop('loe_pause:migrated:ui-reset-v1', None)
 pl.execute('Prefs.values = {}; Prefs.load()')
-check(pl.eval("Prefs.get('pref.lang')") == 'en' and pl.eval("Prefs.get('pref.accent')") == 'crimson'
+check(pl.eval("Prefs.get('pref.lang')") == 'en' and pl.eval("Prefs.get('pref.accent')") == 'pink'
       and pl.eval("Prefs.get('pref.dark')") is True and pl.eval("Prefs.get('pref.mapReturn')") is False, 'sıfırlama: arayüz tercihleri varsayılana dönmeli')
 check(pl.eval("Prefs.get('aim.mode')") == 'free', 'sıfırlama: oyun ayarları (aim.mode) korunmalı')
 check(kvp.get('loe_pause:migrated:ui-reset-v1') == '1', 'sıfırlama: işaret yazılmalı')
@@ -270,7 +270,7 @@ pl.execute("Prefs.values = {}; Prefs.flush()")
 
 pl.execute("Prefs.values = {}; Prefs.set('pref.accent', 'red'); Prefs.set('pref.dark', false)")
 pl.execute("Prefs.reset({'pref.accent', 'pref.dark'})")
-check(pl.eval("Prefs.get('pref.accent')") == 'crimson' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
+check(pl.eval("Prefs.get('pref.accent')") == 'pink' and pl.eval("Prefs.get('pref.dark')") is True, 'reset varsayılana dönmeli')
 check(pl.eval("Prefs.get('pref.lang')") == 'en', "varsayılan dil 'en' olmalı")
 check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık olmalı')
 
@@ -278,7 +278,7 @@ check(pl.eval("Prefs.get('pref.dark')") is True, 'varsayılan koyu tema açık o
 pl.execute("Config.Defaults['pref.accent'] = 'blue'")
 check(pl.eval("Prefs.default('pref.accent')") == 'blue', 'Config.Defaults uygulanmalı')
 pl.execute("Config.Defaults['pref.accent'] = 'invalid'")
-check(pl.eval("Prefs.default('pref.accent')") == 'crimson', 'geçersiz Config.Defaults yok sayılmalı')
+check(pl.eval("Prefs.default('pref.accent')") == 'pink', 'geçersiz Config.Defaults yok sayılmalı')
 
 # ------------------------------------------------------------------ 4) ana döngü simülasyonu
 print('[4] ESC / harita / sızan ESC akışı (simülasyon)')
@@ -602,7 +602,7 @@ sim.pause = true; sim.frames(64)
 check(next(sim.lastOpen().caps) == nil, 'S10: oyuncu çıkınca yetki silinmeli')
 sim.exported.Close(); sim.frames(700)
 
-setMapItem(false)   -- varsayılan: MAP menüde yok, harita yalnızca M ile
+setMapItem(true)    -- varsayılan: MAP menüde görünür (M tuşu ayrıca loe_hud'da)
 
 -- S14: Game/UI Settings alt ekranı — ESC menüyü KAPATMAZ (arayüz bir adım geri döner); "Restore defaults" yalnızca şemadaki id'leri sıfırlar
 sim.frames(700)
@@ -640,35 +640,35 @@ check(ro.ok == true and Prefs.get('disp.radar') == false, 'S14: restore listede 
 Prefs.reset({ 'disp.radar' })
 check(sim.nui('restore', { ids = { 'zzz.yok', 7 } }).ok == false and sim.nui('restore', { ids = 'x' }).ok == false and sim.nui('restore', {}).ok == false, 'S14: geçersiz restore istekleri reddedilmeli')
 sim.exported.Close(); sim.frames(700)
--- S11: M tuşu (loe_bigmap) → menüsüz doğrudan büyük harita; aynı tuş / ESC kapatır; LOE menüsü geri gelmez
-check(type(sim.commands.loe_bigmap) == 'function', 'S11: loe_bigmap komutu kayıtlı olmalı')
+-- S11: menünün kendi harita komutu (loe_pause_map; M tuşu loe_hud'da) → menüsüz doğrudan büyük harita; aynı komut / ESC kapatır; LOE menüsü geri gelmez
+check(type(sim.commands.loe_pause_map) == 'function' and sim.commands.loe_bigmap == nil, 'S11: loe_pause_map komutu kayıtlı olmalı, loe_bigmap (loe_hud içinde) kaydedilmemeli')
 Prefs.set('pref.mapReturn', true)                            -- dönüş tercihi AÇIK olsa bile tuştan açılan harita menüye dönmemeli
 local act11, open11 = sim.calls.Activate or 0, sim.openCount()
-sim.commands.loe_bigmap(); sim.frames(1300)
+sim.commands.loe_pause_map(); sim.frames(1300)
 check((sim.calls.Activate or 0) == act11 + 1 and sim.calls.GoDeeper == 0, 'S11: M büyük haritayı doğrudan açmalı (GoDeeper(0))')
 check(sim.pause == true and isOpen() == false and sim.openCount() == open11, 'S11: harita açık, LOE menüsü açılmamalı')
 sim.escFrame = true; sim.step(16); sim.frames(1500)
 check(sim.pause == false and isOpen() == false and sim.openCount() == open11, 'S11: ESC haritayı kapatmalı, LOE menüsü dönmemeli (mapReturn açık olsa da)')
 
 sim.frames(700)
-sim.commands.loe_bigmap(); sim.frames(1300)
+sim.commands.loe_pause_map(); sim.frames(1300)
 check(sim.pause == true, 'S11: M ikinci kez haritayı açmalı')
-sim.commands.loe_bigmap(); sim.frames(1500)                  -- harita açıkken aynı tuş kapatır
+sim.commands.loe_pause_map(); sim.frames(1500)                  -- harita açıkken aynı tuş kapatır
 check(sim.pause == false and isOpen() == false and sim.openCount() == open11, 'S11: harita açıkken M haritayı kapatmalı')
 sim.frames(700)
 
 local act11b = sim.calls.Activate or 0
 sim.pause = true; sim.frames(64)                             -- LOE menüsü açıkken M işlemez
 check(isOpen() == true, 'S11: menü açılmalı')
-sim.commands.loe_bigmap(); sim.frames(600)
+sim.commands.loe_pause_map(); sim.frames(600)
 check((sim.calls.Activate or 0) == act11b and isOpen() == true, 'S11: LOE menüsü açıkken M harita açmamalı')
 sim.exported.Close(); sim.frames(700)
 LocalPlayer.state.isLoggedIn = false
-sim.commands.loe_bigmap(); sim.frames(600)
+sim.commands.loe_pause_map(); sim.frames(600)
 check((sim.calls.Activate or 0) == act11b, 'S11: giriş yapılmamışken M harita açmamalı')
 LocalPlayer.state.isLoggedIn = true; sim.frames(300)
 sim.nuiFocus = true
-sim.commands.loe_bigmap(); sim.frames(600)
+sim.commands.loe_pause_map(); sim.frames(600)
 check((sim.calls.Activate or 0) == act11b, 'S11: başka bir arayüz odaktayken M harita açmamalı')
 sim.nuiFocus = false; sim.frames(600)
 Prefs.set('pref.mapReturn', false)
@@ -700,19 +700,57 @@ sim.nui('ready')
 rawset(exports, 'qbx_core', { GetPlayerData = function() return {
     citizenid = 'ABC123', charinfo = { firstname = 'Mark', lastname = 'Smith' },
     job = { label = 'LSPD', grade = { name = 'Lieutenant' } }, money = { cash = 0, bank = 27640295 } } end })
+sim.started.ox_inventory = true
 sim.pause = true; sim.frames(64)
 local op = sim.lastOpen()
 check(isOpen() == true and op.stats.id == 7 and op.stats.name == 'Mark Smith' and op.stats.job == 'LSPD'
     and op.stats.grade == 'Lieutenant' and op.stats.cash == 0 and op.stats.bank == 27640295, 'S12: oyuncu kartı verisi (kimlik/ad/meslek/para) iletilmeli')
 local ids, soons = {}, {}
 for _, m in ipairs(op.menu) do ids[#ids + 1] = m.id; if m.soon then soons[#soons + 1] = m.id end end
-check(table.concat(ids, ',') == 'resume,game,ui,stats,battlepass,shop,quit', 'S12: ana menü sırası (MAP yok, KONUM MODU yok, DISCONNECT son): ' .. table.concat(ids, ','))
-check(sim.nui('menu', { id = 'map' }).ok == false, 'S12: MAP menüden kaldırıldı, menu callback reddetmeli')
+check(table.concat(ids, ',') == 'resume,map,stats,inventory,battlepass,shop,settings,support,quit', 'S12: ana menü sırası (konsept; DISCONNECT son): ' .. table.concat(ids, ','))
 check(sim.nui('menu', { id = 'position' }).ok == false, 'S12: KONUM MODU kaldırıldı, menu callback reddetmeli')
 check(table.concat(soons, ',') == 'battlepass,shop', 'S12: resource çalışmayan Battlepass/Shop "yakında" olarak işaretlenmeli: ' .. table.concat(soons, ','))
 check(sim.nui('menu', { id = 'battlepass' }).page == 'soon', 'S12: resource yokken Battlepass "yakında" sayfası döndürmeli')
 check(sim.nui('menu', { id = 'stats' }).page == 'stats', 'S12: CHARACTER STATS yerleşik istatistik sayfasını döndürmeli')
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
+check(op.server == 'LOE RP' and type(op.cards) == 'table' and next(op.cards) == nil, 'S12: sunucu adı gitmeli, çalışan kaynak yokken kart verisi uydurulmamalı')
+-- S12a: özet (Home / Vehicles) menü açıkken arayüze iletilir; yalnızca sayılar
+sim.msgs = {}
+sim.fire('loe_pause:client:summary', { homes = 1, vehicles = 2, evil = 'x' })
+local sm; for _, m in ipairs(sim.msgs) do if m.action == 'summary' then sm = m end end
+check(sm and sm.homes == 1 and sm.vehicles == 2 and sm.evil == nil, 'S12a: özet arayüze iletilmeli (yalnızca sayısal alanlar)')
+local askedSummary = false
+for _, e in ipairs(sim.serverEvents) do if e == 'loe_pause:server:summary' then askedSummary = true end end
+check(askedSummary, 'S12a: açılışta sunucudan özet istenmeli')
+-- S12c: envanter maddesi: menü kapanır, ox_inventory export'u çağrılır
+local invCalls = 0
+rawset(exports, 'ox_inventory', { openInventory = function() invCalls = invCalls + 1 end })
+check(sim.nui('menu', { id = 'inventory' }).ok == true, 'S12c: envanter maddesi kabul edilmeli')
+sim.frames(600)
+check(invCalls == 1 and isOpen() == false, 'S12c: menü kapanmalı ve ox_inventory açılmalı (çağrı=' .. invCalls .. ')')
+rawset(exports, 'ox_inventory', nil)
+sim.pause = true; sim.frames(64)
+-- S12d: Battlepass export'u çalışıyorsa kart verisi (yalnızca bilinen sayısal alanlar) gelir ve madde "yakında" olmaz
+sim.exported.Close(); sim.frames(700)
+sim.started.loe_battlepass = true
+rawset(exports, 'loe_battlepass', { GetProgress = function() return { season = 3, level = 32, maxLevel = 100, evil = 'x' } end })
+sim.pause = true; sim.frames(64)
+local opB = sim.lastOpen()
+local bpSoon; for _, m in ipairs(opB.menu) do if m.id == 'battlepass' then bpSoon = m.soon end end
+check(opB.cards.battlepass and opB.cards.battlepass.level == 32 and opB.cards.battlepass.maxLevel == 100 and opB.cards.battlepass.evil == nil and bpSoon == false,
+    'S12d: Battlepass kartı export verisiyle gelmeli (uydurma alan yok, "yakında" değil)')
+sim.started.loe_battlepass = nil
+rawset(exports, 'loe_battlepass', nil)
+sim.exported.Close(); sim.frames(700)
+-- S12e: loe_hud büyük haritası (M) açıkken LOE menüsü yerleşik menüyü ele geçirmez; harita kapanınca ESC yine LOE menüsünü açar
+sim.started.loe_hud = true
+rawset(exports, 'loe_hud', { IsBigMapOpen = function() return true end })
+sim.pause = true; sim.frames(400)
+check(isOpen() == false and sim.pause == true, 'S12e: loe_hud haritası açıkken yerleşik menü söndürülmemeli / LOE menüsü açılmamalı')
+rawset(exports, 'loe_hud', { IsBigMapOpen = function() return false end })
+sim.frames(700)
+check(isOpen() == true, 'S12e: büyük harita kapanınca yerleşik menü yeniden LOE menüsüne çevrilmeli')
+rawset(exports, 'loe_hud', nil); sim.started.loe_hud = nil
 -- S12b: meslek / rütbe loe_jobcore'dan okunur (qbx_core job'u "unemployed / Freelancer" kalır)
 local jc = { ready = true, state = { primaryJob = 'lspd', onDuty = false, jobs = { lspd = { name = 'lspd', label = 'LSPD', gradeLabel = 'Lieutenant' } } } }
 rawset(exports, 'qbx_core', { GetPlayerData = function() return {
@@ -1003,6 +1041,39 @@ check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
 sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
 
+# Home / Vehicles özeti: yalnızca isteyen oyuncunun kendi sayıları; tablo yoksa o alan gönderilmez
+sv.execute(r'''
+players = { [11] = { PlayerData = { citizenid = 'CID11' } } }
+exports = { qbx_core = { GetPlayer = function(_, s) return players[s] end } }
+queries = {}
+dbCounts = { player_vehicles = 3, loe_properties = 1, loe_hotel_rooms = 'ERR' }
+MySQL = { scalar = { await = function(q, p)
+    queries[#queries + 1] = { q = q, p = p }
+    for name, v in pairs(dbCounts) do
+        if q:find(name, 1, true) then
+            if v == 'ERR' then error('no such table') end
+            return v
+        end
+    end
+end } }
+''')
+SUM = sv.eval('''function(src, adv)
+    source = src; now = now + (adv or 0)
+    handlers['loe_pause:server:summary']()
+    return #sent
+end''')
+n1 = int(sv.eval('#sent'))
+check(SUM(11, 5000) == n1 + 1, 'sunucu: özet isteği yanıtlanmalı')
+sm = lua_to_py(sv.eval('sent[#sent]'))
+check(sm['n'] == 'loe_pause:client:summary' and sm['t'] == 11, 'sunucu: özet yalnızca isteyen oyuncuya gitmeli')
+check(int(sv.eval('sent[#sent].list.vehicles')) == 3 and int(sv.eval('sent[#sent].list.homes')) == 1, 'sunucu: araç ve ev sayısı doğru olmalı (otel tablosu yoksa yok sayılır)')
+check(sv.eval("(function() for _, q in ipairs(queries) do for _, v in ipairs(q.p) do if v ~= 'CID11' then return false end end end return #queries > 0 end)()") is True,
+      'sunucu: sorgular yalnızca isteyen oyuncunun citizenid değeriyle çalışmalı')
+check(SUM(11, 100) == n1 + 1, 'sunucu: özet istekleri 2 sn sınırlanmalı')
+check(SUM(99, 5000) == n1 + 1, 'sunucu: karakteri olmayan oyuncuya yanıt gitmemeli')
+sv.execute("dbCounts.loe_properties = nil; dbCounts.player_vehicles = nil")
+SUM(11, 5000)
+check(sv.eval('sent[#sent].list.homes') is None and sv.eval('sent[#sent].list.vehicles') is None, 'sunucu: tablolar yoksa alanlar gönderilmemeli')
 
 # ------------------------------------------------------------------ 6) GEÇİCİ: scaleform araçları
 print('[6] Scaleform araçları (_dev/gfx)')

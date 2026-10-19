@@ -355,8 +355,9 @@ Schema.categories[#Schema.categories + 1] = cat('editor', 'film', 'Rockstar Edit
 -- ------------------------------------------------------------------ 9. Tercihler (LOE arayüzü; oyuncu bazında KVP)
 Schema.categories[#Schema.categories + 1] = cat('prefs', 'palette', 'Tercihler', 'Preferences', {
     group('look', 'Görünüm', 'Appearance', {
-        { id = 'pref.accent', type = 'select', default = 'crimson', label = L('Vurgu rengi', 'Accent colour'),
+        { id = 'pref.accent', type = 'select', default = 'pink', label = L('Vurgu rengi', 'Accent colour'),
           options = {
+              opt('pink',    'Pembe',   'Pink',    { color = '#ff3e9a' }),
               opt('crimson', 'Kızıl',   'Crimson', { color = '#e3204a' }),
               opt('white',   'Beyaz',   'White',   { color = '#ffffff' }),
               opt('magenta', 'Magenta', 'Magenta', { color = '#ff2e93' }),
