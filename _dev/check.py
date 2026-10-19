@@ -685,6 +685,99 @@ check(sim.nui('menu', { id = 'stats' }) and sim.nui('menu', { id = 'stats' }).ok
 check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü maddesi reddedilmeli')
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
+
+-- S15: GEÇİCİ /loe_gtaset — yetki sunucudan gelir; test sırasında ana döngü yerleşik menüye dokunmaz; bitince her şey kapanır
+local realPrint, realEncode = print, json.encode
+print = function() end
+json.encode = function(t) sim.encoded = t; return 'X' end
+check(type(LoeProbe) == 'table' and LoeProbe.active == false, 'S15: LoeProbe tanımlı ve pasif olmalı')
+local actP = sim.calls.Activate or 0
+sim.commands['loe_gtaset']()
+check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: komut önce sunucudan yetki istemeli')
+check(sim.pause == false, 'S15: yetki gelmeden menü açılmamalı')
+sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
+sim.frames(2000)
+check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
+
+-- sahte oyun: kategori listesi (aşağı = sonraki), sütun durumu kategoriye göre; SET_INPUT_EVENT ve sağ/sol profil değerini değiştirir
+local SETC, CATC = 'currentPage.columnList.1', 'currentPage.columnList.0'
+local STATES = { [0] = '1', '0', '0', '2', '0', '0', '5', '4' }
+local fk = { cat = 0, row = 0, hn = 0, hv = {}, lastPress = {} }
+sim.profile[300], sim.profile[301] = 5, 7
+BeginScaleformMovieMethodOnFrontend = function(path) fk.cur = { p = path, a = {} }; return true end
+ScaleformMovieMethodAddParamInt = function(v) fk.cur.a[#fk.cur.a + 1] = v end
+EndScaleformMovieMethod = function()
+    local c = fk.cur
+    if c.p == SETC .. '.SET_HIGHLIGHT' then fk.row = c.a[1]
+    elseif c.p == SETC .. '.SET_INPUT_EVENT' and fk.cat == 3 then
+        local id = fk.row == 0 and 300 or 301
+        sim.profile[id] = sim.profile[id] + (c.a[1] == 11 and 1 or -1)
+    end
+end
+EndScaleformMovieMethodReturnValue = function()
+    fk.hn = fk.hn + 1
+    local p, r = fk.cur.p, nil
+    if p == CATC .. '.model.getCurrentSelection' then r = tostring(fk.cat)
+    elseif p == SETC .. '.model.getCurrentSelection' then r = tostring(fk.row)
+    elseif p == SETC .. '.state.toString' then r = STATES[fk.cat] or '0'
+    elseif p == SETC .. '.customMC.toString' then r = '_level0.x.customMC' end
+    fk.hv[fk.hn] = r
+    return fk.hn
+end
+IsScaleformMovieMethodReturnValueReady = function(h) return fk.hv[h] ~= nil end
+GetScaleformMovieMethodReturnValueString = function(h) return fk.hv[h] end
+GetScaleformMovieMethodReturnValueInt = function(h) return tonumber(fk.hv[h]) or 0 end
+SetControlValueNextFrame = function(g, c)
+    if g ~= 2 then return end
+    if sim.now - (fk.lastPress[c] or -1000) <= 40 then fk.lastPress[c] = sim.now return end   -- basılı tutma tek basış sayılır
+    fk.lastPress[c] = sim.now
+    if c == 187 then fk.cat = fk.cat + 1
+    elseif c == 188 then fk.cat = math.max(0, fk.cat - 1)
+    elseif c == 190 and fk.cat == 3 then sim.profile[300] = sim.profile[300] + 1
+    elseif c == 189 and fk.cat == 3 then sim.profile[300] = sim.profile[300] - 1 end
+end
+
+sim.latent, sim.encoded = nil, nil
+sim.commands['loe_gtaset']()
+sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
+sim.frames(5000)
+check(LoeProbe.active == true and sim.pause == true and isOpen() == false, 'S15: test GTA ayar menüsünü açmalı')
+sim.escFrame = true; sim.step(16); sim.frames(500)
+check(sim.pause == true and isOpen() == false, 'S15: test sırasında ESC yakalama yerleşik menüye dokunmamalı')
+sim.frames(60000)
+check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: test bitince menü kapanmalı, LOE menüsü açılmamalı')
+check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and sim.encoded and sim.encoded.kind == 'write' and sim.encoded.audio == true,
+    'S15: sonuç sunucuya gönderilmeli, Audio bulunmalı')
+local phases, diffs, sfdo = {}, {}, {}
+for _, e in ipairs((sim.encoded or {}).log or {}) do
+    if e.k == 'phase' then phases[#phases + 1] = e.name end
+    if e.k == 'profile' then diffs[e.tag] = e.diff end
+    if e.k == 'sfdo' then sfdo[#sfdo + 1] = e.p .. '(' .. table.concat(e.args or {}, ',') .. ')' end
+end
+check(table.concat(phases, ',') == 'open,nav-audio,as-row0,enter,input-row,as-row1,back,nav-gfx,gfx-read,close', 'S15: faz sırası: ' .. table.concat(phases, ','))
+local function d1(tag, id, a, b) local d = diffs[tag]; return d and #d == 1 and d[1][1] == id and d[1][2] == a and d[1][3] == b end
+check(d1('as0-right', 300, 5, 6) and #diffs['as0-left'] == 0, 'S15: AS yolu satır 0 değerini bir adım artırıp geri almalı')
+check(d1('in-right', 300, 5, 6) and #diffs['in-left'] == 0, 'S15: girdi yolu sağ/sol profil farkı kaydedilmeli')
+check(d1('as1-right', 301, 7, 8) and #diffs['as1-left'] == 0, 'S15: AS yolu satır 1 (müzik) denenmeli')
+check(#diffs['after-close'] == 0 and sim.profile[300] == 5 and sim.profile[301] == 7, 'S15: test sonunda değerler eski haline dönmeli')
+check(sfdo[1] == SETC .. '.SET_HIGHLIGHT(0)' and sfdo[2] == SETC .. '.SET_INPUT_EVENT(11)', 'S15: AS çağrı sırası: ' .. tostring(sfdo[1]) .. ' ' .. tostring(sfdo[2]))
+check(fk.cat == 6, 'S15: Graphics kategorisine yalnızca okumak için inilmeli (kategori ' .. fk.cat .. ')')
+
+-- Audio bulunamazsa hiçbir değer yazılmamalı
+STATES[3] = '0'; fk.cat = 0; fk.row = 0
+sim.latent, sim.encoded = nil, nil
+sim.frames(3000)
+sim.commands['loe_gtaset']()
+sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
+sim.frames(60000)
+local wrote = false
+for _, e in ipairs((sim.encoded or {}).log or {}) do if e.k == 'sfdo' then wrote = true end end
+check(sim.encoded and sim.encoded.audio == false and not wrote and sim.profile[300] == 5, 'S15: Audio bulunamazsa yazma denenmemeli')
+check(LoeProbe.active == false and sim.pause == false, 'S15: Audio yokken de test kapanmalı')
+print, json.encode = realPrint, realEncode
+BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethod = nil, nil, nil
+EndScaleformMovieMethodReturnValue, IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString = nil, nil, nil
+GetScaleformMovieMethodReturnValueInt, SetControlValueNextFrame = nil, nil
 return R
 '''
 
@@ -692,7 +785,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua'):
+for rel in ('config.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua', 'client/gtaset_probe.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
@@ -756,6 +849,34 @@ check(list(lua_to_py(sv.eval('sent[#sent].list'))) == ['admin'], 'sunucu: admin 
 check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
 sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
+
+# GEÇİCİ: /loe_gtaset yetkisi ve sonuç kaydı
+sv.execute(r'''
+saved = {}
+function SaveResourceFile(r, name, data) saved[#saved + 1] = { r = r, name = name, n = #data } return true end
+function GetCurrentResourceName() return 'loe_pause' end
+function TriggerClientEvent(n, t, a, b) sent[#sent + 1] = { n = n, t = t, list = a, b = b } end
+''')
+ASK = sv.eval('''function(src, adv, admin)
+    source = src; now = now + (adv or 0)
+    aceTable[tostring(src) .. ':admin'] = admin == true
+    handlers['loe_pause:server:gfxprobeAsk']('write')
+    local s = sent[#sent]
+    return s.n, s.t, s.b
+end''')
+SAVE = sv.eval('''function(src, adv, payload)
+    source = src; now = now + (adv or 0)
+    handlers['loe_pause:server:gfxprobe'](payload)
+    return #saved
+end''')
+n, tgt, allowed = ASK(11, 5000, False)
+check(n == 'loe_pause:client:gfxprobeGo' and tgt == 11 and allowed is False, 'sunucu: yetkisiz oyuncuya test izni verilmemeli')
+n, tgt, allowed = ASK(12, 5000, True)
+check(allowed is True, 'sunucu: admin ACE sahibine test izni verilmeli')
+check(SAVE(11, 100, '{"a":1}') == 0, 'sunucu: yetkisiz oyuncunun sonucu kaydedilmemeli')
+check(SAVE(12, 100, '{"a":1}') == 1 and str(sv.eval('saved[1].name')).startswith('gfxprobe_'), 'sunucu: admin sonucu gfxprobe_*.json olarak kaydedilmeli')
+check(SAVE(12, 100, '{"a":2}') == 1, 'sunucu: 10 sn içinde ikinci kayıt reddedilmeli')
+check(SAVE(12, 11000, 7) == 1 and SAVE(12, 11000, '') == 1, 'sunucu: geçersiz sonuç verisi reddedilmeli')
 
 
 

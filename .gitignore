@@ -3,3 +3,4 @@ __pycache__/
 _dev/schema.json
 *.bak
 _dev/mock_bg.jpg
+gfxprobe_*.json

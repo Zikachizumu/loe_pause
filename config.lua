@@ -81,6 +81,10 @@ Config.Native = {
     keybinds = { menu = 'FE_MENU_VERSION_LANDING_KEYMAPPING_MENU', pause = true,  component = -1 },
 }
 
+-- GEÇİCİ: GTA ayarlarını menüde gerçek değerleriyle gösterme araştırması (/loe_gtaset). Yalnızca `ace` yetkisi olanlarda
+-- çalışır; sonuç sunucuda resource klasörüne gfxprobe_*.json yazılır. Araştırma bitince kaldırılır.
+Config.GfxProbe = { enabled = true, ace = 'admin' }
+
 -- ================================================================ ÖZELLİKLER
 -- false yapılan özellik arayüzden tamamen kalkar ve uygulanmaz.
 Config.Features = {
