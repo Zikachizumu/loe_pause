@@ -507,11 +507,12 @@ end
 -- Oyun scaleform metodlarını "TIMELINE.<ad>" yolundan çağırır. Yola oyunun kendi AS2 nesnelerini (veri modeli) yazıp
 -- sonu bir dize/dizi metoduyla (join, toString) bitirirsek metod DEĞERİ döner → oyunun tuttuğu ayar satırlarını okuruz.
 -- Satır verisi: [0 index, 1 menuID, 2 uniqueID, 3 type, 4 initialIndex, 5 isSelectable, 6.. etiket ve seçenek metinleri]
-local function sfRead(path, sep)
+local function sfRead(path, sep, ints)
     local okB, started = pcall(BeginScaleformMovieMethodOnFrontend, path)
     if not okB then return nil, nil, 'ERR ' .. tostring(started) end
     if not started then return nil, nil, 'begin-false' end
     if sep then pcall(ScaleformMovieMethodAddParamTextureNameString, sep) end
+    for _, v in ipairs(ints or {}) do pcall(ScaleformMovieMethodAddParamInt, v) end
     local okE, h = pcall(EndScaleformMovieMethodReturnValue)
     if not okE or type(h) ~= 'number' then return nil, nil, 'end' end
     local t = GetGameTimer()
@@ -533,16 +534,15 @@ local PATH_DISCOVER = {
     'currentPage.columnList.0.dbgID.toString',
     'currentPage.columnList.1.dbgID.toString',
     'currentPage.columnList.2.dbgID.toString',
-    'columnList.join',
-    'columnList.0.dbgID.toString',
-    'columnList.1.dbgID.toString',
     'currentPage.columnList.0.model.viewList.join',
     'currentPage.columnList.1.model.viewList.join',
     'currentPage.columnList.0.model.viewList.0.dataList.join',
     'currentPage.columnList.1.model.viewList.0.dataList.join',
-    'currentPage.columnList.2.model.viewList.0.dataList.join',
-    'columnList.0.model.viewList.0.dataList.join',
-    'columnList.1.model.viewList.0.dataList.join',
+    'currentPage.columnList.0.model.viewList.0.dataList.0.join',
+    'currentPage.columnList.1.model.viewList.0.dataList.0.join',
+    'currentPage.columnList.1.model.viewList.0.itemList.0.join',
+    'currentPage.columnList.1.model.viewList.0.itemList.0.label.toString',
+    'currentPage.columnList.1.model.viewList.0.itemList.0.setPref.toString',
     'menuState.toString',
     'menuLevel.toString',
 }
@@ -583,11 +583,8 @@ local function runPath()
         send('path', { failed = 'open' })
         return
     end
-    sleep(1500)
-    phase('deeper0')
-    pcall(call, 'PauseMenuceptionGoDeeper', 0x77F16B447824DA6C, 0)
-    sleep(1200)
-    info('afterDeeper')
+    sleep(2500)          -- LANDING_MENU doğrudan Ayarlar sayfasını açar (sol sütun kategoriler, sağ sütun ayar satırları)
+    info('opened')
 
     phase('discover')
     for _, p in ipairs(PATH_DISCOVER) do
@@ -600,10 +597,13 @@ local function runPath()
     local okRows = 0
     for step = 0, 14 do
         if step > 0 then press(2, C_DOWN); sleep(900) end
-        base = findBase(base or PATH_BASES[1])
+        base = findBase(base or PATH_BASES[2])
         local rows = base and readRows(base) or {}
+        local cats = (base ~= PATH_BASES[1]) and readRows(PATH_BASES[1]) or {}
+        local _, sel0 = sfRead('GET_COLUMN_SELECTION', nil, { 0 })
+        local _, sel1 = sfRead('GET_COLUMN_SELECTION', nil, { 1 })
         if #rows > 0 then okRows = okRows + 1 end
-        add('rows', { step = step, base = base, n = #rows, rows = rows })
+        add('rows', { step = step, base = base, n = #rows, rows = rows, cats = cats, sel0 = sel0, sel1 = sel1 })
     end
     info('end')
     phase('end')
