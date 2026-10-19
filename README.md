@@ -31,6 +31,8 @@ FXServer manifesti yalnızca `refresh`/sunucu açılışında okur; tek başına
 | `fxmanifest.lua` | Manifest (`ui_page`, paylaşımlı/client/server scriptler) |
 | `config.lua` | Marka, arka plan, ESC yakalama, ana menü, harita/native menü bağlantıları, özellik anahtarları, varsayılanlar, FiveM tuş listesi |
 | `shared/schema.lua` | **Ayarlar ekranının tek doğruluk kaynağı** (kategoriler, gruplar, satırlar, tr/en metinler) |
+| `shared/gtaset_data.lua` | GTA ayar menüsünün satır tablosu: satır kimliği, profil kimliği (`pid`), tür, kaydırıcı üst sınırı, seçenek etiketleri (`_dev/gtaset/` ölçümlerinden) |
+| `client/gtaset.lua` | GTA'nın kendi ayarlarını okur/yazar (gizli GTA menüsü ile; aşağıya bak) |
 | `client/prefs.lua` | Şemaya göre doğrulama + oyuncu bazında KVP kalıcılığı |
 | `client/apply.lua` | Ayarları oyuna uygulayan native çağrıları + eylemler (kayıt, sıfırlama) |
 | `server/main.lua` | "Sunucudan ayrıl": olayı gönderen oyuncuyu `DropPlayer` ile düşürür (3 sn sınırı); Hızlı Eylemler için yetki (ACE) görünürlüğü |
@@ -46,13 +48,21 @@ FXServer manifesti yalnızca `refresh`/sunucu açılışında okur; tek başına
 4. Giriş yapılmamışken (`LocalPlayer.state.isLoggedIn ~= true`), ara sahnede ve ekran kararmışken yerleşik menüye dokunulmaz → karakter seçimi/yaratma bozulmaz.
 5. Script ile açılan yerleşik menü/harita (`ActivateFrontendMenu`) ESC'de kendiliğinden kapanmaz — yalnızca bir seviye geri gider ve açık kalır. Bu yüzden akış sırasında ESC / P / Geri yakalanır, menü kapatılır, sızan yeniden açılış söndürülür ve (tercih açıksa) LOE menüsüne dönülür. Sorun giderme: `Config.Debug = true` yapınca F8 konsolunda `[loe_pause] native ...` satırları görünür.
 6. Yerleşik GTA duraklatma menüsü **tamamen gizlidir** (`Config.Hijack.allowNativeMenu = false`, varsayılan): ESC/P her zaman bu menüyü açar, "Normal Menü" kategorisi arayüzde görünmez ve eski bir KVP tercihi (`menu.native`) etkisizdir. Arıza durumunda bir kaçış kapısı istenirse `allowNativeMenu = true` yapılır (kategori geri gelir). `Config.Hijack.enabled = false` hepsini kapatır; `/loepause` her durumda bu menüyü açar.
-7. Kaçınılmaz istisna: GTA'nın kendi ayarları (grafik, ses seviyeleri, hassasiyet, ekran, tuş atama) yalnızca GTA'nın ekranında değiştirilebilir (aşağıya bak). Game Settings → OPTIONS'ın sonundaki **GTA Settings** o ekranı açar; ESC ile kapanınca (Menü Davranışı tercihine göre) menüye ya da oyuna dönülür.
+7. Kaçınılmaz istisna: grafik ayarları (doku, gölge...) ve tuş atamaları yalnızca GTA'nın ekranında değiştirilebilir (aşağıya bak). Game Settings → Grafik sayfasındaki **GTA grafik ekranı** ve OPTIONS'ın sonundaki **GTA Settings** o ekranı açar; ESC ile kapanınca (Menü Davranışı tercihine göre) menüye ya da oyuna dönülür.
 
-## Kapsam: menüde yalnızca gerçekten uygulanan ayarlar
+## Kapsam: GTA'nın kendi ayarları menüde
 
-GTA'nın kendi ayarları (grafik kalitesi, ses seviyeleri, fare/gamepad hassasiyeti, ekran, tuş atama) **FiveM'den okunamaz ve yazılamaz**. Bu yüzden menüde bunlara ait satır yoktur; Game Settings → OPTIONS'ın en sonundaki **GTA Settings** girişi GTA'nın kendi ayar ekranını açar (`Config.Native.settings`; `Config.Features.allGtaSettings = false` ile gizlenir; ana ekranın sağ altındaki "All GTA settings" düğmesiyle aynı yer).
+Game Settings sayfalarında (Controls, Keyboard / Mouse, Audio, Camera, Display) GTA'nın **gerçek** ayarları kendi satırlarıyla, gerçek değerleriyle ve GTA'nın kendi (oyuncunun GTA dilindeki) metinleriyle görünür: ses seviyeleri, fare/oyun kolu hassasiyeti, FOV, kamera seçenekleri, parlaklık, güvenli bölge, altyazı, ölçü birimi... (~64 ayar; tablo `shared/gtaset_data.lua`). Değişiklik yapınca satır kırmızıya döner ve altta **APPLY CHANGES (n)** görünür (kısayol: `A`); uygulayınca değerler GTA'ya yazılır. Ayarlardan uygulanmamış değişiklikle çıkarken "Şimdi uygula / Vazgeç / Düzenlemeye devam" sorulur.
 
-Neden referans videodaki gibi yapılamıyor (2026-10-19 araştırması, FiveM for GTAV Enhanced): videodaki script Legacy FiveM'de pause menü scaleform'unu değiştiriyor; Enhanced istemcisi aynı isimli oyun dosyası geçersiz kılmalarını yok sayıyor (citizenfx/rfc#92, #378). Scaleform yolu üzerinden okuma denemesinde ayar satırlarına ulaşılamadı. Araçlar ve kayıt kancası `_dev/gfx/` içinde; FiveM bu hatayı düzeltirse yeniden denenebilir.
+**Nasıl çalışır** (`client/gtaset.lua`): FiveM bu ayarlar için native sunmaz.
+- **Okuma:** her satırın değeri bir *profil ayarı*dır → `GetProfileSetting(pid)`; menü kapalıyken anlıktır.
+- **Yazma:** GTA'nın kendi ayar menüsü **gizli** açılır (`SuppressFrontendRenderingThisFrame`) ve menünün iç scaleform çağrılarıyla (`SET_INPUT_EVENT`, `MENU_SHIFT_DEPTH`) satırlar oyuncu sağ/sol tuşa basmış gibi adım adım değiştirilir; menü kapanınca GTA değeri kaydeder, sonra profil okunup doğrulanır, tutmayan satırlar yavaş aralıkla en çok 3 kez denenir. Uygulama birkaç saniye sürer (oyun sesi kısılıp açılabilir); bu sırada menü kilitlenir.
+- **Zamanlama** (ölçüldü): GTA menüsü her işlemden sonra kısa süre meşgul kalır ve o sırada gelen çağrıyı yutar → gezinme ≥ 60 ms, değer adımı 50 ms (ilk deneme), giriş/çıkış ve adım öncesi ≥ 250 ms, seviye değişiminden sonra 400 ms.
+- **Kaydırıcılar** 0..`max` tam sayı adımlarıdır (çoğu 0–10, hassasiyetler 0–14, parlaklık 0–30, fare hassasiyeti 0–200). **Güvenli bölge** ters çalışır (sağ = küçük profil değeri; tabloda `inv = true`).
+- Bizim satırlarımızla aynı işi yapan GTA ayarları listelenmez (hedefleme modu, radar/HUD/GPS/nişangâh modu): bizimkiler kalır.
+- `Config.Features.gtaSettings = false` bu satırları tamamen kaldırır.
+
+**Grafik ayarları (doku, gölge, MSAA, çözünürlük...)** hâlâ GTA'nın kendi ekranındadır: değerleri okunamıyor (ayar satırlarına scaleform yoluyla erişilemedi). Grafik sayfasındaki **GTA grafik ekranı** GTA ayar ekranını doğrudan Graphics kategorisinde açar (`Config.Native.graphics`, `category = 6`). Neden videodaki gibi yapılamadı (2026-10-19, FiveM for GTAV Enhanced): videodaki script Legacy FiveM'de pause menü scaleform dosyasını değiştiriyor; Enhanced istemcisi aynı isimli oyun dosyası geçersiz kılmalarını yok sayıyor (citizenfx/rfc#92, #378). Araçlar `_dev/gfx/` içinde; FiveM bu hatayı düzeltirse yeniden denenebilir. Ölçüm sonuçları ve tablo üreticileri `_dev/gtaset/` içinde.
 
 - **Uygulanan ayarlar** (anahtar/seçici/kaydırıcı; KVP'de saklanır, giriş yapınca yeniden uygulanır):
 
@@ -103,7 +113,8 @@ Arka plan: oyun görüntüsü + koyu katman; `Config.Hijack.blurGame = true` ike
 2. ESC tekrar: menü kapanmalı, oyun kontrolü ve minimap/HUD geri gelmeli, yerleşik menü açılmamalı.
 3. Envanteri aç, ESC ile kapat: pause menü **açılmamalı**.
 4. Harita: `loe_3dmap` açılmalı; kapanınca (tercih açıksa) menü geri gelmeli.
-5. Game Settings → OPTIONS → GTA Settings → Enter: GTA'nın ayar ekranı açılmalı, ESC ile çıkınca (tercihe göre) menüye/oyuna dönmeli. **Çalışmazsa** `config.lua > Config.Native` hash'lerini düzelt.
+5. Game Settings → OPTIONS → GTA Settings → Enter: GTA'nın ayar ekranı açılmalı, ESC ile çıkınca (tercihe göre) menüye/oyuna dönmeli. **Çalışmazsa** `config.lua > Config.Native` hash'lerini düzelt. Grafik → "GTA grafik ekranı": ayar ekranı doğrudan Graphics sayfasında açılmalı.
+5b. Audio → SFX/Music seviyesini değiştir → **Apply Changes**: birkaç saniye "Applying…" görünür, GTA menüsü **hiç görünmemeli**, bitince menü açık kalmalı ve değer korunmalı (GTA Settings → Audio'dan doğrula). Güvenli bölge (Display) sağ okla küçülmeli/büyümeli. Uygulanmamış değişiklikle çıkarken soru çıkmalı.
 6. Ayarlar → Kamera/Görüntü/Ses vb.: değiştir, çık, tekrar gir: değerler korunmalı; yeniden bağlanınca da korunmalı (KVP).
 7. Tercihler → Görünümü Sıfırla: onay çıkmalı; sonra tema/renk/dil varsayılana dönmeli.
 8. Ayarlar'da "Normal Menü" kategorisi **görünmemeli**; ESC/P her zaman LOE menüsünü açmalı.

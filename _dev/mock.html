@@ -45,9 +45,27 @@
         : [{ id: 'flu', label: 'Flu', symptom: 'You are coughing and feel weak.', suppressed: false, bandaged: false },
            { id: 'gunshot', label: 'Gunshot wound', symptom: 'You are bleeding.', suppressed: false, bandaged: true }]) };
 
+    // GTA ayarları (oyunda profil değerleri + GTA'nın kendi metinleri): burada örnek değerler ve İngilizce etiketler
+    const gtaLabels = {
+        MO_SFX: 'SFX Volume', MO_MUS: 'Music Volume', MO_DBOOST: 'Dialogue Boost', MO_UR_PLAYMODE: 'Self Radio Mode', MO_UR_AUTOSCAN: 'Auto-Scan for Music',
+        MO_AUDIO_FOCUS: 'Mute Audio on Focus Loss', MO_OFF: 'Off', MO_ON: 'On', MO_SENS: 'Third Person Aiming Sensitivity', MO_LK_SENS: 'Third Person Look-Around Sensitivity',
+        MO_FPS_LSENS: 'First Person Look-Around Sensitivity', MO_FPS_ASENS: 'First Person Aiming Sensitivity', MO_VIB: 'Vibration', MO_INV: 'Inverted Look',
+        MO_SPRINT: 'Sprint Mode', MO_TAP_SPRINT: 'Tap', MO_HOLD_SPRINT: 'Hold', MO_MONFSENS: 'Mouse Look Sensitivity', MO_MDRVSENS: 'Mouse Driving Sensitivity',
+        MO_MOUSEWEIGHT: 'Mouse Smoothing', MO_INVMOUSE: 'Invert Mouse Look', MO_FPS_FOV: 'First Person Field of View', MO_CAMERAHEIGHT: 'Vehicle Camera Height',
+        MO_FPS_HDB: 'First Person Head Bobbing', MO_SAFEZONE: 'Safe Zone', MO_BRI: 'Brightness', MO_SUB: 'Subtitles', MO_MEASUREMENT: 'Measurement Units',
+        MS_IMPERIAL: 'Imperial', MS_METRIC: 'Metric', MO_RET_SIZE: 'Simple Reticle Size', MO_SKFX: 'Screen Kill Effects', MO_CTY: 'Third Person Control Type',
+        MO_CCONF_1: 'Standard', MO_CCONF_2: 'Southpaw', MO_CCONF_3: 'Alternate', MO_CCONF_4: 'Southpaw Alt', MO_CCONF_5: 'Config 5', MO_CCONF_6: 'Config 6',
+    };
+    const gta = {};
+    schema.forEach(c => c.groups.forEach(g => g.rows.forEach(r => {
+        if (r.type === 'gtaslider') gta[r.pid] = Math.round(r.max / 2) + (r.pid % 3);
+        else if (r.type === 'glist') gta[r.pid] = r.pid % r.labels.length;
+    })));
+    gta[212] = 3; gta[754] = 50;
+
     const send = (d) => window.postMessage(d, '*');
     const caps = params.get('admin') === '1' ? { admin: true } : {};   // ?admin=1 → "Yönetici paneli" satırı görünür
-    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps });
+    const open = (anim) => send({ action: 'open', anim: anim || 'open', values, keys, menu, stats, health, caps, gta: { ...gta }, gtaLabels });
 
     const handlers = {
         ready: () => { setTimeout(() => { send({ action: 'init', schema, links, gta: true, bg: { mode: 'image', image: '/_dev/mock_bg.jpg' } }); open(); }, 50); return { ok: true }; },
@@ -64,6 +82,16 @@
             if (b.id === 'pref.reset') { Object.assign(values, defaults); return { ok: true, msg: 'reset_done', values: { ...values } }; }
             const msg = { 'rec.start': 'rec_started', 'rec.save': 'rec_saved', 'rec.discard': 'rec_discarded' }[b.id];
             return { ok: true, msg };
+        },
+        gtaApply: (b) => {
+            console.log('[mock] gtaApply', JSON.stringify(b.changes));
+            const failPid = params.get('gtafail') ? Number(params.get('gtafail')) : null;
+            setTimeout(() => {
+                const failed = [];
+                for (const [k, v] of Object.entries(b.changes || {})) { if (Number(k) === failPid) failed.push(Number(k)); else gta[k] = v; }
+                send({ action: 'gtaDone', ok: failed.length === 0, failed, values: { ...gta } });
+            }, 2500);
+            return { ok: true };
         },
         native: (b) => { console.log('[mock] native menu →', b.target); return { ok: true }; },
         menu: (b) => ({ ok: true, page: b.id === 'stats' ? 'stats' : (b.id === 'settings' ? 'settings' : (['battlepass', 'shop'].includes(b.id) ? 'soon' : undefined)) }),

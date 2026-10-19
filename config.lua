@@ -79,15 +79,14 @@ Config.Native = {
     game     = { menu = 'FE_MENU_VERSION_LANDING_MENU',           pause = true,  component = -1 },
     settings = { menu = 'FE_MENU_VERSION_LANDING_MENU',           pause = true,  component = -1 },
     keybinds = { menu = 'FE_MENU_VERSION_LANDING_KEYMAPPING_MENU', pause = true,  component = -1 },
+    -- Ayarlar ekranı doğrudan Graphics kategorisinde açılır (category = GTA kategori kimliği; gtaset_data.lua / _dev/gtaset)
+    graphics = { menu = 'FE_MENU_VERSION_LANDING_MENU',           pause = true,  component = -1, category = 6 },
 }
-
--- GEÇİCİ: GTA ayarlarını menüde gerçek değerleriyle gösterme araştırması (/loe_gtaset). Yalnızca `ace` yetkisi olanlarda
--- çalışır; sonuç sunucuda resource klasörüne gfxprobe_*.json yazılır. Araştırma bitince kaldırılır.
-Config.GfxProbe = { enabled = true, ace = 'admin' }
 
 -- ================================================================ ÖZELLİKLER
 -- false yapılan özellik arayüzden tamamen kalkar ve uygulanmaz.
 Config.Features = {
+    gtaSettings = true,    -- GTA'nın kendi ayarları (ses seviyeleri, hassasiyet, kamera, ekran...) bu menüde okunur ve değiştirilir (client/gtaset.lua)
     allGtaSettings = true, -- GTA'nın kendi ayar ekranına giriş: Game Settings → OPTIONS'ın sonundaki "GTA Settings" + ana ekranın sağ altındaki "All GTA settings"
     recording = true,    -- Rockstar Editor: kayıt başlat / kaydet / iptal
     lodScale  = true,    -- Gelişmiş Grafikler: mesafe ayrıntısı ölçeği (OverrideLodscaleThisFrame, performansı etkiler)

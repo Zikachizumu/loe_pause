@@ -6,9 +6,12 @@
 --   action   : tek seferlik eylem (kayıt başlat, sıfırla...). 'confirm' varsa arayüz önce onay ister
 --   info     : açıklama notu
 --
--- NUI'den gelen her değer client/prefs.lua içinde bu şemaya göre yeniden doğrulanır.
--- GTA'nın kendi ayarları (grafik, ses seviyeleri, fare/gamepad hassasiyeti, ekran, tuş atama) burada YOK: FiveM bunları
--- okumaya/yazmaya izin vermez. Arayüzde Game Settings → OPTIONS'ın sonundaki tek "GTA Settings" girişi GTA ekranını açar.
+--   gtaslider / glist : GTA'nın KENDİ ayarları (ses seviyeleri, hassasiyet, kamera, ekran...). Değer profil ayarıdır (pid),
+--             client/gtaset.lua okur ve yazar; KVP'de saklanmaz, Prefs'e girmez. Etiketler GTA'dan gelir (GetLabelText).
+--   gta      : GTA'nın kendi ekranını açar (target = Config.Native anahtarı; ör. graphics → doğrudan Grafik sayfası)
+--
+-- NUI'den gelen her değer client/prefs.lua içinde bu şemaya göre yeniden doğrulanır (GTA satırları client/gtaset.lua'da).
+-- Grafik ayarları (doku kalitesi...) okunamaz/yazılamaz: Graphics sayfası GTA'nın kendi ekranına bağlanır.
 
 Schema = { categories = {}, actions = {} }
 
@@ -37,6 +40,33 @@ local function opt(value, tr, en, extra)
     return o
 end
 
+-- ------------------------------------------------------------------ GTA'nın kendi ayarları (shared/gtaset_data.lua tablosundan)
+-- Bizim satırlarımızla aynı işi yapanlar (hedefleme modu, radar/HUD/GPS/nişangâh modu) atlanır; bizimkiler kalır.
+local GTA_SKIP = { [0] = true, [204] = true, [205] = true, [207] = true, [412] = true }
+
+local function gtaRows(catId)
+    local rows = {}
+    if features.gtaSettings == false then return rows end
+    for _, c in ipairs((GtaSetData and GtaSetData.cats) or {}) do
+        if c.id == catId then
+            for _, r in ipairs(c.rows) do
+                if r.pid and not GTA_SKIP[r.pid] and (r.kind == 'slider' or r.kind == 'list') then
+                    if r.kind == 'slider' then
+                        rows[#rows + 1] = { id = 'gta.' .. r.pid, type = 'gtaslider', pid = r.pid, text = r.text, max = r.max, inv = r.inv }
+                    else
+                        rows[#rows + 1] = { id = 'gta.' .. r.pid, type = 'glist', pid = r.pid, text = r.text, labels = r.labels }
+                    end
+                end
+            end
+        end
+    end
+    return rows
+end
+
+local function gtaGroup(catId, id, tr, en)
+    return group(id, tr, en, gtaRows(catId))
+end
+
 -- ------------------------------------------------------------------ paylaşılan satırlar (iki yerde görünür, tek tanım)
 local AIM_MODE = {
     id = 'aim.mode', type = 'select', default = 'game',
@@ -62,6 +92,12 @@ end
 -- ------------------------------------------------------------------ 1. Kontroller
 Schema.categories[#Schema.categories + 1] = cat('controller', 'gamepad', 'Kontroller', 'Controls', {
     group('aim', 'Hedefleme', 'Aiming', { AIM_MODE }),
+    gtaGroup('controls', 'gamepad', 'Oyun Kolu', 'Gamepad'),
+})
+
+-- ------------------------------------------------------------------ 1b. Klavye / Fare
+Schema.categories[#Schema.categories + 1] = cat('mouse', 'mouse', 'Klavye / Fare', 'Keyboard / Mouse', {
+    gtaGroup('mouse', 'mouse', 'Fare ve Klavye', 'Mouse & Keyboard'),
 })
 
 -- ------------------------------------------------------------------ 2. Tuş Atamaları (salt okunur)
@@ -211,6 +247,7 @@ Schema.categories[#Schema.categories + 1] = cat('audio', 'speaker', 'Ses', 'Audi
                      'When off, vehicle radios stay silent and the radio wheel is disabled.'),
         }),
     }),
+    gtaGroup('audio', 'levels', 'Ses Seviyeleri', 'Volume'),
 })
 
 -- ------------------------------------------------------------------ 4. Kamera
@@ -240,9 +277,29 @@ if features.cameraOverrides ~= false then
 end
 Schema.categories[#Schema.categories + 1] = cat('camera', 'camera', 'Kamera', 'Camera', {
     group('view', 'Görüş Modu', 'View Mode', cameraRows),
+    gtaGroup('camera', 'options', 'Kamera Seçenekleri', 'Camera Options'),
 })
 
--- ------------------------------------------------------------------ 5. Görüntü
+-- ------------------------------------------------------------------ 5. Grafik (GTA'nın kendi ekranına bağlantı + script ile uygulanabilen ayar)
+local gfxRows = {}
+if features.lodScale ~= false then
+    gfxRows[#gfxRows + 1] = slider('gfx.lod', 'Mesafe ayrıntısı ölçeği', 'Distance detail scale', 1.0, 2.0, 0.1, 1.0, {
+        unit = 'x', decimals = 1,
+        desc = L('Uzaktaki nesnelerin ayrıntı mesafesini artırır. 1.0 = oyun varsayılanı. Performansı düşürebilir.',
+                 'Increases how far objects keep their detail. 1.0 = game default. May reduce performance.'),
+    })
+end
+local gfxGroups = { group('distance', 'Mesafe', 'Distance', gfxRows) }
+if features.allGtaSettings ~= false then
+    gfxGroups[#gfxGroups + 1] = group('screen', 'GTA Grafik Ekranı', 'GTA Graphics Screen', {
+        info('Doku, gölge, yansıma, anti-aliasing, çözünürlük ve diğer grafik ayarları GTA\'nın kendi Grafik ekranında değiştirilir; değerleri buradan okunamaz.',
+             'Texture, shadow, reflection, anti-aliasing, resolution and the other graphics settings are changed in GTA\'s own Graphics screen; their values cannot be read here.'),
+        { type = 'gta', target = 'graphics', label = L('GTA grafik ekranı', 'GTA graphics screen') },
+    })
+end
+Schema.categories[#Schema.categories + 1] = cat('advgfx', 'sliders', 'Grafik', 'Graphics', gfxGroups)
+
+-- ------------------------------------------------------------------ 6. Görüntü
 Schema.categories[#Schema.categories + 1] = cat('display', 'monitor', 'Görüntü', 'Display', {
     group('hud', 'HUD ve Radar', 'HUD & Radar', {
         toggle('disp.radar', 'Radar ve HUD', 'Radar & HUD', true, {
@@ -254,19 +311,7 @@ Schema.categories[#Schema.categories + 1] = cat('display', 'monitor', 'Görünt�
             desc = L('Kapalıyken harita işaretinin yol çizgisi gösterilmez.', 'When off, the waypoint route line is hidden.'),
         }),
     }),
-})
-
--- ------------------------------------------------------------------ 6. Grafik (yalnızca script ile uygulanabilen ayar)
-local gfxRows = {}
-if features.lodScale ~= false then
-    gfxRows[#gfxRows + 1] = slider('gfx.lod', 'Mesafe ayrıntısı ölçeği', 'Distance detail scale', 1.0, 2.0, 0.1, 1.0, {
-        unit = 'x', decimals = 1,
-        desc = L('Uzaktaki nesnelerin ayrıntı mesafesini artırır. 1.0 = oyun varsayılanı. Performansı düşürebilir.',
-                 'Increases how far objects keep their detail. 1.0 = game default. May reduce performance.'),
-    })
-end
-Schema.categories[#Schema.categories + 1] = cat('advgfx', 'sliders', 'Grafik', 'Graphics', {
-    group('distance', 'Mesafe', 'Distance', gfxRows),
+    gtaGroup('display', 'screen', 'Ekran', 'Screen'),
 })
 
 -- ------------------------------------------------------------------ 7. Sesli Sohbet

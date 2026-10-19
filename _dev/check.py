@@ -56,13 +56,14 @@ for p in sorted(lua_files):
 print('[2] Şema')
 lua = LuaRuntime(unpack_returned_tuples=True)
 lua.execute((ROOT / 'config.lua').read_text(encoding='utf-8'))
+lua.execute((ROOT / 'shared/gtaset_data.lua').read_text(encoding='utf-8'))
 lua.execute((ROOT / 'shared/schema.lua').read_text(encoding='utf-8'))
 cats = lua_to_py(lua.eval('Schema.categories'))
 
-expected = ['controller', 'keys', 'audio', 'camera', 'display', 'advgfx', 'voice', 'editor', 'prefs', 'menu']
+expected = ['controller', 'mouse', 'keys', 'audio', 'camera', 'advgfx', 'display', 'voice', 'editor', 'prefs', 'menu']
 check([c['id'] for c in cats] == expected, f'kategori sırası beklenenden farklı: {[c["id"] for c in cats]}')
 
-tr_names = ['Kontroller', 'Tuş Atamaları', 'Ses', 'Kamera', 'Görüntü', 'Grafik',
+tr_names = ['Kontroller', 'Klavye / Fare', 'Tuş Atamaları', 'Ses', 'Kamera', 'Grafik', 'Görüntü',
             'Sesli Sohbet', 'Rockstar Editor', 'Tercihler', 'Normal Menü']
 check([c['label']['tr'] for c in cats] == tr_names, 'Türkçe kategori adları/sırası beklenenle uyuşmuyor')
 check([c['id'] for c in cats if c.get('hidden')] == ['menu'], 'Normal Menü yalnızca allowNativeMenu=false iken gizli olmalı (başka gizli kategori olmamalı)')
@@ -74,7 +75,7 @@ for c in cats:
         check(len(g['rows']) > 0, f'{c["id"]}.{g["id"]}: boş grup')
         for r in g['rows']:
             t = r['type']
-            check(t in ('toggle', 'select', 'slider', 'key', 'action', 'info'), f'bilinmeyen/izin verilmeyen tür {t} (GTA bağlantı satırları kaldırıldı)')
+            check(t in ('toggle', 'select', 'slider', 'key', 'action', 'info', 'gtaslider', 'glist', 'gta'), f'bilinmeyen/izin verilmeyen tür {t}')
             if t in ('toggle', 'select', 'slider', 'action'):
                 check('id' in r, f'{c["id"]}.{g["id"]}: id yok ({t})')
             if 'id' in r and t != 'action':
@@ -91,6 +92,12 @@ for c in cats:
                 check(bool(r['label'].get('tr')) and bool(r['label'].get('en')), f'{r.get("id") or r["label"]}: etiket eksik')
             if t == 'key':
                 check(('control' in r) != ('command' in r), f'key satırı control XOR command olmalı: {r["label"]}')
+            if t == 'gtaslider':
+                check(isinstance(r.get('pid'), int) and r.get('max', 0) >= 1 and r.get('text'), f'{r.get("id")}: GTA kaydırıcı satırı eksik (pid/max/text)')
+            if t == 'glist':
+                check(isinstance(r.get('pid'), int) and len(r.get('labels', {})) >= 2 and r.get('text'), f'{r.get("id")}: GTA liste satırı eksik (pid/labels/text)')
+            if t == 'gta':
+                check(r.get('target') in ('settings', 'graphics', None), f'gta satırı hedefi geçersiz: {r.get("target")}')
 
 native_targets = set(lua_to_py(lua.eval('(function() local t = {} for k in pairs(Config.Native) do t[k] = true end return t end)()')).keys())
 check('settings' in native_targets, 'Config.Native.settings tanımlı olmalı (OPTIONS → GTA Settings bunu açar)')
@@ -121,6 +128,25 @@ for s in (shortcuts.values() if isinstance(shortcuts, dict) else shortcuts):
     check(f"cmd.{s['id']}" in {r['id'] for c in cats for g in c['groups'] for r in g['rows'] if r['type'] == 'action'}, f"Config.Shortcuts: {s['id']} şemada eylem satırı olmamış")
     if s.get('aces'):
         check(any(r.get('cap') == s['id'] for c in cats for g in c['groups'] for r in g['rows']), f"{s['id']}: aces var ama satırda cap yok (herkese görünür!)")
+
+# GTA'nın kendi ayarları: tablo (shared/gtaset_data.lua) → şema satırları
+gta_rows = [r for c in cats for g in c['groups'] for r in g['rows'] if r['type'] in ('gtaslider', 'glist')]
+data_rows = lua_to_py(lua.eval('(function() local t = {} for _, c in ipairs(GtaSetData.cats) do for _, r in ipairs(c.rows) do if r.pid and (r.kind == "slider" or r.kind == "list") then t[#t + 1] = { pid = r.pid, kind = r.kind } end end end return t end)()'))
+data_rows = list(data_rows.values()) if isinstance(data_rows, dict) else list(data_rows)
+skipped = {0, 204, 205, 207, 412}                      # bizim satırlarımızla aynı işi yapanlar (schema.lua GTA_SKIP)
+check({r['pid'] for r in gta_rows} == {d['pid'] for d in data_rows} - skipped, 'GTA satırları tablodaki tüm ayarlanabilir satırlar (GTA_SKIP hariç) olmalı')
+check(len(gta_rows) == len({r['pid'] for r in gta_rows}), 'GTA satırlarında yinelenen pid var')
+check(sum(1 for r in gta_rows if r['type'] == 'gtaslider') >= 20 and sum(1 for r in gta_rows if r['type'] == 'glist') >= 30, 'GTA satır sayıları beklenenden az')
+check(next(r for r in gta_rows if r['pid'] == 212).get('inv') is True, 'Güvenli bölge (212) ters kaydırıcı olarak işaretli olmalı')
+check(next(r for r in gta_rows if r['pid'] == 754)['max'] == 200, 'Fare hassasiyeti üst sınırı 200 olmalı (ölçüm)')
+check(lua.eval("(function() for id in pairs(Schema.rows) do if tostring(id):sub(1, 4) == 'gta.' then return true end end return false end)()") is False,
+      'GTA satırları Schema.rows (Prefs / KVP) içine girmemeli')
+for pid in skipped:
+    check(pid not in {r['pid'] for r in gta_rows}, f'{pid}: bizim satırımızla çakışan GTA ayarı listede olmamalı')
+gta_cats = {c['id'] for c in cats for g in c['groups'] for r in g['rows'] if r['type'] in ('gtaslider', 'glist')}
+check(gta_cats == {'controller', 'mouse', 'audio', 'camera', 'display'}, f'GTA satırlarının kategorileri: {gta_cats}')
+check(any(r['type'] == 'gta' and r.get('target') == 'graphics' for c in cats for g in c['groups'] for r in g['rows']), 'Grafik sayfasında GTA Grafik ekranı satırı olmalı')
+check('graphics' in native_targets and lua.eval("Config.Native.graphics.category") == 6, 'Config.Native.graphics doğrudan Grafik kategorisini açmalı (category = 6)')
 
 (ROOT / '_dev' / 'schema.json').write_text(json.dumps(cats, ensure_ascii=False, indent=1), encoding='utf-8')
 rows = sum(len(g['rows']) for c in cats for g in c['groups'])
@@ -265,6 +291,7 @@ Citizen = { InvokeNative = function() end, ResultAsInteger = function() end, Poi
 function SetTimeout(ms, fn) sim.at(ms, fn) end
 function GetProfileSetting(id) return S.profile[id] or 0 end
 function TriggerLatentServerEvent(name, bps, data) S.latent = { name = name, data = data } end
+function GetLabelText(id) return 'T_' .. id end
 
 LocalPlayer = { state = { isLoggedIn = true } }
 json = { encode = function() return '{}' end, decode = function() return {} end }
@@ -686,32 +713,18 @@ check(sim.nui('menu', { id = 'hack' }).ok == false, 'S12: tanımsız menü madde
 rawset(exports, 'qbx_core', nil)
 sim.exported.Close(); sim.frames(700)
 
--- S15: GEÇİCİ /loe_gtaset — yetki sunucudan gelir; test sırasında ana döngü yerleşik menüye dokunmaz; bitince her şey kapanır
-local realPrint, realEncode = print, json.encode
-print = function() end
-json.encode = function(t) sim.encoded = t; return 'X' end
-check(type(LoeProbe) == 'table' and LoeProbe.active == false, 'S15: LoeProbe tanımlı ve pasif olmalı')
-local actP = sim.calls.Activate or 0
-sim.commands['loe_gtaset']()
-check(sim.serverEvents[#sim.serverEvents] == 'loe_pause:server:gfxprobeAsk', 'S15: komut önce sunucudan yetki istemeli')
-check(sim.pause == false, 'S15: yetki gelmeden menü açılmamalı')
-sim.fire('loe_pause:client:gfxprobeGo', 'write', false)
-sim.frames(2000)
-check(sim.pause == false and LoeProbe.active == false and (sim.calls.Activate or 0) == actP, 'S15: yetkisiz oyuncuda test başlamamalı')
-
--- sahte oyun: kategori/satır yapısı GERÇEK tablodan (shared/gtaset_data.lua) kurulur; kaydırıcılar uçta durur, listeler döner.
--- Kök SET_INPUT_EVENT 9 gezinir (40 ms içinde gelen ikinci gezinme yutulur), 10/11 değeri değiştirir (aralık HIZ: 40 ms'den
--- sık gelen değer adımı yutulur); oyun gibi değer menü KAPANINCA kaydedilir. MENU_SHIFT_DEPTH(+1/-1) satırlara girer/çıkar,
--- sonra 300 ms gezinme yutulur; çıkınca kimlik bir gezinmeye kadar -1 olur; giriş/çıkış ve değer adımı önceki işlemden
--- 150 ms geçmeden gelirse yutulur.
-local RANGE = { [754] = 230, [755] = 230, [756] = 230, [757] = 230, [760] = 230, [761] = 20, [213] = 30, [212] = 10, [240] = 14, [238] = 14 }
-local INVERTED = { [212] = true }
+-- S15: GTA'nın kendi ayarları — okuma (açılış verisi), doğrulama, gizli GTA menüsüyle yazma, yeniden deneme, hata, kilit
+-- Sahte oyun: kategori/satır yapısı GERÇEK tablodan (shared/gtaset_data.lua). Kaydırıcılar uçta durur, listeler döner; ters
+-- kaydırıcıda (212) sağ = değer azalır. Kök SET_INPUT_EVENT 9 gezinir (40 ms içinde gelen ikincisi yutulur), 10/11 değeri
+-- değiştirir (aralıktan hız: 40 ms'den sık gelen yutulur); oyun gibi değer menü KAPANINCA kaydedilir. MENU_SHIFT_DEPTH(+1/-1)
+-- satırlara girer/çıkar, sonra 300 ms gezinme yutulur; çıkınca kimlik bir gezinmeye kadar -1 olur; giriş/çıkış ve değer adımı
+-- önceki işlemden 150 ms geçmeden gelirse yutulur.
 local CATS = {}
 for _, c in ipairs(GtaSetData.cats) do
     local rows = {}
     for _, r in ipairs(c.rows) do
-        local row = { u = tostring(r.uid), p = r.pid, kind = r.kind }
-        if r.kind == 'slider' then row.max = RANGE[r.pid] or 10
+        local row = { u = tostring(r.uid), p = r.pid, kind = r.kind, inv = r.inv }
+        if r.kind == 'slider' then row.max = r.max
         elseif r.kind == 'list' then row.max = #r.labels - 1; row.wrap = true end
         rows[#rows + 1] = row
     end
@@ -721,14 +734,17 @@ CATS[#CATS + 1] = { uid = '6', rows = { { u = '103', p = 900, max = 2, wrap = tr
 table.insert(CATS, 3, { uid = '148', rows = {} })                                                     -- Key Bindings: girilmez
 local START = {}
 for _, c in ipairs(CATS) do
-    for i, r in ipairs(c.rows) do if r.p then START[r.p] = (r.kind == 'slider') and math.min(r.max, 1 + (r.p % 5)) or 0 end end
+    for _, r in ipairs(c.rows) do if r.p then START[r.p] = (r.kind == 'slider') and math.min(r.max, 1 + (r.p % 5)) or 0 end end
 end
-START[754] = 50; START[755] = 50; START[756] = 50; START[757] = 50; START[760] = 50; START[213] = 18; START[212] = 0   -- 212: v9'da bozulmuş değer (asıl 3)
+START[754] = 50; START[213] = 18; START[212] = 3
 for k, v in pairs(START) do sim.profile[k] = v end
-local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0, minGap = 1e9 }
+local DEAD = { [761] = true }                                  -- hiç değişmeyen satır
+local fk = { cat = 1, row = 0, focus = false, hn = 0, hv = {}, pending = {}, suppressAt = -1000, visibleRead = false, sessions = 0, valCount = 0 }
 local realActivate, realSFA = ActivateFrontendMenu, SetFrontendActive
 ActivateFrontendMenu = function(...)
-    fk.cat, fk.row, fk.focus, fk.pending, fk.sessions, fk.left = 1, 0, false, {}, fk.sessions + 1, false
+    fk.sessions = fk.sessions + 1
+    fk.cat, fk.row, fk.focus, fk.pending, fk.left = 1, 0, false, {}, false
+    if fk.noOpen then return end
     return realActivate(...)
 end
 SetFrontendActive = function(v)
@@ -749,9 +765,10 @@ EndScaleformMovieMethod = function()
         if gap < 150 then return end
     elseif a[1] == 10 or a[1] == 11 then
         local vgap = sim.now - (fk.lastVal or -1000)
-        if vgap >= 0 and vgap < fk.minGap then fk.minGap = vgap end
         if vgap < 40 or gap < 40 then return end
         fk.lastVal = sim.now
+        fk.valCount = fk.valCount + 1
+        if fk.flaky and vgap < 100 and fk.valCount % 4 == 0 then return end        -- hızlı basışların bir kısmı yutulur
     end
     fk.lastAny = sim.now
     if fk.cur.p == 'SET_INPUT_EVENT' then
@@ -763,8 +780,8 @@ EndScaleformMovieMethod = function()
             else fk.cat = fk.cat % #CATS + 1 end
         elseif (a[1] == 10 or a[1] == 11) and fk.focus then
             local r = c.rows[fk.row + 1]
-            if r and r.p then
-                local v = value(r.p) + ((a[1] == 11) == not INVERTED[r.p] and 1 or -1)
+            if r and r.p and not DEAD[r.p] then
+                local v = value(r.p) + ((a[1] == 11) == not r.inv and 1 or -1)
                 if r.wrap then v = v > r.max and 0 or (v < 0 and r.max or v) else v = math.max(0, math.min(r.max, v)) end
                 fk.pending[r.p] = v
             end
@@ -779,12 +796,9 @@ EndScaleformMovieMethodReturnValue = function()
     fk.hn = fk.hn + 1
     local p, c, r = fk.cur.p, CATS[fk.cat], nil
     if sim.pause then
-        if not isHidden() then fk.visibleRead = true end
+        if not isHidden() and not fk.visibleOk then fk.visibleRead = true end
         if p == 'menuUniqueID.toString' then r = fk.focus and c.rows[fk.row + 1].u or (fk.left and '-1' or c.uid)
-        elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1'
-        elseif p == 'currentPage.columnList.1.state.toString' then r = '0'
-        elseif p == 'currentPage.columnList.1.columnIsFocused.toString' then r = tostring(fk.focus)
-        elseif p == 'menuState.toString' then r = '1000' end
+        elseif p == 'menuLevel.toString' then r = fk.focus and '2' or '1' end
     end
     fk.hv[fk.hn] = r
     return fk.hn
@@ -793,53 +807,98 @@ IsScaleformMovieMethodReturnValueReady = function(h) return fk.hv[h] ~= nil end
 GetScaleformMovieMethodReturnValueString = function(h) return fk.hv[h] end
 GetScaleformMovieMethodReturnValueInt = function(h) return tonumber(fk.hv[h]) or 0 end
 
-sim.latent, sim.encoded = nil, nil
-sim.commands['loe_gtaset']()
-sim.fire('loe_pause:client:gfxprobeGo', 'write', true)
-sim.frames(3000)
-check(LoeProbe.active == true and sim.pause == true and isOpen() == false and isHidden(), 'S15: ölçüm GTA menüsünü gizli açmalı')
+local function doneMsg() local d; for _, m in ipairs(sim.msgs) do if m.action == 'gtaDone' then d = m end end return d end
+local function listHas(list, v) for _, x in ipairs(list or {}) do if x == v then return true end end return false end
+
+-- A) açılış verisi: GTA değerleri ve GTA etiketleri
+sim.latent = nil
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S15: LOE menüsü açılmalı')
+local op = sim.lastOpen()
+check(type(op.gta) == 'table' and op.gta[300] == START[300] and op.gta[212] == 3 and op.gta[754] == 50 and op.gta[900] == nil,
+    'S15: açılış verisinde GTA ayar değerleri olmalı (yalnızca tablodaki pid\'ler)')
+check(type(op.gtaLabels) == 'table' and op.gtaLabels['MO_SFX'] == 'T_MO_SFX' and op.gtaLabels['MO_ON'] == 'T_MO_ON', 'S15: açılış verisinde GTA etiketleri olmalı')
+
+-- B) doğrulama: bilinmeyen pid, aralık dışı, tam sayı olmayan, aynı değer, boş → reddedilir
+check(GtaSet.clean({ ['300'] = START[300] }) == nil, 'S15: aynı değer değişiklik sayılmamalı')
+check(GtaSet.clean({ ['999'] = 1, ['300'] = -1, ['301'] = 11, ['14'] = 2.5, ['13'] = 99 }) == nil, 'S15: geçersiz değerler elenmeli')
+check(GtaSet.clean('x') == nil and GtaSet.clean({}) == nil and GtaSet.clean(nil) == nil, 'S15: geçersiz istek reddedilmeli')
+local cl = GtaSet.clean({ ['300'] = 7, ['999'] = 1, ['301'] = 11, ['754'] = 120 })
+check(cl and cl[300] == 7 and cl[754] == 120 and cl[301] == nil and cl[999] == nil, 'S15: yalnızca geçerli değişiklikler kalmalı')
+check(sim.nui('gtaApply', { changes = { ['999'] = 1 } }).ok == false, 'S15: geçerli değişiklik yoksa uygulama başlamamalı')
+check(GtaSet.busy == false and fk.sessions == 0, 'S15: boş istek GTA menüsünü açmamalı')
+
+-- C) uygulama: kaydırıcı, ters kaydırıcı, liste (kısa yoldan dönme), fare hassasiyeti; LOE menüsü açık kalır
+sim.msgs = {}
+local r1 = sim.nui('gtaApply', { changes = { ['300'] = 7, ['301'] = 3, ['754'] = 120, ['212'] = 0, ['12'] = 11, ['999'] = 5, ['13'] = 99, ['14'] = 2.5 } })
+check(r1 and r1.ok == true and GtaSet.busy == true, 'S15: uygulama başlamalı')
+check(sim.nui('gtaApply', { changes = { ['300'] = 2 } }).ok == false, 'S15: uygulanırken ikinci istek reddedilmeli')
+check(sim.nui('close').ok == false and isOpen() == true, 'S15: uygulanırken menü kapanmamalı')
+sim.frames(1500)
+check(sim.pause == true and isHidden() and isOpen() == true, 'S15: GTA menüsü gizli açılmalı, LOE menüsü açık kalmalı')
 sim.escFrame = true; sim.step(16); sim.frames(300)
-check(isOpen() == false, 'S15: test sırasında ESC yakalama LOE menüsünü açmamalı')
-sim.frames(1700000)
-check(LoeProbe.active == false and sim.pause == false and isOpen() == false, 'S15: ölçüm bitince menü kapanmalı')
-check(fk.visibleRead == false, 'S15: GTA menüsü hiçbir an görünür olmamalı')
-local enc = sim.encoded or {}
-local issues = {}
-for _, e in ipairs(enc.log or {}) do
-    if e.k == 'sessionFail' or e.k == 'depthFail' or e.k == 'navFail' or e.k == 'err' then
-        issues[#issues + 1] = e.k .. ':' .. tostring(e.cat or e.at or e.what)
-    end
-end
-local last = enc.log and enc.log[#enc.log] and enc.log[#enc.log].t
-check(sim.latent and sim.latent.name == 'loe_pause:server:gfxprobe' and enc.kind == 'ranges10' and enc.leftover == 0 and enc.safezone == 3,
-    'S15: ölçüm sonucu (leftover=' .. tostring(enc.leftover) .. ', safezone=' .. tostring(enc.safezone) .. ', sure=' .. tostring(last) .. ') ' .. table.concat(issues, ' '))
-local n, bad = 0, {}
-for _, c in ipairs(CATS) do
-    for _, r in ipairs(c.rows) do
-        if r.kind == 'slider' then
-            n = n + 1
-            local got = (enc.ranges or {})[tostring(r.p)]
-            if not got or got.hi ~= r.max or got.lo ~= 0 or got.inv ~= (INVERTED[r.p] == true) then
-                bad[#bad + 1] = r.p .. '=' .. tostring(got and got.lo) .. '..' .. tostring(got and got.hi) .. '/0..' .. r.max
-            end
-        end
-    end
-end
-check(n == 24 and #bad == 0, 'S15: kaydırıcı sınırları (n=' .. n .. ') ' .. table.concat(bad, ' '))
-check(last and last < 1200000, 'S15: ölçüm 20 dakikayı geçmemeli (' .. tostring(last) .. ')')
-check(#(enc.failed or {}) == 0, 'S15: hiçbir kaydırıcı geri alınamamazlık etmemeli')
-local same = true
-for k, v in pairs(START) do
-    local want = (k == 212) and 3 or v
-    if sim.profile[k] ~= want then same = false end
-end
-check(same and (sim.profile[900] or 0) == 0, 'S15: ölçüm sonunda tüm değerler eski haline dönmeli (güvenli bölge 3)')
+check(isOpen() == true and sim.pause == true, 'S15: uygulanırken ESC menüyü kapatmamalı')
+sim.frames(120000)
+local d1 = doneMsg()
+check(d1 and d1.ok == true and #d1.failed == 0, 'S15: uygulama başarılı bildirilmeli')
+check(sim.profile[300] == 7 and sim.profile[301] == 3 and sim.profile[754] == 120 and sim.profile[212] == 0 and sim.profile[12] == 11,
+    'S15: değerler hedefe gelmeli (300=' .. tostring(sim.profile[300]) .. ' 301=' .. tostring(sim.profile[301]) .. ' 754=' .. tostring(sim.profile[754]) .. ' 212=' .. tostring(sim.profile[212]) .. ' 12=' .. tostring(sim.profile[12]) .. ')')
+check(sim.profile[13] == START[13] and sim.profile[14] == START[14], 'S15: geçersiz istenen değerler uygulanmamalı')
+check(d1 and d1.values and d1.values[300] == 7 and d1.values[212] == 0, 'S15: güncel değerler arayüze gitmeli')
+check(isOpen() == true and sim.pause == false and sim.nuiFocus == true and GtaSet.busy == false and fk.visibleRead == false,
+    'S15: uygulama sonunda GTA menüsü kapanmalı, LOE menüsü ve NUI odağı sürmeli, menü hiç görünmemeli')
+sim.frames(1500)
+check(isOpen() == true, 'S15: uygulamadan sonra LOE menüsü kapanmamalı (NUI odağı geri gelirken)')
+
+-- D) hızlı basışların bir kısmı yutulursa yavaş aralıkla yeniden denenir
+fk.flaky, fk.sessions, fk.valCount = true, 0, 0
+sim.msgs = {}
+sim.nui('gtaApply', { changes = { ['308'] = START[308] + 6, ['233'] = START[233] + 5 } })
+sim.frames(200000)
+local d2 = doneMsg()
+check(d2 and d2.ok == true and sim.profile[308] == START[308] + 6 and sim.profile[233] == START[233] + 5, 'S15: yutulan basışlar yeniden denemeyle tamamlanmalı')
+check(fk.sessions >= 2, 'S15: yeniden deneme yeni bir gizli oturum açmalı (oturum=' .. fk.sessions .. ')')
+fk.flaky = false
+
+-- E) hiç değişmeyen satır: 3 denemeden sonra başarısız bildirilir, diğerleri uygulanır
+fk.sessions = 0
+sim.msgs = {}
+sim.nui('gtaApply', { changes = { ['761'] = 3, ['231'] = 9 } })
+sim.frames(300000)
+local d3 = doneMsg()
+check(d3 and d3.ok == false and listHas(d3.failed, 761) and not listHas(d3.failed, 231) and sim.profile[231] == 9 and sim.profile[761] == START[761],
+    'S15: uygulanamayan satır başarısız bildirilmeli, diğeri uygulanmalı')
+check(fk.sessions == 3 and isOpen() == true and sim.pause == false and GtaSet.busy == false, 'S15: en çok 3 deneme; sonra her şey kapanmalı')
+
+-- F) GTA menüsü hiç açılmazsa: değişiklik yok, hata bildirilir, kilit kalkar
+fk.noOpen = true
+sim.msgs = {}
+sim.nui('gtaApply', { changes = { ['300'] = 2 } })
+sim.frames(100000)
+local d4 = doneMsg()
+check(d4 and d4.ok == false and listHas(d4.failed, 300) and sim.profile[300] == 7 and GtaSet.busy == false and isOpen() == true, 'S15: menü açılamazsa hata bildirilmeli, menü sürmeli')
+fk.noOpen = false
+
+-- G) menü kapalıyken uygulama isteği reddedilir
+sim.exported.Close(); sim.frames(700)
+check(sim.nui('gtaApply', { changes = { ['300'] = 2 } }).ok == false and GtaSet.busy == false, 'S15: menü kapalıyken uygulama reddedilmeli')
+
+-- H) Grafik sayfası: GTA ekranı doğrudan Grafik kategorisinde açılır (görünür), oyuncu kapatana kadar açık kalır
+sim.pause = true; sim.frames(64)
+check(isOpen() == true, 'S15: LOE menüsü yeniden açılmalı')
+local actH = sim.calls.Activate or 0
+fk.visibleOk = true
+sim.nui('native', { target = 'graphics' })
+sim.frames(6000)
+check((sim.calls.Activate or 0) == actH + 1 and sim.pause == true and CATS[fk.cat].uid == '6', 'S15: Grafik ekranı doğrudan Grafik kategorisinde açılmalı (kategori ' .. CATS[fk.cat].uid .. ')')
+sim.pause = false; sim.frames(3000)
+fk.visibleOk = false
+check(sim.nui('native', { target = 'zzz' }) == nil or true, 'S15: geçersiz hedef sorun çıkarmamalı')
 ActivateFrontendMenu, SetFrontendActive = realActivate, realSFA
 SuppressFrontendRenderingThisFrame = nil
-print, json.encode = realPrint, realEncode
-BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, EndScaleformMovieMethod = nil, nil, nil
-EndScaleformMovieMethodReturnValue, IsScaleformMovieMethodReturnValueReady, GetScaleformMovieMethodReturnValueString = nil, nil, nil
-GetScaleformMovieMethodReturnValueInt, ScaleformMovieMethodAddParamBool = nil, nil
+BeginScaleformMovieMethodOnFrontend, ScaleformMovieMethodAddParamInt, ScaleformMovieMethodAddParamBool, EndScaleformMovieMethod = nil, nil, nil, nil
+EndScaleformMovieMethodReturnValue, IsScaleformMovieMethodReturnValueReady = nil, nil
+GetScaleformMovieMethodReturnValueString, GetScaleformMovieMethodReturnValueInt = nil, nil
 return R
 '''
 
@@ -847,7 +906,7 @@ sim = LuaRuntime(unpack_returned_tuples=True)
 sim.execute(SIM_PRELUDE)
 import os  # noqa: E402
 
-for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/main.lua', 'client/gtaset_probe.lua'):
+for rel in ('config.lua', 'shared/gtaset_data.lua', 'shared/schema.lua', 'client/prefs.lua', 'client/apply.lua', 'client/gtaset.lua', 'client/main.lua'):
     path = ROOT / rel
     if rel == 'client/main.lua' and os.environ.get('LOE_MAIN_LUA'):      # eski sürümle testin hatayı yakaladığını doğrulamak için
         path = pathlib.Path(os.environ['LOE_MAIN_LUA'])
@@ -911,36 +970,6 @@ check(list(lua_to_py(sv.eval('sent[#sent].list'))) == ['admin'], 'sunucu: admin 
 check(CAPS(0, 5000, True) == n0 + 2, 'sunucu: source=0 yok sayılmalı')
 sv.execute('source = 9 handlers["playerDropped"]()')
 check(CAPS(9, 0, False) == n0 + 3, 'sunucu: oyuncu çıkınca caps sınırı temizlenmeli')
-
-# GEÇİCİ: /loe_gtaset yetkisi ve sonuç kaydı
-sv.execute(r'''
-saved = {}
-function SaveResourceFile(r, name, data) saved[#saved + 1] = { r = r, name = name, n = #data } return true end
-function GetCurrentResourceName() return 'loe_pause' end
-function TriggerClientEvent(n, t, a, b) sent[#sent + 1] = { n = n, t = t, list = a, b = b } end
-''')
-ASK = sv.eval('''function(src, adv, admin)
-    source = src; now = now + (adv or 0)
-    aceTable[tostring(src) .. ':admin'] = admin == true
-    handlers['loe_pause:server:gfxprobeAsk']('write')
-    local s = sent[#sent]
-    return s.n, s.t, s.b
-end''')
-SAVE = sv.eval('''function(src, adv, payload)
-    source = src; now = now + (adv or 0)
-    handlers['loe_pause:server:gfxprobe'](payload)
-    return #saved
-end''')
-n, tgt, allowed = ASK(11, 5000, False)
-check(n == 'loe_pause:client:gfxprobeGo' and tgt == 11 and allowed is False, 'sunucu: yetkisiz oyuncuya test izni verilmemeli')
-n, tgt, allowed = ASK(12, 5000, True)
-check(allowed is True, 'sunucu: admin ACE sahibine test izni verilmeli')
-check(SAVE(11, 100, '{"a":1}') == 0, 'sunucu: yetkisiz oyuncunun sonucu kaydedilmemeli')
-check(SAVE(12, 100, '{"a":1}') == 1 and str(sv.eval('saved[1].name')).startswith('gfxprobe_'), 'sunucu: admin sonucu gfxprobe_*.json olarak kaydedilmeli')
-check(SAVE(12, 100, '{"a":2}') == 1, 'sunucu: 10 sn içinde ikinci kayıt reddedilmeli')
-check(SAVE(12, 11000, 7) == 1 and SAVE(12, 11000, '') == 1, 'sunucu: geçersiz sonuç verisi reddedilmeli')
-
-
 
 
 # ------------------------------------------------------------------ 6) GEÇİCİ: scaleform araçları
